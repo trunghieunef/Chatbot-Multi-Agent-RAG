@@ -1,0 +1,32 @@
+services:
+  crawler:
+    build: .
+    container_name: bds-crawler
+    volumes:
+      # Mount data directory for CSV input/output
+      - ../:/data
+    # Override command for different steps:
+    #
+    # Step 1: Crawl listing URLs
+    #   docker compose run crawler python crawl_listing_url.py --output /data/listing_url.csv --workers 8
+    #
+    # Step 2: Crawl listing details (default)
+    #   docker compose up
+    #   — or with custom args —
+    #   docker compose run crawler python crawl_listing_details.py --input /data/listing_url.csv --output /data/listing_details.csv --workers 4 --limit 100
+    #
+    # Step 3: Merge temp files
+    #   docker compose run crawler python merge.py --output /data/listing_details.csv
+    #
+    # Clean data
+    #   docker compose run crawler python clean.py
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTHONIOENCODING=utf-8
+    restart: "no"
+    # Recommended memory limit per worker is ~150MB
+    # 4 workers ≈ 600MB + overhead
+    deploy:
+      resources:
+        limits:
+          memory: 2G

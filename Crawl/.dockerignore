@@ -1,0 +1,8 @@
+.git
+__pycache__
+*.pyc
+*.tmp
+*.log
+.env
+vn_old.json
+heatmap.html

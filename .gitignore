@@ -1,0 +1,6 @@
+*.tmp
+*.log
+__pycache__/
+data/
+batdongsancom-crawler/
+.env
