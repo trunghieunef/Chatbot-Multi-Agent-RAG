@@ -1,7 +1,50 @@
-*.tmp
-*.log
+# ─── Python ───────────────────────────────────────────────────
 __pycache__/
-data/
-batdongsancom-crawler/
+*.py[cod]
+*.so
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# ─── Virtual Environment ──────────────────────────────────────
+.venv/
+venv/
+env/
+
+# ─── IDE ──────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ─── Environment ──────────────────────────────────────────────
 .env
-.venv
+.env.local
+.env.production
+
+# ─── Node ─────────────────────────────────────────────────────
+node_modules/
+.next/
+out/
+
+# ─── Data (large files) ──────────────────────────────────────
+data/raw/
+data/processed/
+*.db
+*.sqlite3
+
+# ─── Docker ───────────────────────────────────────────────────
+docker-compose.override.yml
+
+# ─── OS ───────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ─── Crawler temp files ──────────────────────────────────────
+*.tmp
+*.worker*.tmp
+
+# ─── Agent ────────────────────────────────────────────────────
+.agent/
