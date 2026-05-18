@@ -96,12 +96,23 @@ export interface ChatMessageRequest {
   session_id?: string;
 }
 
+export interface ChatSource {
+  id: number;
+  product_id: string;
+  title: string | null;
+  location: string | null;
+  price_text: string | null;
+  area_text: string | null;
+  published_at: string | null;
+  score?: number;
+}
+
 export interface ChatMessageResponse {
   session_id: string;
   role: string;
   content: string;
   agent_used: string | null;
-  sources: Record<string, unknown>[] | null;
+  sources: ChatSource[] | null;
   suggested_actions: string[] | null;
   created_at: string | null;
 }

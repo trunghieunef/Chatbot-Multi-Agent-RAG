@@ -74,7 +74,7 @@ export default function Footer() {
             <ul className="space-y-3 text-sm text-muted-foreground">
               <li className="flex items-center gap-2">
                 <Mail size={14} className="text-primary" />
-                contact@batdongsan.vn
+                hieu21268@gmail.com
               </li>
               <li className="flex items-center gap-2">
                 <Phone size={14} className="text-primary" />
@@ -82,15 +82,14 @@ export default function Footer() {
               </li>
               <li className="flex items-start gap-2">
                 <MapPin size={14} className="mt-0.5 text-primary" />
-                Tầng 8, Tòa nhà Zentower, Quận 1, TP.HCM
+                Khoa Toán-Tin , Đại học Bách Khoa Hà Nội
               </li>
             </ul>
           </div>
         </div>
 
         <div className="mt-10 border-t border-border pt-6 text-center text-xs text-muted-foreground">
-          © {new Date().getFullYear()} BatDongSan Chatbot. Phát triển với ❤️
-          bằng Next.js + FastAPI.
+          © {new Date().getFullYear()} BatDongSan Chatbot. Phát triển bởi TrungHieu145.
         </div>
       </div>
     </footer>

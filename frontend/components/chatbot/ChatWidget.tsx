@@ -1,14 +1,15 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { MessageCircle, X, Send, Bot, User, Sparkles } from "lucide-react";
+import { Home, MapPin, MessageCircle, X, Send, Bot, User, Sparkles } from "lucide-react";
 import { sendChatMessage } from "@/lib/api";
-import type { ChatMessageResponse } from "@/lib/types";
+import type { ChatMessageResponse, ChatSource } from "@/lib/types";
 
 interface Message {
   role: "user" | "assistant";
   content: string;
   agent_used?: string | null;
+  sources?: ChatSource[] | null;
   suggested_actions?: string[] | null;
 }
 
@@ -58,6 +59,7 @@ export default function ChatWidget() {
           role: "assistant",
           content: res.content,
           agent_used: res.agent_used,
+          sources: res.sources,
           suggested_actions: res.suggested_actions,
         },
       ]);
@@ -156,6 +158,25 @@ export default function ChatWidget() {
                         </span>
                       )}
                     <p className="whitespace-pre-wrap">{msg.content}</p>
+                    {msg.sources && msg.sources.length > 0 && (
+                      <div className="mt-2 space-y-1.5 border-t border-border/70 pt-2">
+                        {msg.sources.slice(0, 3).map((source) => (
+                          <div key={source.product_id} className="rounded-md bg-card/70 p-2 text-[11px] leading-snug">
+                            <div className="flex items-start gap-1.5 font-medium">
+                              <Home size={12} className="mt-0.5 shrink-0" />
+                              <span className="line-clamp-2">{source.title || "Tin bất động sản"}</span>
+                            </div>
+                            <div className="mt-1 flex items-center gap-1 text-muted-foreground">
+                              <MapPin size={11} className="shrink-0" />
+                              <span className="truncate">{source.location || "Chưa rõ vị trí"}</span>
+                            </div>
+                            <div className="mt-1 text-muted-foreground">
+                              {[source.price_text, source.area_text].filter(Boolean).join(" · ")}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
                 {/* Suggested actions */}

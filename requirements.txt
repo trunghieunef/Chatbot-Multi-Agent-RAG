@@ -35,3 +35,5 @@ google-genai>=1.0.0
 langchain>=0.3.0
 langgraph>=0.2.0
 chromadb>=0.5.0
+datasets>=2.21.0
+pyarrow>=15.0.0

@@ -10,10 +10,10 @@ Uses Google Gemini for classification.
 """
 
 import json
-import google.generativeai as genai
+import unicodedata
 
-from rag.config import GEMINI_API_KEY, GEMINI_MODEL
-from rag.state import ChatState
+from chatbot.config import GEMINI_API_KEY, GEMINI_MODEL
+from chatbot.state import ChatState
 
 ROUTER_PROMPT = """Bạn là Router Agent trong hệ thống tư vấn bất động sản.
 
@@ -67,12 +67,14 @@ def router_node(state: ChatState) -> dict:
         return _keyword_router(query)
 
     try:
-        genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel(GEMINI_MODEL)
+        from google import genai
+        from google.genai import types
 
-        response = model.generate_content(
-            ROUTER_PROMPT.format(query=query),
-            generation_config=genai.types.GenerationConfig(
+        client = genai.Client(api_key=GEMINI_API_KEY)
+        response = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=ROUTER_PROMPT.format(query=query),
+            config=types.GenerateContentConfig(
                 response_mime_type="application/json",
                 temperature=0.1,
             ),
@@ -90,9 +92,36 @@ def router_node(state: ChatState) -> dict:
         return _keyword_router(query)
 
 
+def _normalize_query(query: str) -> str:
+    normalized = unicodedata.normalize("NFD", query or "")
+    without_accents = "".join(
+        char for char in normalized if unicodedata.category(char) != "Mn"
+    )
+    return without_accents.lower()
+
+
 def _keyword_router(query: str) -> dict:
     """Fallback keyword-based routing when Gemini is unavailable."""
-    q = query.lower()
+    q = _normalize_query(query)
+
+    if any(w in q for w in ["phap ly", "luat", "thu tuc", "cong chung", "hop dong", "so do"]):
+        return {
+            "intent": "legal_advice",
+            "target_agents": ["legal_advisor"],
+            "search_filters": {},
+        }
+    if any(w in q for w in ["dau tu", "roi", "loi nhuan", "sinh loi", "kenh"]):
+        return {
+            "intent": "investment_advice",
+            "target_agents": ["investment_advisor"],
+            "search_filters": {},
+        }
+    if any(w in q for w in ["thi truong", "xu huong", "bien dong", "thong ke"]):
+        return {
+            "intent": "market_analysis",
+            "target_agents": ["market_analysis"],
+            "search_filters": {},
+        }
 
     if any(w in q for w in ["tìm", "mua", "thuê", "căn hộ", "nhà", "đất", "phòng"]):
         return {

@@ -7,7 +7,7 @@ Uses RAG on a legal knowledge base covering:
 - Thuế và phí chuyển nhượng
 """
 
-from rag.state import ChatState
+from chatbot.state import ChatState
 
 
 def legal_advisor_node(state: ChatState) -> dict:

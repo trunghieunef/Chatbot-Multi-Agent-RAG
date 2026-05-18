@@ -5,10 +5,7 @@ Uses vector search (ChromaDB) + SQL filters (PostgreSQL) to find
 relevant listings, then uses Gemini to generate a natural language summary.
 """
 
-import google.generativeai as genai
-
-from rag.config import GEMINI_API_KEY, GEMINI_MODEL
-from rag.state import ChatState
+from chatbot.state import ChatState
 
 PROPERTY_PROMPT = """Bạn là chuyên viên tư vấn bất động sản.
 

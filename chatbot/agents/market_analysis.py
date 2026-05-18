@@ -5,7 +5,7 @@ Queries PostgreSQL aggregations for price trends, supply/demand,
 and regional comparisons.
 """
 
-from rag.state import ChatState
+from chatbot.state import ChatState
 
 
 def market_analysis_node(state: ChatState) -> dict:

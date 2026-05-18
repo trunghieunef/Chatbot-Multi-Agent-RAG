@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     # Google Gemini
     GEMINI_API_KEY: str = ""
     GEMINI_MODEL: str = "gemini-2.0-flash"
+    GEMINI_EMBEDDING_MODEL: str = "gemini-embedding-2"
 
     # JWT
     JWT_SECRET_KEY: str = "your-super-secret-jwt-key-change-in-production"

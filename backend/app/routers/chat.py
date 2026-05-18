@@ -20,8 +20,21 @@ from app.schemas.chat import (
     ChatSessionResponse,
     ChatHistoryResponse,
 )
+from app.services.chatbot import run_chat_pipeline
+from app.services.rag import run_simple_rag
 
 router = APIRouter(prefix="/chat", tags=["Chat"])
+
+
+async def _run_chatbot_pipeline(message: str, db: AsyncSession, session_id: uuid.UUID) -> dict:
+    """Run production multi-agent chat with simple RAG fallback."""
+    try:
+        return await run_chat_pipeline(message, db, session_id=str(session_id))
+    except Exception:
+        try:
+            return await run_simple_rag(message, db)
+        except Exception as exc:
+            raise RuntimeError(str(exc)) from exc
 
 
 @router.post("", response_model=ChatMessageResponse)
@@ -60,22 +73,20 @@ async def send_message(
     )
     db.add(user_msg)
 
-    # ─────────────────────────────────────────────────────────────
-    # TODO (Phase 3): Replace this placeholder with RAG pipeline call
-    #
-    # from rag.graph import run_chat_pipeline
-    # result = await run_chat_pipeline(body.message, session.id)
-    # response_text = result["final_response"]
-    # agent_used = result["agent_used"]
-    # sources = result["sources"]
-    # ─────────────────────────────────────────────────────────────
-
-    response_text = (
-        f"Cảm ơn bạn đã liên hệ! Tôi là chatbot tư vấn bất động sản. "
-        f"Hiện tại hệ thống RAG đang được phát triển. "
-        f"Câu hỏi của bạn: \"{body.message}\" sẽ được xử lý bởi multi-agent system trong Phase 3."
-    )
-    agent_used = "placeholder"
+    try:
+        rag_result = await _run_chatbot_pipeline(body.message, db, session.id)
+        response_text = rag_result["final_response"]
+        agent_used = rag_result["agent_used"]
+        sources = rag_result.get("sources", [])
+        suggested_actions = rag_result.get("suggested_actions", [])
+    except RuntimeError as exc:
+        response_text = (
+            "Chatbot RAG chưa sẵn sàng do cấu hình backend còn thiếu. "
+            f"Chi tiết: {exc}"
+        )
+        agent_used = "simple_rag"
+        sources = []
+        suggested_actions = ["Kiểm tra GEMINI_API_KEY", "Chạy script ingest dữ liệu", "Thử lại sau"]
 
     # Save assistant response
     assistant_msg = ChatMessage(
@@ -83,7 +94,7 @@ async def send_message(
         role="assistant",
         content=response_text,
         agent_used=agent_used,
-        metadata_json={"sources": [], "suggested_actions": []},
+        metadata_json={"sources": sources, "suggested_actions": suggested_actions},
     )
     db.add(assistant_msg)
     await db.flush()
@@ -93,12 +104,8 @@ async def send_message(
         role="assistant",
         content=response_text,
         agent_used=agent_used,
-        sources=[],
-        suggested_actions=[
-            "Tìm căn hộ theo khu vực",
-            "Xem xu hướng giá",
-            "Tư vấn pháp lý mua nhà",
-        ],
+        sources=sources,
+        suggested_actions=suggested_actions,
         created_at=assistant_msg.created_at,
     )
 

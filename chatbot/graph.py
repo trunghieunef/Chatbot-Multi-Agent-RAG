@@ -11,12 +11,12 @@ Graph flow:
 
 from langgraph.graph import StateGraph, END
 
-from rag.state import ChatState
-from rag.agents.router import router_node
-from rag.agents.property_search import property_search_node
-from rag.agents.market_analysis import market_analysis_node
-from rag.agents.legal_advisor import legal_advisor_node
-from rag.agents.investment_advisor import investment_advisor_node
+from chatbot.state import ChatState
+from chatbot.agents.router import router_node
+from chatbot.agents.property_search import property_search_node
+from chatbot.agents.market_analysis import market_analysis_node
+from chatbot.agents.legal_advisor import legal_advisor_node
+from chatbot.agents.investment_advisor import investment_advisor_node
 
 
 def synthesizer_node(state: ChatState) -> dict:

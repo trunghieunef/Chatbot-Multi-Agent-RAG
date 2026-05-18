@@ -5,7 +5,7 @@ Provides ROI calculations, investment comparisons,
 risk analysis, and rental yield estimates.
 """
 
-from rag.state import ChatState
+from chatbot.state import ChatState
 
 
 def investment_advisor_node(state: ChatState) -> dict:
