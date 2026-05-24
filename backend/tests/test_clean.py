@@ -59,3 +59,36 @@ def test_row_to_listing_maps_csv_fields():
     assert listing["area"] == 75
     assert listing["bedrooms"] == 2
     assert listing["district"] == "Quận 7"
+
+
+def test_row_to_listing_rent_price_unit_is_million_per_month():
+    row = {
+        "product_id": "456",
+        "title": "Cho thuê căn hộ Quận 7",
+        "url": "/nha-dat-cho-thue/abc",
+        "price_text": "15 triệu/tháng",
+        "area_text": "60 m²",
+        "address": "Phường Tân Phong, Quận 7, Hồ Chí Minh",
+    }
+    listing = row_to_listing(row)
+    assert listing["listing_type"] == "rent"
+    assert listing["price_unit"] == "million/month"
+
+
+def test_row_to_listing_rent_without_thang_falls_back_to_billion():
+    row = {
+        "product_id": "789",
+        "title": "Cho thuê",
+        "url": "/nha-dat-cho-thue/xyz",
+        "price_text": "15 triệu",
+        "area_text": "60 m²",
+        "address": "Phường 1, Quận 7, Hồ Chí Minh",
+    }
+    listing = row_to_listing(row)
+    assert listing["listing_type"] == "rent"
+    assert listing["price_unit"] == "billion"
+
+
+def test_parse_price_per_m2():
+    assert parse_price_per_m2("60 triệu/m²") == 60.0
+    assert parse_price_per_m2("") is None
