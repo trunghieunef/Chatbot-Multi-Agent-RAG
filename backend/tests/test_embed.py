@@ -17,7 +17,7 @@ class FakeModels:
     def __init__(self):
         self.calls = []
 
-    def embed_content(self, model, contents):
+    def embed_content(self, model, contents, config=None):
         self.calls.append((model, contents))
         return FakeResult([[float(i)] * 768 for i, _ in enumerate(contents, start=1)])
 
@@ -37,8 +37,8 @@ async def test_embed_texts_batches_and_returns_vectors():
     assert len(vectors) == 3
     assert len(vectors[0]) == 768
     assert client.models.calls == [
-        ("models/text-embedding-004", ["a", "b"]),
-        ("models/text-embedding-004", ["c"]),
+        ("gemini-embedding-001", ["a", "b"]),
+        ("gemini-embedding-001", ["c"]),
     ]
 
 

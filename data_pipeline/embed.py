@@ -10,10 +10,11 @@ from google import genai
 @dataclass
 class GeminiEmbedder:
     api_key: str
-    model: str = "models/text-embedding-004"
+    model: str = "gemini-embedding-001"
     batch_size: int = 100
     retries: int = 3
     retry_delay_seconds: float = 1.0
+    output_dimensionality: int = 768
     client: object | None = None
 
     def __post_init__(self) -> None:
@@ -45,5 +46,11 @@ class GeminiEmbedder:
         raise RuntimeError(f"Embedding failed after {self.retries} attempts") from last_error
 
     def _embed_batch_sync(self, batch: Sequence[str]) -> list[list[float]]:
-        result = self.client.models.embed_content(model=self.model, contents=list(batch))
+        from google.genai import types
+
+        result = self.client.models.embed_content(
+            model=self.model,
+            contents=list(batch),
+            config=types.EmbedContentConfig(output_dimensionality=self.output_dimensionality),
+        )
         return [list(item.values) for item in result.embeddings]

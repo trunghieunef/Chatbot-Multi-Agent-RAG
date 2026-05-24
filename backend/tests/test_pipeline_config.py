@@ -16,7 +16,7 @@ def test_pipeline_defaults_use_m1_embedding_model(monkeypatch):
 
     settings = Settings(_env_file=None)
 
-    assert settings.GEMINI_EMBEDDING_MODEL == "models/text-embedding-004"
+    assert settings.GEMINI_EMBEDDING_MODEL == "gemini-embedding-001"
     assert settings.EMBEDDING_DIM == 768
     assert settings.CHUNK_SIZE_TOKENS == 400
     assert settings.RERANK_PROVIDER == "cohere"
