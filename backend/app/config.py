@@ -29,7 +29,16 @@ class Settings(BaseSettings):
     # Google Gemini
     GEMINI_API_KEY: str = ""
     GEMINI_MODEL: str = "gemini-2.0-flash"
-    GEMINI_EMBEDDING_MODEL: str = "gemini-embedding-2"
+    GEMINI_EMBEDDING_MODEL: str = "models/text-embedding-004"
+    EMBEDDING_DIM: int = 768
+    CHUNK_SIZE_TOKENS: int = 400
+    CHUNK_OVERLAP_TOKENS: int = 80
+
+    # Reranking
+    COHERE_API_KEY: str = ""
+    RERANK_PROVIDER: str = "cohere"
+    RERANK_MODEL: str = "rerank-multilingual-v3.0"
+    RERANK_TOP_N: int = 5
 
     # JWT
     JWT_SECRET_KEY: str = "your-super-secret-jwt-key-change-in-production"
