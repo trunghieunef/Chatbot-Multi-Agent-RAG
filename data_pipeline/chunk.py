@@ -15,7 +15,9 @@ INTENT_RULES: dict[str, tuple[str, ...]] = {
 
 
 def compact_text(value: Any) -> str:
-    return re.sub(r"\s+", " ", str(value or "")).strip()
+    if value is None:
+        return ""
+    return re.sub(r"\s+", " ", str(value)).strip()
 
 
 def extract_intent_tags(text: str) -> list[str]:
@@ -44,6 +46,7 @@ def build_listing_chunks(listing: dict[str, Any]) -> list[dict[str, str]]:
 
     chunks: list[dict[str, str]] = []
 
+    region = ", ".join(part for part in (district, city) if part)
     overview_parts = [
         title,
         f"Loại giao dịch: {listing_type}" if listing_type else "",
@@ -52,7 +55,7 @@ def build_listing_chunks(listing: dict[str, Any]) -> list[dict[str, str]]:
         f"Diện tích: {area_text}" if area_text else "",
         f"Phòng ngủ: {bedrooms}" if bedrooms else "",
         f"Phòng tắm: {bathrooms}" if bathrooms else "",
-        f"Khu vực: {district}, {city}".strip(", ") if district or city else "",
+        f"Khu vực: {region}" if region else "",
         f"Pháp lý: {legal_status}" if legal_status else "",
         f"Nội thất: {furniture}" if furniture else "",
     ]
