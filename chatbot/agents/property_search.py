@@ -1,11 +1,11 @@
-"""
-Property Search Agent — Find real estate listings matching user needs.
+"""Property Search Agent — Find real estate listings matching user needs.
 
-Uses vector search (ChromaDB) + SQL filters (PostgreSQL) to find
-relevant listings, then uses Gemini to generate a natural language summary.
+Calls hybrid_search (PostgreSQL SQL filter + pgvector kNN + Cohere rerank)
+to retrieve listings, then formats them for the synthesizer.
 """
 
 from chatbot.state import ChatState
+from chatbot.tools.hybrid_search import hybrid_search
 
 PROPERTY_PROMPT = """Bạn là chuyên viên tư vấn bất động sản.
 
@@ -28,33 +28,32 @@ Trả lời bằng tiếng Việt, thân thiện và chuyên nghiệp.
 """
 
 
-def property_search_node(state: ChatState) -> dict:
-    """
-    Property Search node: find listings matching the query.
+def format_listing_results(listings: list[dict]) -> str:
+    if not listings:
+        return "Không tìm thấy bất động sản phù hợp trong dữ liệu hiện có."
 
-    TODO (Phase 3 full implementation):
-    1. Query ChromaDB with embedded query for semantic search
-    2. Query PostgreSQL with extracted filters
-    3. Combine and rank results
-    4. Use Gemini to generate natural language response
-    """
+    lines = []
+    for index, item in enumerate(listings, start=1):
+        lines.append(
+            f"{index}. {item.get('title') or 'Không có tiêu đề'} | "
+            f"{item.get('price_text') or item.get('price') or 'Chưa rõ giá'} | "
+            f"{item.get('area_text') or item.get('area') or 'Chưa rõ diện tích'} | "
+            f"{item.get('district') or ''}, {item.get('city') or ''} | "
+            f"{item.get('url') or ''}"
+        )
+    return "\n".join(lines)
+
+
+async def property_search_node(state: ChatState) -> dict:
     query = state.get("user_query", "")
     filters = state.get("search_filters", {})
-
-    # ─── Placeholder: Will be replaced with real vector + SQL search ───
-    # In Phase 3, this will:
-    # - Call ChromaDB for semantic similarity search
-    # - Call PostgreSQL for filtered structured search
-    # - Merge and deduplicate results
-    # - Pass to Gemini for response generation
-
-    response_text = (
-        f"🏠 **Kết quả tìm kiếm bất động sản**\n\n"
-        f"Tôi đang tìm kiếm theo yêu cầu: \"{query}\"\n"
-        f"Bộ lọc: {filters if filters else 'Không có bộ lọc cụ thể'}\n\n"
-        f"⏳ Hệ thống RAG đang được phát triển. "
-        f"Khi hoàn thành, tôi sẽ tìm kiếm trong cơ sở dữ liệu hàng nghìn tin đăng "
-        f"và đưa ra gợi ý phù hợp nhất cho bạn."
+    listings = await hybrid_search(query=query, filters=filters, parent_type="listing")
+    listings_text = format_listing_results(listings)
+    response_text = PROPERTY_PROMPT.format(
+        query=query,
+        filters=filters if filters else "Không có bộ lọc cụ thể",
+        count=len(listings),
+        listings_text=listings_text,
     )
 
     return {
@@ -63,8 +62,8 @@ def property_search_node(state: ChatState) -> dict:
             "property_search": {
                 "agent_name": "property_search",
                 "content": response_text,
-                "sources": [],
-                "confidence": 0.8,
+                "sources": [item.get("url") for item in listings if item.get("url")],
+                "confidence": 0.85 if listings else 0.35,
             },
         },
     }
