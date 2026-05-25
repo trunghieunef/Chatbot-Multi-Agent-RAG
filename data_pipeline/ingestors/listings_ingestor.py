@@ -21,7 +21,7 @@ from app.models import Chunk, Listing
 from data_pipeline.chunk import build_listing_chunks
 from data_pipeline.clean import row_to_listing
 from data_pipeline.embed import GeminiEmbedder
-from data_pipeline.enrich import GeminiIntentExtractor, NominatimGeocoder
+from data_pipeline.enrich import GeminiIntentExtractor, NominatimGeocoder, build_geocoder
 
 
 def read_csv_rows(csv_path: str) -> list[dict[str, str]]:
@@ -120,9 +120,10 @@ async def ingest_listing_rows(rows: list[dict[str, str]], batch_size: int = 50) 
         batch_size=100,
     )
 
-    geocoder = NominatimGeocoder(
+    geocoder = build_geocoder(
+        provider=settings.GEOCODER_PROVIDER,
         user_agent=settings.GEOCODER_USER_AGENT,
-        rate_limit_seconds=settings.GEOCODER_RATE_LIMIT_SECONDS,
+        goong_api_key=settings.GOONG_API_KEY,
     )
     if settings.INTENT_EXTRACTOR == "gemini" and settings.GEMINI_API_KEY:
         intent_extractor = GeminiIntentExtractor(
