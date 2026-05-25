@@ -14,6 +14,7 @@ if str(BACKEND) not in sys.path:
 
 from app.config import get_settings
 from app.database import async_session
+from chatbot.tools.cache import JsonCache, get_redis_client, hash_pair, hash_text
 from data_pipeline.embed import GeminiEmbedder
 
 _QUERY_EMBEDDER: GeminiEmbedder | None = None
@@ -117,6 +118,29 @@ async def sql_filter(parent_type: str, filters: dict[str, Any], limit: int = 500
         return [row[0] for row in result.all()]
 
 
+async def get_query_embedding(
+    query: str,
+    *,
+    embedder: Any,
+    cache: JsonCache | None = None,
+) -> list[float]:
+    """Return the query embedding, consulting the cache before calling the embedder.
+
+    Cache key is namespaced by the embedder model so a model upgrade never
+    returns stale vectors.
+    """
+    cache_key = hash_text(query, namespace=getattr(embedder, "model", ""))
+    if cache is not None:
+        cached = await cache.get(cache_key)
+        if cached:
+            return cached
+    vectors = await embedder.embed_texts([query])
+    embedding = vectors[0]
+    if cache is not None:
+        await cache.set(cache_key, embedding)
+    return embedding
+
+
 async def pgvector_knn(
     query_embedding: list[float],
     parent_type: str,
@@ -150,6 +174,33 @@ async def cohere_rerank(query: str, chunks: list[dict[str, Any]], top_n: int) ->
     if not chunks or not settings.COHERE_API_KEY:
         return chunks[:top_n]
 
+    rerank_cache: JsonCache | None
+    try:
+        rerank_cache = JsonCache(
+            client=await get_redis_client(),
+            namespace="rerank",
+            ttl_seconds=60 * 60,
+        )
+    except Exception as exc:  # Redis unavailable — degrade gracefully.
+        print(f"[hybrid_search] rerank cache disabled: {exc}", file=sys.stderr)
+        rerank_cache = None
+
+    rerank_namespace = settings.RERANK_MODEL
+
+    if rerank_cache is not None:
+        cached_scores: list[float | None] = []
+        for chunk in chunks:
+            key = hash_pair(query, chunk["text"], namespace=rerank_namespace)
+            cached_scores.append(await rerank_cache.get(key))
+        if all(score is not None for score in cached_scores):
+            scored = []
+            for chunk, score in zip(chunks, cached_scores, strict=True):
+                copy = dict(chunk)
+                copy["rerank_score"] = score
+                scored.append(copy)
+            scored.sort(key=lambda c: c["rerank_score"] or 0.0, reverse=True)
+            return scored[:top_n]
+
     payload = {
         "model": settings.RERANK_MODEL,
         "query": query,
@@ -171,11 +222,20 @@ async def cohere_rerank(query: str, chunks: list[dict[str, Any]], top_n: int) ->
         print(f"[hybrid_search] cohere rerank failed, falling back to vector order: {exc}", file=sys.stderr)
         return chunks[:top_n]
 
+    results = data.get("results")
+    if not results:
+        return chunks[:top_n]
+
     reranked = []
-    for item in data.get("results", []):
+    for item in results:
+        if "index" not in item:
+            return chunks[:top_n]
         chunk = dict(chunks[item["index"]])
         chunk["rerank_score"] = item.get("relevance_score")
         reranked.append(chunk)
+        if rerank_cache is not None and chunk["rerank_score"] is not None:
+            key = hash_pair(query, chunk["text"], namespace=rerank_namespace)
+            await rerank_cache.set(key, chunk["rerank_score"])
     return reranked
 
 
@@ -305,7 +365,18 @@ async def hybrid_search(
         return []
 
     embedder = _get_query_embedder()
-    query_embedding = (await embedder.embed_texts([query]))[0]
+    embedding_cache: JsonCache | None
+    try:
+        embedding_cache = JsonCache(
+            client=await get_redis_client(),
+            namespace="embed:q",
+            ttl_seconds=60 * 60 * 24 * 7,
+        )
+    except Exception as exc:  # Redis unavailable — degrade gracefully.
+        print(f"[hybrid_search] embedding cache disabled: {exc}", file=sys.stderr)
+        embedding_cache = None
+
+    query_embedding = await get_query_embedding(query, embedder=embedder, cache=embedding_cache)
     chunks = await pgvector_knn(query_embedding, parent_type=parent_type, parent_ids=candidate_ids, k=top_k)
     reranked = await cohere_rerank(query, chunks, top_n=rerank_to)
 
