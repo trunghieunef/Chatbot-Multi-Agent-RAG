@@ -48,6 +48,16 @@ class Settings(BaseSettings):
     # CORS
     CORS_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000"
 
+    # Geocoding
+    GEOCODER_PROVIDER: str = "nominatim"          # 'nominatim' | 'goong'
+    GEOCODER_USER_AGENT: str = "realestate-chatbot/0.1 (contact@example.com)"
+    GEOCODER_RATE_LIMIT_SECONDS: float = 1.0
+    GOONG_API_KEY: str = ""
+
+    # Intent extraction
+    INTENT_EXTRACTOR: str = "rule"                # 'rule' | 'gemini'
+    GEMINI_INTENT_MODEL: str = "gemini-2.0-flash"
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [origin.strip() for origin in self.CORS_ORIGINS.split(",")]

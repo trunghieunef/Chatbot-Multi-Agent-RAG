@@ -1,3 +1,4 @@
+from data_pipeline.chunk import build_listing_chunks
 from data_pipeline.ingestors.listings_ingestor import prepare_listing_chunks
 
 
@@ -14,11 +15,13 @@ def test_prepare_listing_chunks_pairs_text_and_vectors():
         "address": "Phường Tân Phong, Quận 7, Hồ Chí Minh",
         "description": "Gần trường học.",
     }
-    vectors = [[0.1] * 768, [0.2] * 768, [0.3] * 768, [0.4] * 768]
+    chunks = build_listing_chunks(listing_data)
+    vectors = [[float(i) / 10] * 768 for i in range(len(chunks))]
 
-    rows = prepare_listing_chunks(listing_id, listing_data, vectors)
+    rows = prepare_listing_chunks(listing_id, chunks, vectors)
 
+    assert len(rows) == len(chunks)
     assert rows[0]["parent_type"] == "listing"
     assert rows[0]["parent_id"] == 42
-    assert rows[0]["chunk_type"] == "overview"
-    assert rows[0]["embedding"] == [0.1] * 768
+    assert rows[0]["chunk_type"] == chunks[0]["chunk_type"]
+    assert rows[0]["embedding"] == vectors[0]

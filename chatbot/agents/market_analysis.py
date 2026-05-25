@@ -6,40 +6,35 @@ and regional comparisons.
 """
 
 from chatbot.state import ChatState
+from chatbot.tools.market_stats import district_price_overview
 
 
-def market_analysis_node(state: ChatState) -> dict:
-    """
-    Market Analysis node: provide market insights and trends.
+async def market_analysis_node(state: ChatState) -> dict:
+    filters = state.get("search_filters", {})
+    city = filters.get("city") or "Hồ Chí Minh"
+    listing_type = filters.get("listing_type") or "sale"
+    property_type = filters.get("property_type")
 
-    TODO (Phase 3 full implementation):
-    1. Query PostgreSQL for aggregate statistics
-    2. Calculate price trends over time
-    3. Compare regions/districts
-    4. Use Gemini to generate analytical report
-    """
-    query = state.get("user_query", "")
-
-    response_text = (
-        f"📊 **Phân tích thị trường bất động sản**\n\n"
-        f"Câu hỏi: \"{query}\"\n\n"
-        f"⏳ Module phân tích thị trường đang được phát triển.\n"
-        f"Khi hoàn thành, tôi sẽ cung cấp:\n"
-        f"- Xu hướng giá theo khu vực và thời gian\n"
-        f"- So sánh giá giữa các quận/huyện\n"
-        f"- Thống kê cung-cầu theo loại hình BĐS\n"
-        f"- Phân tích giá/m² trung bình\n"
-        f"- Dự báo xu hướng ngắn hạn"
-    )
+    rows = await district_price_overview(city=city, listing_type=listing_type, property_type=property_type)
+    if not rows:
+        content = f"Chưa đủ dữ liệu để phân tích {city} ({listing_type})."
+    else:
+        lines = [f"Phân tích giá theo quận tại {city} ({listing_type}):"]
+        for row in rows[:10]:
+            lines.append(
+                f"- {row['district']}: {row['listings']} tin, "
+                f"giá TB {row['avg_price']:.2f} tỷ, giá/m² TB {row['avg_price_per_m2']:.2f} triệu"
+            )
+        content = "\n".join(lines)
 
     return {
         "agent_results": {
             **state.get("agent_results", {}),
             "market_analysis": {
                 "agent_name": "market_analysis",
-                "content": response_text,
+                "content": content,
                 "sources": [],
-                "confidence": 0.7,
+                "confidence": 0.7 if rows else 0.3,
             },
         },
     }

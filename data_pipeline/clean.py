@@ -5,7 +5,9 @@ Provides parsers for Vietnamese price/area text, listing/property type classific
 location extraction, and a high-level row_to_listing converter.
 """
 
+import json
 import re
+from datetime import date
 
 
 PRICE_RE = re.compile(r"([\d.,]+)", re.IGNORECASE)
@@ -148,4 +150,68 @@ def row_to_listing(row: dict) -> dict:
         "url": row.get("url", "") or None,
         "listing_type_label": row.get("listing_type", "") or None,
         "is_active": True,
+    }
+
+
+def row_to_project(row: dict) -> dict:
+    """Convert a project CSV row dict into Project model kwargs.
+
+    Tolerates missing/blank fields, JSON-encoded amenities lists, and
+    non-numeric ``total_units`` values.
+    """
+    raw_amenities = row.get("amenities") or "[]"
+    try:
+        amenities = (
+            json.loads(raw_amenities)
+            if isinstance(raw_amenities, str)
+            else list(raw_amenities)
+        )
+    except json.JSONDecodeError:
+        amenities = []
+
+    total_units_value = row.get("total_units")
+    try:
+        total_units = (
+            int(total_units_value) if total_units_value not in (None, "") else None
+        )
+    except (TypeError, ValueError):
+        total_units = None
+
+    return {
+        "slug": (row.get("slug") or "").strip(),
+        "name": (row.get("name") or "").strip(),
+        "developer": (row.get("developer") or "").strip() or None,
+        "location": row.get("location") or None,
+        "district": row.get("district") or None,
+        "city": row.get("city") or None,
+        "total_units": total_units,
+        "price_range": row.get("price_range") or None,
+        "area_range": row.get("area_range") or None,
+        "status": row.get("status") or None,
+        "project_type": row.get("project_type") or None,
+        "description": row.get("description") or None,
+        "amenities": [str(item).strip() for item in amenities if str(item).strip()],
+        "url": row.get("url") or None,
+    }
+
+
+def _parse_iso_date(value: str) -> date | None:
+    """Return a ``date`` from an ISO ``YYYY-MM-DD`` string, or ``None`` if unparseable."""
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(value.strip())
+    except ValueError:
+        return None
+
+
+def row_to_article(row: dict) -> dict:
+    """Convert a news/article CSV row dict into Article model kwargs."""
+    return {
+        "title": (row.get("title") or "").strip(),
+        "body": (row.get("body") or "").strip(),
+        "category": (row.get("category") or "news").strip() or "news",
+        "source": (row.get("source") or "").strip() or "batdongsan.com",
+        "post_date": _parse_iso_date(row.get("post_date") or ""),
+        "url": row.get("url") or None,
     }

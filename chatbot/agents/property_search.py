@@ -1,8 +1,7 @@
-"""
-Property Search Agent — Find real estate listings matching user needs.
+"""Property Search Agent — Find real estate listings matching user needs.
 
-Uses vector search (ChromaDB) + SQL filters (PostgreSQL) to find
-relevant listings, then uses Gemini to generate a natural language summary.
+Calls hybrid_search (PostgreSQL SQL filter + pgvector kNN + Cohere rerank)
+to retrieve listings, then formats them for the synthesizer.
 """
 
 from chatbot.state import ChatState

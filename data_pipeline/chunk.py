@@ -75,7 +75,12 @@ def build_listing_chunks(listing: dict[str, Any]) -> list[dict[str, str]]:
     if location:
         chunks.append({"chunk_type": "location", "text": location})
 
-    tags = extract_intent_tags(" ".join([title, description, address, legal_status, furniture]))
+    precomputed = listing.get("intent_tags")
+    if isinstance(precomputed, list) and precomputed:
+        tags = [str(tag) for tag in precomputed if str(tag).strip()]
+    else:
+        tags = extract_intent_tags(" ".join([title, description, address, legal_status, furniture]))
+
     if tags:
         chunks.append({"chunk_type": "intent_tags", "text": "Nhu cầu phù hợp: " + ", ".join(tags)})
 

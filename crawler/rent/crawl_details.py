@@ -1,7 +1,7 @@
 """
-Step 2: Crawl detailed listing information from batdongsan.com.vn.
+Step 2: Crawl detailed rental listing information from batdongsan.com.vn.
 
-Reads listing URLs from listing_url.csv (output of Step 1: crawl_urls.py),
+Reads listing URLs from rent_urls.csv (output of Step 1: crawl_urls.py),
 visits each listing page with headless Chrome + stealth, and extracts detailed
 property information.
 
@@ -14,9 +14,9 @@ Features:
   - Optional --since YYYY-MM-DD filter on post_date
 
 Usage:
-    python -m crawler.sale.crawl_details
-    python -m crawler.sale.crawl_details --input ../listing_url.csv --output ../listing_details.csv --workers 4
-    python -m crawler.sale.crawl_details --since 2026-01-01
+    python -m crawler.rent.crawl_details
+    python -m crawler.rent.crawl_details --input data/raw/rent_urls.csv --output data/raw/rent_details.csv --workers 4
+    python -m crawler.rent.crawl_details --since 2026-01-01
 """
 
 import argparse
@@ -249,7 +249,7 @@ def parse_detail_page(page, url: str, product_id: str) -> dict | None:
         data["contact_name"] = text_or_empty(contact_el)
 
         # Apply shared normalization (sets listing_type + price_unit)
-        data = normalize_listing_detail(data, source="sale")
+        data = normalize_listing_detail(data, source="rent")
 
         return data
 
@@ -429,7 +429,7 @@ def _read_done_ids_with_tmp(output: str) -> set[str]:
 
 
 def _read_input_urls(input_file: str) -> list[dict]:
-    """Read URLs from the input CSV (listing_url.csv)."""
+    """Read URLs from the input CSV (rent_urls.csv)."""
     urls = []
     with open(input_file, newline="", encoding="utf-8-sig") as f:
         reader = csv.DictReader(f)
@@ -445,15 +445,15 @@ def _read_input_urls(input_file: str) -> list[dict]:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Step 2: Crawl listing details from batdongsan.com.vn"
+        description="Step 2: Crawl rental listing details from batdongsan.com.vn"
     )
     parser.add_argument(
-        "--input", default="../listing_url.csv",
-        help="Input CSV with product_id,url columns (default: ../listing_url.csv)",
+        "--input", default="data/raw/rent_urls.csv",
+        help="Input CSV with product_id,url columns (default: data/raw/rent_urls.csv)",
     )
     parser.add_argument(
-        "--output", default="../listing_details.csv",
-        help="Output CSV file (default: ../listing_details.csv)",
+        "--output", default="data/raw/rent_details.csv",
+        help="Output CSV file (default: data/raw/rent_details.csv)",
     )
     parser.add_argument(
         "--workers", type=int, default=4,
