@@ -7,7 +7,6 @@ from sqlalchemy import (
     Boolean, Column, Date, DateTime, Enum, Float, Index, Integer,
     String, Text, func,
 )
-from pgvector.sqlalchemy import Vector
 
 from app.database import Base
 
@@ -71,9 +70,6 @@ class Listing(Base):
     badge = Column(String(50))
     listing_type_label = Column(String(50))  # Loại tin (Tin VIP, Tin thường, ...)
     is_active = Column(Boolean, default=True)
-
-    # Vector embedding for RAG
-    embedding = Column(Vector(768))  # Gemini embedding dimension
 
     # Timestamps
     created_at = Column(DateTime, default=func.now())

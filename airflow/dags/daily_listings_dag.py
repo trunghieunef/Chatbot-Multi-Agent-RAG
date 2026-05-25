@@ -17,6 +17,8 @@ from plugins.pipeline_runner import (
     run_crawler,
     run_listings_ingestion,
 )
+from plugins.run_metrics import on_failure as record_failure
+from plugins.run_metrics import on_success as record_success
 
 
 LOCAL_TZ = pendulum.timezone("Asia/Ho_Chi_Minh")
@@ -92,6 +94,8 @@ with DAG(
     start_date=datetime(2026, 5, 25),
     catchup=False,
     max_active_runs=1,
+    on_success_callback=record_success,
+    on_failure_callback=record_failure,
     tags=["realestate", "listings"],
 ) as dag:
     source_groups = []

@@ -30,5 +30,8 @@ httpx>=0.28.0
 pymupdf>=1.24.0
 beautifulsoup4>=4.14.0
 
+# Observability (M5)
+prometheus-client>=0.21
+
 # Test/Dev
 pytest-asyncio>=0.24

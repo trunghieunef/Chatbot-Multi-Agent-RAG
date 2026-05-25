@@ -447,3 +447,7 @@ python -m compileall backend\app chatbot data_pipeline
 3. Thêm observability: log `routing`, `agent_used`, latency từng agent.
 4. Thêm feature flag `CHATBOT_PIPELINE=multi|simple` nếu cần rollback khi deploy.
 5. Thêm streaming/WebSocket sau khi REST flow ổn định.
+
+## Operations
+
+- Grafana: import `infra/grafana/realestate-pipeline.json` and point it at the FastAPI Prometheus scrape job.

@@ -2,10 +2,14 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from dataclasses import dataclass, field
 from typing import Callable
 
 import httpx
+
+
+logger = logging.getLogger(__name__)
 
 
 INTENT_PROMPT = (
@@ -76,3 +80,29 @@ class GeminiIntentExtractor:
             return [tag for tag in tags if isinstance(tag, str) and tag.strip()]
         except (json.JSONDecodeError, AttributeError, TypeError):
             return []
+
+
+class _NoOpGeocoder:
+    """Returns ``None`` for every address. Used when no provider is wired."""
+
+    async def geocode(self, address: str) -> tuple[float, float] | None:
+        return None
+
+
+def build_geocoder(*, provider: str, user_agent: str, goong_api_key: str) -> object:
+    """Return a geocoder for the configured provider.
+
+    M5 only ships ``nominatim``. ``goong`` is reserved for a future Goong
+    Maps implementation; until then we return a no-op and log a warning so
+    operators see the misconfiguration.
+    """
+    if provider == "nominatim":
+        return NominatimGeocoder(user_agent=user_agent)
+    if provider == "goong":
+        logger.warning(
+            "GEOCODER_PROVIDER=goong is configured but not implemented in M5; "
+            "geocoding will be skipped. Implement a GoongGeocoder if needed."
+        )
+        return _NoOpGeocoder()
+    logger.warning("Unknown GEOCODER_PROVIDER=%s; geocoding disabled.", provider)
+    return _NoOpGeocoder()
