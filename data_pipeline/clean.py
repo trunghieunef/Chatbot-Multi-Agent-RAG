@@ -7,6 +7,7 @@ location extraction, and a high-level row_to_listing converter.
 
 import json
 import re
+from datetime import date
 
 
 PRICE_RE = re.compile(r"([\d.,]+)", re.IGNORECASE)
@@ -190,5 +191,27 @@ def row_to_project(row: dict) -> dict:
         "project_type": row.get("project_type") or None,
         "description": row.get("description") or None,
         "amenities": [str(item).strip() for item in amenities if str(item).strip()],
+        "url": row.get("url") or None,
+    }
+
+
+def _parse_iso_date(value: str) -> date | None:
+    """Return a ``date`` from an ISO ``YYYY-MM-DD`` string, or ``None`` if unparseable."""
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(value.strip())
+    except ValueError:
+        return None
+
+
+def row_to_article(row: dict) -> dict:
+    """Convert a news/article CSV row dict into Article model kwargs."""
+    return {
+        "title": (row.get("title") or "").strip(),
+        "body": (row.get("body") or "").strip(),
+        "category": (row.get("category") or "news").strip() or "news",
+        "source": "batdongsan.com",
+        "post_date": _parse_iso_date(row.get("post_date") or ""),
         "url": row.get("url") or None,
     }
