@@ -1,12 +1,91 @@
-﻿services:
-  app:
-    image: python:3.12-slim
-    container_name: realestate_chatbot
-    working_dir: /app
-    ports:
-      - "8000:8000"
+services:
+  # ─── PostgreSQL + pgvector ───────────────────────────────────
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: realestate_postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-realestate}
+      POSTGRES_USER: ${POSTGRES_USER:-admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-realestate_secret_2026}
     volumes:
-      - ./:/app
-    command: >
-      sh -c "pip install --no-cache-dir -r requirements.txt &&
-             uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload"
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-admin} -d ${POSTGRES_DB:-realestate}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── Redis ───────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: realestate_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── ChromaDB (Vector Store) ─────────────────────────────────
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: realestate_chromadb
+    ports:
+      - "${CHROMA_PORT:-8001}:8000"
+    volumes:
+      - chromadata:/chroma/chroma
+    environment:
+      - IS_PERSISTENT=TRUE
+
+  # ─── Backend API ─────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: realestate_backend
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      chromadb:
+        condition: service_started
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-admin}:${POSTGRES_PASSWORD:-realestate_secret_2026}@postgres:5432/${POSTGRES_DB:-realestate}
+      REDIS_URL: redis://redis:6379/0
+      CHROMA_HOST: chromadb
+      CHROMA_PORT: 8000
+    volumes:
+      - ./backend:/app
+      - ./data:/app/data
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # ─── Frontend ────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: realestate_frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    environment:
+      NEXT_PUBLIC_API_URL: http://backend:8000/api/v1
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+
+volumes:
+  pgdata:
+  redisdata:
+  chromadata:
