@@ -34,3 +34,10 @@ def test_run_crawler_raises_when_subprocess_fails(monkeypatch):
         run_crawler(module="crawler.sale.crawl_urls", args={})
 
     assert "exit code 2" in str(exc.value)
+
+
+def test_run_legal_ingestion_callable_exists():
+    from plugins import pipeline_runner
+
+    assert hasattr(pipeline_runner, "run_legal_ingestion")
+    assert callable(pipeline_runner.run_legal_ingestion)
