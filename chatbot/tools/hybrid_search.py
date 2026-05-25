@@ -65,17 +65,52 @@ def build_listing_filter_clauses(filters: dict[str, Any]) -> tuple[list[str], di
     return clauses, params
 
 
+def build_project_filter_clauses(filters: dict[str, Any]) -> tuple[list[str], dict[str, Any]]:
+    clauses: list[str] = []
+    params: dict[str, Any] = {}
+    if filters.get("status"):
+        clauses.append("status = :status")
+        params["status"] = filters["status"]
+    if filters.get("city"):
+        clauses.append("city ILIKE :city")
+        params["city"] = f"%{filters['city']}%"
+    if filters.get("district"):
+        clauses.append("district ILIKE :district")
+        params["district"] = f"%{filters['district']}%"
+    if filters.get("project_type"):
+        clauses.append("project_type ILIKE :project_type")
+        params["project_type"] = f"%{filters['project_type']}%"
+    return clauses or ["1=1"], params
+
+
+def build_article_filter_clauses(filters: dict[str, Any]) -> tuple[list[str], dict[str, Any]]:
+    clauses: list[str] = []
+    params: dict[str, Any] = {}
+    if filters.get("category"):
+        clauses.append("category = :category")
+        params["category"] = filters["category"]
+    return clauses or ["1=1"], params
+
+
 async def sql_filter(parent_type: str, filters: dict[str, Any], limit: int = 500) -> list[int]:
-    if parent_type != "listing":
+    if parent_type == "listing":
+        clauses, params = build_listing_filter_clauses(filters)
+        table = "listings"
+        order_by = "ORDER BY updated_at DESC NULLS LAST, id DESC"
+    elif parent_type == "project":
+        clauses, params = build_project_filter_clauses(filters)
+        table = "projects"
+        order_by = "ORDER BY updated_at DESC NULLS LAST, id DESC"
+    elif parent_type == "article":
+        clauses, params = build_article_filter_clauses(filters)
+        table = "articles"
+        order_by = "ORDER BY post_date DESC NULLS LAST, id DESC"
+    else:
         return []
 
-    clauses, params = build_listing_filter_clauses(filters)
     params["limit"] = limit
     query = text(
-        "SELECT id FROM listings "
-        f"WHERE {' AND '.join(clauses)} "
-        "ORDER BY updated_at DESC NULLS LAST, id DESC "
-        "LIMIT :limit"
+        f"SELECT id FROM {table} WHERE {' AND '.join(clauses)} {order_by} LIMIT :limit"
     )
     async with async_session() as session:
         result = await session.execute(query, params)
@@ -174,6 +209,77 @@ async def resolve_to_listing_records(chunks: list[dict[str, Any]]) -> list[dict[
     return records
 
 
+async def resolve_to_project_records(chunks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    parent_ids: list[int] = []
+    for chunk in chunks:
+        pid = chunk["parent_id"]
+        if pid not in parent_ids:
+            parent_ids.append(pid)
+
+    if not parent_ids:
+        return []
+
+    query = text(
+        "SELECT id, slug, name, developer, district, city, status, "
+        "price_range, area_range, project_type, url "
+        "FROM projects WHERE id = ANY(:ids)"
+    )
+    async with async_session() as session:
+        result = await session.execute(query, {"ids": parent_ids})
+        projects = {row._mapping["id"]: dict(row._mapping) for row in result.all()}
+
+    records: list[dict[str, Any]] = []
+    for chunk in chunks:
+        project = projects.get(chunk["parent_id"])
+        if not project:
+            continue
+        if any(record["id"] == project["id"] for record in records):
+            continue
+        project["matched_chunk"] = {
+            "chunk_type": chunk["chunk_type"],
+            "text": chunk["text"],
+            "distance": float(chunk["distance"]),
+            "rerank_score": chunk.get("rerank_score"),
+        }
+        records.append(project)
+    return records
+
+
+async def resolve_to_article_records(chunks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    parent_ids: list[int] = []
+    for chunk in chunks:
+        pid = chunk["parent_id"]
+        if pid not in parent_ids:
+            parent_ids.append(pid)
+
+    if not parent_ids:
+        return []
+
+    query = text(
+        "SELECT id, title, category, source, post_date, url FROM articles "
+        "WHERE id = ANY(:ids)"
+    )
+    async with async_session() as session:
+        result = await session.execute(query, {"ids": parent_ids})
+        articles = {row._mapping["id"]: dict(row._mapping) for row in result.all()}
+
+    records: list[dict[str, Any]] = []
+    for chunk in chunks:
+        article = articles.get(chunk["parent_id"])
+        if not article:
+            continue
+        if any(record["id"] == article["id"] for record in records):
+            continue
+        article["matched_chunk"] = {
+            "chunk_type": chunk["chunk_type"],
+            "text": chunk["text"],
+            "distance": float(chunk["distance"]),
+            "rerank_score": chunk.get("rerank_score"),
+        }
+        records.append(article)
+    return records
+
+
 async def hybrid_search(
     query: str,
     filters: dict[str, Any] | None = None,
@@ -193,6 +299,10 @@ async def hybrid_search(
 
     if parent_type == "listing":
         return await resolve_to_listing_records(reranked)
+    if parent_type == "project":
+        return await resolve_to_project_records(reranked)
+    if parent_type == "article":
+        return await resolve_to_article_records(reranked)
     return []
 
 
