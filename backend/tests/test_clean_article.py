@@ -22,3 +22,16 @@ def test_row_to_article_parses_iso_date():
 def test_row_to_article_returns_none_post_date_for_invalid_input():
     article = row_to_article({"title": "T", "body": "B", "url": "u", "post_date": "không rõ"})
     assert article["post_date"] is None
+
+
+def test_row_to_article_passes_through_explicit_source():
+    article = row_to_article(
+        {"title": "T", "body": "B", "url": "u", "source": "luatvietnam.vn", "category": "legal"}
+    )
+    assert article["source"] == "luatvietnam.vn"
+    assert article["category"] == "legal"
+
+
+def test_row_to_article_defaults_source_when_missing():
+    article = row_to_article({"title": "T", "body": "B", "url": "u"})
+    assert article["source"] == "batdongsan.com"

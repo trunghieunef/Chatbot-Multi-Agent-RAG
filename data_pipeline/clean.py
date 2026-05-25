@@ -211,7 +211,7 @@ def row_to_article(row: dict) -> dict:
         "title": (row.get("title") or "").strip(),
         "body": (row.get("body") or "").strip(),
         "category": (row.get("category") or "news").strip() or "news",
-        "source": "batdongsan.com",
+        "source": (row.get("source") or "").strip() or "batdongsan.com",
         "post_date": _parse_iso_date(row.get("post_date") or ""),
         "url": row.get("url") or None,
     }

@@ -50,3 +50,37 @@ async def test_enrich_listing_data_skips_geocode_for_blank_address():
     assert enriched["latitude"] is None
     assert enriched["longitude"] is None
     assert geocoder.calls == []
+
+
+class FlakyGeocoder:
+    async def geocode(self, address):
+        raise RuntimeError("nominatim 503")
+
+
+class FlakyIntent:
+    async def extract(self, content):
+        raise RuntimeError("gemini timeout")
+
+
+@pytest.mark.asyncio
+async def test_enrich_listing_data_degrades_on_geocode_failure():
+    listing = {"address": "Quận 7", "description": "Gần trường"}
+    enriched = await enrich_listing_data(
+        listing, geocoder=FlakyGeocoder(), intent_extractor=StubIntent(["gần trường"])
+    )
+
+    assert enriched["latitude"] is None
+    assert enriched["longitude"] is None
+    assert enriched["intent_tags"] == ["gần trường"]
+
+
+@pytest.mark.asyncio
+async def test_enrich_listing_data_degrades_on_intent_failure():
+    listing = {"address": "Quận 7", "description": "Gần trường"}
+    enriched = await enrich_listing_data(
+        listing, geocoder=StubGeocoder((10.7, 106.7)), intent_extractor=FlakyIntent()
+    )
+
+    assert enriched["latitude"] == 10.7
+    assert enriched["longitude"] == 106.7
+    assert enriched["intent_tags"] == []

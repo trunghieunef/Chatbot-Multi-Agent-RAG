@@ -16,7 +16,6 @@ Output CSV columns:
 import argparse
 import csv
 import glob
-import json
 import os
 import random
 import threading
@@ -66,15 +65,11 @@ def _log(msg: str) -> None:
 def parse_detail_page(page, url: str, slug: str) -> dict | None:
     """Extract project detail fields.
 
-    TODO: implement project detail selectors. Until then, this returns a
-    skeleton row populated with slug/url so downstream wiring can be
-    smoke-tested without crashing.
+    TODO: implement project detail selectors. Until then, this returns
+    ``None`` so workers don't write empty rows. The CSV column contract is
+    fixed by ``DETAIL_FIELDS`` above; future selector work should populate
+    that shape and return the dict.
     """
-    # TODO: implement project detail selectors
-    data = {field: "" for field in DETAIL_FIELDS}
-    data["slug"] = slug
-    data["url"] = url
-    data["amenities"] = json.dumps([], ensure_ascii=False)
     return None  # signal "not implemented" so workers don't write empty rows
 
 

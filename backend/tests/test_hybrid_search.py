@@ -100,3 +100,44 @@ async def test_cohere_rerank_attaches_score_when_api_succeeds(monkeypatch):
     assert [chunk["parent_id"] for chunk in result] == [2, 1]
     assert result[0]["rerank_score"] == 0.9
     assert result[1]["rerank_score"] == 0.4
+
+
+@pytest.mark.asyncio
+async def test_cohere_rerank_falls_back_on_http_error(monkeypatch):
+    import httpx
+
+    from app import config as app_config
+    from chatbot.tools import hybrid_search as hs
+
+    fake_settings = type(
+        "S",
+        (),
+        {"COHERE_API_KEY": "test-key", "RERANK_MODEL": "rerank-multilingual-v3.0"},
+    )()
+    monkeypatch.setattr(app_config, "get_settings", lambda: fake_settings)
+    monkeypatch.setattr(hs, "get_settings", lambda: fake_settings)
+
+    class FlakyAsyncClient:
+        def __init__(self, *_, **__):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+        async def post(self, *_, **__):
+            raise httpx.ConnectTimeout("cohere unreachable")
+
+    monkeypatch.setattr(hs.httpx, "AsyncClient", FlakyAsyncClient)
+
+    chunks = [
+        {"text": "a", "parent_id": 1, "chunk_type": "overview", "distance": 0.1},
+        {"text": "b", "parent_id": 2, "chunk_type": "overview", "distance": 0.2},
+        {"text": "c", "parent_id": 3, "chunk_type": "overview", "distance": 0.3},
+    ]
+
+    result = await cohere_rerank("query", chunks, top_n=2)
+
+    assert result == chunks[:2]

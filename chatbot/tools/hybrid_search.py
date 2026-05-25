@@ -160,10 +160,16 @@ async def cohere_rerank(query: str, chunks: list[dict[str, Any]], top_n: int) ->
         "Authorization": f"Bearer {settings.COHERE_API_KEY}",
         "Content-Type": "application/json",
     }
-    async with httpx.AsyncClient(timeout=30) as client:
-        response = await client.post("https://api.cohere.com/v2/rerank", json=payload, headers=headers)
-        response.raise_for_status()
-        data = response.json()
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.post("https://api.cohere.com/v2/rerank", json=payload, headers=headers)
+            response.raise_for_status()
+            data = response.json()
+    except (httpx.HTTPError, ValueError) as exc:
+        # Graceful fallback: degrade to vector-distance order on transient
+        # API failure (5xx, timeout, 429) or malformed response.
+        print(f"[hybrid_search] cohere rerank failed, falling back to vector order: {exc}", file=sys.stderr)
+        return chunks[:top_n]
 
     reranked = []
     for item in data.get("results", []):

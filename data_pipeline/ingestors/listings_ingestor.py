@@ -54,28 +54,44 @@ async def enrich_listing_data(listing: dict, *, geocoder, intent_extractor) -> d
     Returns a copy of ``listing`` with ``latitude``/``longitude`` populated when
     the address is non-blank and the geocoder resolves it, plus ``intent_tags``
     produced by ``intent_extractor`` from a concatenation of title, description,
-    and address.
+    and address. Geocoder/intent network failures degrade to ``None``/``[]`` so
+    a flaky upstream service can't drop the listing from ingestion.
     """
     enriched = dict(listing)
 
+    enriched.setdefault("latitude", None)
+    enriched.setdefault("longitude", None)
+
     address = (enriched.get("address") or "").strip()
     if address:
-        coord = await geocoder.geocode(address)
+        try:
+            coord = await geocoder.geocode(address)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            print(
+                f"[enrich] geocode failed for {address!r}: {exc}",
+                file=sys.stderr,
+            )
+            coord = None
         if coord:
             enriched["latitude"], enriched["longitude"] = coord
-        else:
-            enriched.setdefault("latitude", None)
-            enriched.setdefault("longitude", None)
-    else:
-        enriched.setdefault("latitude", None)
-        enriched.setdefault("longitude", None)
 
     description_for_intent = " ".join(
         part
         for part in (enriched.get("title"), enriched.get("description"), enriched.get("address"))
         if part
     )
-    enriched["intent_tags"] = await intent_extractor.extract(description_for_intent)
+    try:
+        enriched["intent_tags"] = await intent_extractor.extract(description_for_intent)
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        print(
+            f"[enrich] intent extraction failed for {enriched.get('product_id', '?')}: {exc}",
+            file=sys.stderr,
+        )
+        enriched["intent_tags"] = []
     return enriched
 
 
