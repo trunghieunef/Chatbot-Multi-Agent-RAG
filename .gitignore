@@ -46,5 +46,11 @@ Thumbs.db
 *.tmp
 *.worker*.tmp
 
+# ─── Legal knowledge base (large PDFs and ingestion logs) ────
+data/knowledge/raw/*
+!data/knowledge/raw/.gitkeep
+data/knowledge/ingested/*
+!data/knowledge/ingested/.gitkeep
+
 # ─── Agent ────────────────────────────────────────────────────
 .agent/
