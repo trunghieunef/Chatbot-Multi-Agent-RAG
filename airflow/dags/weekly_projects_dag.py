@@ -8,6 +8,8 @@ from airflow.operators.python import PythonOperator
 
 from plugins.alerting import slack_failure_callback
 from plugins.pipeline_runner import REPO_ROOT, run_crawler, run_projects_ingestion
+from plugins.run_metrics import on_failure as record_failure
+from plugins.run_metrics import on_success as record_success
 
 
 def _alert_emails() -> list[str]:
@@ -59,6 +61,8 @@ with DAG(
     start_date=datetime(2026, 5, 25),
     catchup=False,
     max_active_runs=1,
+    on_success_callback=record_success,
+    on_failure_callback=record_failure,
     tags=["realestate", "projects"],
 ) as dag:
     crawl_urls = PythonOperator(task_id="crawl_project_urls", python_callable=_crawl_project_urls)
