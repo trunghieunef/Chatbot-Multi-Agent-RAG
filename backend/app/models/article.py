@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Date, DateTime, Integer, String, Text, func
+from sqlalchemy import JSON, Column, Date, DateTime, Integer, String, Text, func
 
 from app.database import Base
 
@@ -15,5 +15,6 @@ class Article(Base):
     source = Column(String(150))
     post_date = Column(Date)
     url = Column(Text, unique=True)
+    metadata_json = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
