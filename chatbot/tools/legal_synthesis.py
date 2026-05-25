@@ -36,7 +36,20 @@ def format_citations(chunks: list[dict[str, Any]]) -> str:
         chuong = citation.get("chuong") or ""
         dieu = citation.get("dieu_number")
         dieu_title = citation.get("dieu_title") or ""
-        header = f"[{index}] ({slug}, {chuong}, Điều {dieu} - {dieu_title})".strip(", ")
+        khoan = citation.get("khoan_number")
+
+        parts: list[str] = [slug]
+        if chuong:
+            parts.append(chuong)
+        if dieu is not None:
+            dieu_part = f"Điều {dieu}"
+            if dieu_title:
+                dieu_part += f" - {dieu_title}"
+            parts.append(dieu_part)
+        if khoan is not None:
+            parts.append(f"Khoản {khoan}")
+        header = f"[{index}] (" + ", ".join(parts) + ")"
+
         snippet = (chunk.get("text") or "").strip().replace("\n", " ")
         if len(snippet) > 600:
             snippet = snippet[:600] + "..."

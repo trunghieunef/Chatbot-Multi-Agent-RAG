@@ -36,3 +36,41 @@ def test_prepare_chunk_rows_pairs_chunks_and_vectors():
     assert rows[0]["chunk_type"] == "dieu"
     assert rows[0]["text"].startswith("Điều 1")
     assert rows[0]["embedding"] == [0.1] * 768
+
+
+def test_prepare_chunk_rows_persists_citation_in_metadata_json():
+    chunks = [
+        {
+            "chunk_type": "khoan",
+            "text": "Điều 3 Khoản 2...",
+            "citation": {
+                "doc_slug": "luat-dat-dai-2024",
+                "chuong": "Chương II",
+                "dieu_number": 3,
+                "dieu_title": "Quyền",
+                "khoan_number": 2,
+            },
+        },
+    ]
+    vectors = [[0.0] * 768]
+
+    rows = prepare_chunk_rows(article_id=7, chunks=chunks, vectors=vectors)
+
+    assert rows[0]["metadata_json"] == {
+        "citation": {
+            "doc_slug": "luat-dat-dai-2024",
+            "chuong": "Chương II",
+            "dieu_number": 3,
+            "dieu_title": "Quyền",
+            "khoan_number": 2,
+        }
+    }
+
+
+def test_prepare_chunk_rows_omits_metadata_json_when_no_citation():
+    chunks = [{"chunk_type": "dieu", "text": "X"}]
+    vectors = [[0.0] * 768]
+
+    rows = prepare_chunk_rows(article_id=1, chunks=chunks, vectors=vectors)
+
+    assert "metadata_json" not in rows[0]
