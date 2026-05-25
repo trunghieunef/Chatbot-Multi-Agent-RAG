@@ -16,6 +16,25 @@ from app.config import get_settings
 from app.database import async_session
 from data_pipeline.embed import GeminiEmbedder
 
+_QUERY_EMBEDDER: GeminiEmbedder | None = None
+
+
+def _get_query_embedder() -> GeminiEmbedder:
+    global _QUERY_EMBEDDER
+    if _QUERY_EMBEDDER is None:
+        settings = get_settings()
+        _QUERY_EMBEDDER = GeminiEmbedder(
+            api_key=settings.GEMINI_API_KEY,
+            model=settings.GEMINI_EMBEDDING_MODEL,
+            batch_size=1,
+        )
+    return _QUERY_EMBEDDER
+
+
+def _format_pgvector(values: list[float]) -> str:
+    """Format a Python list as a pgvector text literal (e.g. '[0.1,0.2,...]')."""
+    return "[" + ",".join(format(float(v), ".8f") for v in values) + "]"
+
 
 def build_listing_filter_clauses(filters: dict[str, Any]) -> tuple[list[str], dict[str, Any]]:
     clauses = ["is_active = true"]
@@ -81,7 +100,7 @@ async def pgvector_knn(
         "LIMIT :k"
     )
     params = {
-        "query_embedding": str(query_embedding),
+        "query_embedding": _format_pgvector(query_embedding),
         "parent_type": parent_type,
         "parent_ids": parent_ids,
         "k": k,
@@ -167,12 +186,7 @@ async def hybrid_search(
     if not candidate_ids:
         return []
 
-    settings = get_settings()
-    embedder = GeminiEmbedder(
-        api_key=settings.GEMINI_API_KEY,
-        model=settings.GEMINI_EMBEDDING_MODEL,
-        batch_size=1,
-    )
+    embedder = _get_query_embedder()
     query_embedding = (await embedder.embed_texts([query]))[0]
     chunks = await pgvector_knn(query_embedding, parent_type=parent_type, parent_ids=candidate_ids, k=top_k)
     reranked = await cohere_rerank(query, chunks, top_n=rerank_to)
