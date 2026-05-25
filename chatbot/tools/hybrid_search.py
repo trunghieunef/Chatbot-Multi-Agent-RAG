@@ -127,7 +127,7 @@ async def pgvector_knn(
         return []
 
     query = text(
-        "SELECT id, parent_type, parent_id, chunk_type, text, "
+        "SELECT id, parent_type, parent_id, chunk_type, text, metadata_json, "
         "embedding <=> CAST(:query_embedding AS vector) AS distance "
         "FROM chunks "
         "WHERE parent_type = :parent_type AND parent_id = ANY(:parent_ids) "
@@ -262,8 +262,8 @@ async def resolve_to_article_records(chunks: list[dict[str, Any]]) -> list[dict[
         return []
 
     query = text(
-        "SELECT id, title, category, source, post_date, url FROM articles "
-        "WHERE id = ANY(:ids)"
+        "SELECT id, title, category, source, post_date, url, metadata_json "
+        "FROM articles WHERE id = ANY(:ids)"
     )
     async with async_session() as session:
         result = await session.execute(query, {"ids": parent_ids})
@@ -276,12 +276,18 @@ async def resolve_to_article_records(chunks: list[dict[str, Any]]) -> list[dict[
             continue
         if any(record["id"] == article["id"] for record in records):
             continue
+        chunk_meta = chunk.get("metadata_json") or {}
         article["matched_chunk"] = {
             "chunk_type": chunk["chunk_type"],
             "text": chunk["text"],
             "distance": float(chunk["distance"]),
             "rerank_score": chunk.get("rerank_score"),
         }
+        # Surface the per-chunk citation alongside the article-level
+        # metadata so legal_synthesis.format_citations can render
+        # Chương/Điều/Khoản references.
+        if isinstance(chunk_meta, dict) and chunk_meta.get("citation"):
+            article["citation"] = chunk_meta["citation"]
         records.append(article)
     return records
 

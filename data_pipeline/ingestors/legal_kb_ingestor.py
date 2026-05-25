@@ -60,20 +60,27 @@ def build_article_payload(
 def prepare_chunk_rows(
     *, article_id: int, chunks: list[dict], vectors: list[list[float]]
 ) -> list[dict]:
-    """Pair chunk dicts with their vectors into Chunk row kwargs."""
+    """Pair chunk dicts with their vectors into Chunk row kwargs.
+
+    The per-chunk ``citation`` payload (Chương / Điều / Khoản) is persisted in
+    ``metadata_json`` so the Legal Advisor can render references at query time
+    without re-parsing the article body.
+    """
     if len(chunks) != len(vectors):
         raise ValueError("chunk/vector count mismatch")
     rows: list[dict] = []
     for chunk, vector in zip(chunks, vectors, strict=True):
-        rows.append(
-            {
-                "parent_type": "article",
-                "parent_id": article_id,
-                "chunk_type": chunk["chunk_type"],
-                "text": chunk["text"],
-                "embedding": vector,
-            }
-        )
+        row: dict[str, Any] = {
+            "parent_type": "article",
+            "parent_id": article_id,
+            "chunk_type": chunk["chunk_type"],
+            "text": chunk["text"],
+            "embedding": vector,
+        }
+        citation = chunk.get("citation")
+        if citation:
+            row["metadata_json"] = {"citation": citation}
+        rows.append(row)
     return rows
 
 
@@ -134,9 +141,9 @@ async def ingest_legal_documents(
 
         body = _read_document_text(path)
         title = _derive_title(path, body)
-        slug = slugify(title)
+        base_slug = slugify(title) or slugify(path.stem) or "unknown"
         articles_struct = split_into_articles(body)
-        chunks = build_legal_chunks(articles_struct, doc_slug=slug)
+        chunks = build_legal_chunks(articles_struct, doc_slug=base_slug)
 
         if not chunks:
             skipped += 1
@@ -146,6 +153,15 @@ async def ingest_legal_documents(
         vectors = await embedder.embed_texts([chunk["text"] for chunk in chunks])
 
         async with async_session() as session:
+            slug = await _resolve_unique_slug(session, base_slug, digest)
+            # When the slug is disambiguated by digest the chunks still point
+            # at the base slug; rewrite citation to keep references stable.
+            if slug != base_slug:
+                for chunk in chunks:
+                    citation = chunk.get("citation")
+                    if isinstance(citation, dict):
+                        citation["doc_slug"] = slug
+
             payload = build_article_payload(
                 title=title,
                 slug=slug,
@@ -185,6 +201,27 @@ async def ingest_legal_documents(
         )
 
     return {"documents": total_docs, "chunks": total_chunks, "skipped": skipped}
+
+
+async def _resolve_unique_slug(session, base_slug: str, digest: str) -> str:
+    """Return ``base_slug`` if free, else suffix with the SHA-256 prefix.
+
+    Two distinct files (different digests) that derive the same title would
+    otherwise share ``url='legal://<base_slug>'`` and the second ingest would
+    silently overwrite the first. We disambiguate by appending a short digest
+    so each source maps to a stable, unique URL.
+    """
+    candidate_url = f"legal://{base_slug}"
+    existing = await session.execute(
+        select(Article.metadata_json).where(Article.url == candidate_url)
+    )
+    row = existing.first()
+    if row is None:
+        return base_slug
+    existing_meta = row[0] or {}
+    if existing_meta.get("sha256") == digest:
+        return base_slug
+    return f"{base_slug}-{digest[:8]}"
 
 
 async def main() -> None:

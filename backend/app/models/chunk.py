@@ -1,4 +1,4 @@
-from sqlalchemy import Column, DateTime, Index, Integer, String, Text, func
+from sqlalchemy import JSON, Column, DateTime, Index, Integer, String, Text, func
 from pgvector.sqlalchemy import Vector
 
 from app.database import Base
@@ -15,6 +15,7 @@ class Chunk(Base):
     chunk_type = Column(String(50), nullable=False)
     text = Column(Text, nullable=False)
     embedding = Column(Vector(768), nullable=False)
+    metadata_json = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=func.now())
 
     __table_args__ = (
