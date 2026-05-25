@@ -4,6 +4,7 @@ import os
 from datetime import datetime, timedelta
 from pathlib import Path
 
+import pendulum
 from airflow import DAG
 from airflow.models import Variable
 from airflow.operators.python import PythonOperator
@@ -16,6 +17,9 @@ from plugins.pipeline_runner import (
     run_crawler,
     run_listings_ingestion,
 )
+
+
+LOCAL_TZ = pendulum.timezone("Asia/Ho_Chi_Minh")
 
 
 def _alert_emails() -> list[str]:
@@ -46,7 +50,11 @@ def _read_since(source: str) -> str | None:
 
 
 def _store_now(source: str, **_) -> None:
-    Variable.set(_last_crawl_var(source), datetime.utcnow().date().isoformat())
+    # Watermark advances after ingest succeeds but before mark_active runs.
+    # If mark_active later fails, --since is already advanced — accepted because
+    # --since only governs URL listing; deactivation is idempotent and retried
+    # on the next DAG run.
+    Variable.set(_last_crawl_var(source), pendulum.now(LOCAL_TZ).date().isoformat())
 
 
 def _crawl_urls(source: str, base_module: str, **_):
@@ -74,7 +82,11 @@ def _ingest(source: str, **_):
 
 with DAG(
     dag_id="daily_listings_dag",
-    description="Crawl + ingest sale and rent listings daily, then deactivate expired listings",
+    description=(
+        "Crawl + ingest sale and rent listings daily, then deactivate expired "
+        "listings. Requires the `realestate_app` Airflow connection (Admin -> "
+        "Connections) pointing at the app Postgres."
+    ),
     default_args=DEFAULT_ARGS,
     schedule_interval="0 2 * * *",
     start_date=datetime(2026, 5, 25),

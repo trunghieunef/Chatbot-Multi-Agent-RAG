@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import logging
 import os
 from typing import Any
 
 import httpx
+
+logger = logging.getLogger(__name__)
 
 
 def build_failure_payload(context: dict[str, Any]) -> dict:
@@ -29,5 +32,5 @@ def slack_failure_callback(context: dict[str, Any]) -> None:
     payload = build_failure_payload(context)
     try:
         httpx.post(webhook, json=payload, timeout=10).raise_for_status()
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("slack failure callback failed: %s", exc)
