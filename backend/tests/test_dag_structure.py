@@ -7,13 +7,13 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 AIRFLOW_DIR = REPO_ROOT / "airflow"
 
-if str(AIRFLOW_DIR) not in sys.path:
-    sys.path.insert(0, str(AIRFLOW_DIR))
-
 
 @pytest.fixture(scope="module")
 def dagbag():
-    pytest.importorskip("airflow")
+    pytest.importorskip("airflow.models")
+
+    if str(AIRFLOW_DIR) not in sys.path:
+        sys.path.insert(0, str(AIRFLOW_DIR))
 
     os.environ.setdefault("AIRFLOW__CORE__LOAD_EXAMPLES", "false")
     os.environ.setdefault("PROJECT_ROOT", str(REPO_ROOT))
