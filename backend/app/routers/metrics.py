@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Response
+from fastapi import APIRouter, HTTPException, Response
 from prometheus_client import (
     CONTENT_TYPE_LATEST,
     Counter,
@@ -14,6 +15,9 @@ from sqlalchemy import func, select
 
 from app.database import async_session
 from app.models import Article, Chunk, Listing, PipelineRun
+
+
+logger = logging.getLogger(__name__)
 
 
 router = APIRouter(tags=["Metrics"])
@@ -84,15 +88,27 @@ async def _refresh_gauges() -> None:
 
 @router.get("/metrics", include_in_schema=False)
 async def metrics_endpoint() -> Response:
+    """Prometheus exposition endpoint.
+
+    Refreshes gauge snapshots from the DB on every scrape. If the DB is
+    unreachable we return HTTP 503 so Prometheus marks the target down and
+    operators see ``up=0`` instead of silently empty panels.
+    """
     try:
         await _refresh_gauges()
-    except Exception:  # DB unavailable — still serve registry contents.
-        pass
+    except Exception as exc:
+        logger.exception("metrics scrape failed: %s", exc)
+        raise HTTPException(status_code=503, detail="metrics backend unavailable")
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
 @router.get("/health/pipeline")
 async def pipeline_health() -> dict:
+    """Operator-facing JSON summary of recent DAG runs.
+
+    Returns an empty ``dags`` map when the DB is unavailable so the endpoint
+    stays usable for liveness checks during outages.
+    """
     summary: dict[str, dict] = {}
     try:
         async with async_session() as session:
@@ -106,7 +122,8 @@ async def pipeline_health() -> dict:
                 .order_by(PipelineRun.dag_id)
             )
             runs = rows.all()
-    except Exception:
+    except Exception as exc:
+        logger.warning("pipeline_health DB query failed: %s", exc)
         runs = []
 
     for dag_id, last_run, status in runs:

@@ -132,7 +132,7 @@ async def get_query_embedding(
     cache_key = hash_text(query, namespace=getattr(embedder, "model", ""))
     if cache is not None:
         cached = await cache.get(cache_key)
-        if cached:
+        if cached is not None:
             return cached
     vectors = await embedder.embed_texts([query])
     embedding = vectors[0]
@@ -187,19 +187,30 @@ async def cohere_rerank(query: str, chunks: list[dict[str, Any]], top_n: int) ->
 
     rerank_namespace = settings.RERANK_MODEL
 
+    # Cache the entire rerank ordering on a single key so a hit replaces the
+    # whole call in one round trip. The key fingerprints (query, candidate
+    # text set, top_n) so adding/removing/changing any candidate invalidates.
+    set_signature = "|".join(sorted(chunk["text"] for chunk in chunks))
+    cache_key = hash_pair(
+        f"{query}|n={top_n}",
+        set_signature,
+        namespace=rerank_namespace,
+    )
+
     if rerank_cache is not None:
-        cached_scores: list[float | None] = []
-        for chunk in chunks:
-            key = hash_pair(query, chunk["text"], namespace=rerank_namespace)
-            cached_scores.append(await rerank_cache.get(key))
-        if all(score is not None for score in cached_scores):
-            scored = []
-            for chunk, score in zip(chunks, cached_scores, strict=True):
-                copy = dict(chunk)
-                copy["rerank_score"] = score
+        cached = await rerank_cache.get(cache_key)
+        if isinstance(cached, list) and cached:
+            scored: list[dict[str, Any]] = []
+            for entry in cached:
+                idx = entry.get("index")
+                if not isinstance(idx, int) or not 0 <= idx < len(chunks):
+                    scored = []
+                    break
+                copy = dict(chunks[idx])
+                copy["rerank_score"] = entry.get("score")
                 scored.append(copy)
-            scored.sort(key=lambda c: c["rerank_score"] or 0.0, reverse=True)
-            return scored[:top_n]
+            if scored:
+                return scored[:top_n]
 
     payload = {
         "model": settings.RERANK_MODEL,
@@ -227,15 +238,20 @@ async def cohere_rerank(query: str, chunks: list[dict[str, Any]], top_n: int) ->
         return chunks[:top_n]
 
     reranked = []
+    cache_payload: list[dict[str, Any]] = []
     for item in results:
         if "index" not in item:
             return chunks[:top_n]
         chunk = dict(chunks[item["index"]])
         chunk["rerank_score"] = item.get("relevance_score")
         reranked.append(chunk)
-        if rerank_cache is not None and chunk["rerank_score"] is not None:
-            key = hash_pair(query, chunk["text"], namespace=rerank_namespace)
-            await rerank_cache.set(key, chunk["rerank_score"])
+        cache_payload.append({"index": item["index"], "score": chunk["rerank_score"]})
+
+    if rerank_cache is not None and cache_payload:
+        try:
+            await rerank_cache.set(cache_key, cache_payload)
+        except Exception as exc:  # Cache write must never break a successful query.
+            print(f"[hybrid_search] rerank cache write failed: {exc}", file=sys.stderr)
     return reranked
 
 

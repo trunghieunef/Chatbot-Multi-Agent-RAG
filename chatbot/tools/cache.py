@@ -59,9 +59,31 @@ def hash_pair(query: str, doc: str, *, namespace: str = "") -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
-async def get_redis_client():
-    from app.config import get_settings
-    from redis import asyncio as redis_async
+_REDIS_CLIENT: Any = None
 
-    settings = get_settings()
-    return redis_async.from_url(settings.REDIS_URL, decode_responses=True)
+
+async def get_redis_client():
+    """Return a process-wide async Redis client.
+
+    Memoized at module scope so callers do not allocate a fresh
+    ``ConnectionPool`` per request — that would leak pools under load.
+    """
+    global _REDIS_CLIENT
+    if _REDIS_CLIENT is None:
+        from app.config import get_settings
+        from redis import asyncio as redis_async
+
+        settings = get_settings()
+        _REDIS_CLIENT = redis_async.from_url(settings.REDIS_URL, decode_responses=True)
+    return _REDIS_CLIENT
+
+
+async def reset_redis_client() -> None:
+    """Close the cached client and clear the cache slot. Test-only helper."""
+    global _REDIS_CLIENT
+    if _REDIS_CLIENT is not None:
+        try:
+            await _REDIS_CLIENT.aclose()
+        except Exception:
+            pass
+        _REDIS_CLIENT = None

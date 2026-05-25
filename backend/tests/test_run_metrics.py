@@ -5,7 +5,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "airflow"))
 
-from plugins.run_metrics import build_run_summary
+from plugins.run_metrics import build_run_summary, collect_metrics_from_dag_run
 
 
 def test_build_run_summary_extracts_dag_run_status():
@@ -31,3 +31,58 @@ def test_build_run_summary_extracts_dag_run_status():
     assert summary["status"] == "success"
     assert summary["metrics"] == {"listings": 42, "chunks": 168}
     assert summary["error"] is None
+
+
+def _fake_ti(task_id: str, return_value):
+    """Build a fake TaskInstance whose xcom_pull returns the ingestor dict."""
+
+    class _TI:
+        def __init__(self):
+            self.task_id = task_id
+
+        def xcom_pull(self, task_ids=None, key=None):  # noqa: ARG002
+            if task_ids == self.task_id:
+                return return_value
+            return None
+
+    return _TI()
+
+
+def _fake_dag_run(task_instances):
+    class _DR:
+        def get_task_instances(self):
+            return task_instances
+
+    return _DR()
+
+
+def test_collect_metrics_from_dag_run_aggregates_return_value_xcoms():
+    context = {
+        "dag_run": _fake_dag_run(
+            [
+                _fake_ti("ingest_sale", {"listings": 10, "chunks": 30}),
+                _fake_ti("ingest_rent", {"listings": 5, "chunks": 12}),
+                _fake_ti("crawl", "ignored-non-dict"),
+            ]
+        ),
+    }
+
+    metrics = collect_metrics_from_dag_run(context)
+
+    assert metrics == {"listings": 15, "chunks": 42}
+
+
+def test_collect_metrics_from_dag_run_returns_empty_when_no_dag_run():
+    assert collect_metrics_from_dag_run({}) == {}
+
+
+def test_collect_metrics_from_dag_run_ignores_unknown_keys():
+    context = {
+        "dag_run": _fake_dag_run(
+            [_fake_ti("x", {"listings": 1, "irrelevant": 99})]
+        ),
+    }
+
+    metrics = collect_metrics_from_dag_run(context)
+
+    assert metrics == {"listings": 1}

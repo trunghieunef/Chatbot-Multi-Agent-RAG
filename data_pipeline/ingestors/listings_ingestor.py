@@ -21,7 +21,7 @@ from app.models import Chunk, Listing
 from data_pipeline.chunk import build_listing_chunks
 from data_pipeline.clean import row_to_listing
 from data_pipeline.embed import GeminiEmbedder
-from data_pipeline.enrich import GeminiIntentExtractor, NominatimGeocoder, build_geocoder
+from data_pipeline.enrich import GeminiIntentExtractor, build_geocoder
 
 
 def read_csv_rows(csv_path: str) -> list[dict[str, str]]:
