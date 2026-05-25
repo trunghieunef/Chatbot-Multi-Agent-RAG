@@ -33,6 +33,7 @@ from playwright.sync_api import sync_playwright, Browser
 from playwright_stealth import Stealth
 
 from crawler.core.csv_writer import append_csv, merge_tmp_files, read_done_ids
+from crawler.core.listing_detail_parser import normalize_listing_detail
 from crawler.core.parser import text_or_empty
 
 USER_AGENT = (
@@ -246,6 +247,9 @@ def parse_detail_page(page, url: str, product_id: str) -> dict | None:
             or page.query_selector(".re__agent-info .agent-name")
         )
         data["contact_name"] = text_or_empty(contact_el)
+
+        # Apply shared normalization (sets listing_type + price_unit)
+        data = normalize_listing_detail(data, source="sale")
 
         return data
 
