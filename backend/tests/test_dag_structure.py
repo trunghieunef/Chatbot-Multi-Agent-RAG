@@ -28,7 +28,12 @@ def test_no_import_errors(dagbag):
 
 
 def test_expected_dags_loaded(dagbag):
-    expected = {"daily_listings_dag", "weekly_projects_dag", "weekly_news_dag"}
+    expected = {
+        "daily_listings_dag",
+        "weekly_projects_dag",
+        "weekly_news_dag",
+        "monthly_legal_kb_dag",
+    }
     assert expected.issubset(dagbag.dags.keys())
 
 
@@ -55,3 +60,10 @@ def test_retry_policy_applied(dagbag):
     for task in dag.tasks:
         assert task.retries == 3
         assert task.retry_exponential_backoff is True
+
+
+def test_monthly_legal_kb_dag_loaded(dagbag):
+    dag = dagbag.dags.get("monthly_legal_kb_dag")
+    assert dag is not None
+    task_ids = {task.task_id for task in dag.tasks}
+    assert "ingest_legal_kb" in task_ids

@@ -73,3 +73,13 @@ def run_news_ingestion(csv_path: str) -> dict[str, int]:
     with open(csv_path, newline="", encoding="utf-8-sig") as handle:
         rows = list(csvlib.DictReader(handle))
     return asyncio.run(ingest_article_rows(rows))
+
+
+def run_legal_ingestion() -> dict[str, int]:
+    sys.path.insert(0, str(REPO_ROOT))
+    sys.path.insert(0, str(REPO_ROOT / "backend"))
+    import asyncio
+
+    from data_pipeline.ingestors.legal_kb_ingestor import ingest_legal_documents
+
+    return asyncio.run(ingest_legal_documents())

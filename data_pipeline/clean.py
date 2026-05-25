@@ -7,6 +7,7 @@ location extraction, and a high-level row_to_listing converter.
 
 import json
 import re
+import unicodedata
 from datetime import date
 
 
@@ -215,3 +216,16 @@ def row_to_article(row: dict) -> dict:
         "post_date": _parse_iso_date(row.get("post_date") or ""),
         "url": row.get("url") or None,
     }
+
+
+
+def slugify(value: str) -> str:
+    """Lowercase, strip diacritics, replace non-alphanumeric runs with hyphens."""
+    if not value:
+        return ""
+    normalized = unicodedata.normalize("NFD", value)
+    without_marks = "".join(ch for ch in normalized if unicodedata.category(ch) != "Mn")
+    without_marks = without_marks.replace("đ", "d").replace("Đ", "d")
+    lowered = without_marks.lower()
+    cleaned = re.sub(r"[^a-z0-9]+", "-", lowered).strip("-")
+    return cleaned
