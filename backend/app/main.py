@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.database import init_db
-from app.routers import listings, market, auth, chat
+from app.routers import auth, chat, listings, market, metrics
 
 
 settings = get_settings()
@@ -50,6 +50,7 @@ app.include_router(listings.router, prefix="/api/v1")
 app.include_router(market.router, prefix="/api/v1")
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(chat.router, prefix="/api/v1")
+app.include_router(metrics.router, prefix="/api/v1")
 
 
 # ─── Health check ─────────────────────────────────────────────
