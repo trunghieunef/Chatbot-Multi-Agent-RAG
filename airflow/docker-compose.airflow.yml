@@ -1,0 +1,92 @@
+x-airflow-common: &airflow-common
+  build:
+    context: ..
+    dockerfile: airflow/Dockerfile
+  environment:
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY}
+    AIRFLOW__CORE__DEFAULT_TIMEZONE: Asia/Ho_Chi_Minh
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__CORE__PARALLELISM: "8"
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow_postgres:5432/airflow
+    AIRFLOW__SMTP__SMTP_HOST: ${SMTP_HOST:-}
+    AIRFLOW__SMTP__SMTP_USER: ${SMTP_USER:-}
+    AIRFLOW__SMTP__SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+    AIRFLOW__SMTP__SMTP_MAIL_FROM: ${SMTP_MAIL_FROM:-airflow@example.com}
+    AIRFLOW__SMTP__SMTP_PORT: ${SMTP_PORT:-587}
+    AIRFLOW__SMTP__SMTP_STARTTLS: "True"
+    DATABASE_URL: postgresql+asyncpg://admin:${POSTGRES_PASSWORD:-realestate_secret_2026}@realestate_postgres:5432/realestate
+    GEMINI_API_KEY: ${GEMINI_API_KEY}
+    COHERE_API_KEY: ${COHERE_API_KEY}
+    SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
+    PYTHONPATH: /opt/project:/opt/project/backend
+  volumes:
+    - ../:/opt/project
+    - ./dags:/opt/airflow/dags
+    - ./plugins:/opt/airflow/plugins
+    - airflow_logs:/opt/airflow/logs
+  networks:
+    - airflow_net
+    - realestate_default
+
+services:
+  airflow_postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - airflow_pgdata:/var/lib/postgresql/data
+    networks: [airflow_net]
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 10s
+      retries: 5
+
+  airflow_init:
+    <<: *airflow-common
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - "airflow db migrate && airflow users create --username admin --password admin --firstname A --lastname D --role Admin --email admin@example.com || true"
+    depends_on:
+      airflow_postgres:
+        condition: service_healthy
+
+  airflow_webserver:
+    <<: *airflow-common
+    command: webserver
+    ports: ["8080:8080"]
+    mem_limit: 2g
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    depends_on:
+      airflow_init:
+        condition: service_completed_successfully
+
+  airflow_scheduler:
+    <<: *airflow-common
+    command: scheduler
+    mem_limit: 3g
+    healthcheck:
+      test: ["CMD-SHELL", "airflow jobs check --job-type SchedulerJob --hostname \"$(hostname)\" || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    depends_on:
+      airflow_init:
+        condition: service_completed_successfully
+
+volumes:
+  airflow_pgdata:
+  airflow_logs:
+
+networks:
+  airflow_net:
+  realestate_default:
+    external: true
+    name: realestate_chatbot_v2_default
