@@ -30,3 +30,13 @@ COLLECTION_KNOWLEDGE = "legal_knowledge"
 CHUNK_SIZE = 1000
 CHUNK_OVERLAP = 200
 TOP_K_RESULTS = 10
+
+# Geocoding
+GEOCODER_PROVIDER = os.getenv("GEOCODER_PROVIDER", "nominatim")
+GEOCODER_USER_AGENT = os.getenv("GEOCODER_USER_AGENT", "realestate-chatbot/0.1 (contact@example.com)")
+GEOCODER_RATE_LIMIT_SECONDS = float(os.getenv("GEOCODER_RATE_LIMIT_SECONDS", "1.0"))
+GOONG_API_KEY = os.getenv("GOONG_API_KEY", "")
+
+# Intent extraction
+INTENT_EXTRACTOR = os.getenv("INTENT_EXTRACTOR", "rule")
+GEMINI_INTENT_MODEL = os.getenv("GEMINI_INTENT_MODEL", "gemini-2.0-flash")
