@@ -1,0 +1,47 @@
+% ============================================================
+% TRANG 5: LỜI CẢM ƠN + TÓM TẮT NỘI DUNG ĐỒ ÁN
+% ============================================================
+\thispagestyle{empty}
+
+% --- LỜI CẢM ƠN ---
+\begin{center}
+    {\fontsize{13}{16}\selectfont\bfseries Lời cảm ơn}
+\end{center}
+
+\vspace{0.8cm}
+
+Trước hết, em xin bày tỏ lòng biết ơn sâu sắc đến PGS. TS. Nguyễn Văn ABC, người đã tận tình hướng dẫn, định hướng và động viên em trong suốt quá trình thực hiện đồ án tốt nghiệp này. Những góp ý quý báu của thầy về kiến trúc hệ thống, phương pháp nghiên cứu và cách trình bày đã giúp em hoàn thiện đồ án một cách tốt nhất.
+
+Em cũng xin gửi lời cảm ơn đến các thầy cô trong Khoa Toán -- Tin, Đại học Bách Khoa Hà Nội, những người đã trang bị cho em nền tảng kiến thức vững chắc về công nghệ thông tin, trí tuệ nhân tạo và kỹ năng nghiên cứu trong suốt những năm học vừa qua.
+
+Cuối cùng, em xin cảm ơn gia đình và bạn bè đã luôn ủng hộ, tạo điều kiện thuận lợi và là nguồn động viên tinh thần to lớn để em có thể tập trung hoàn thành đồ án này.
+
+\vspace{1.5cm}
+
+% --- TÓM TẮT NỘI DUNG ĐỒ ÁN ---
+\begin{center}
+    {\fontsize{13}{16}\selectfont\bfseries Tóm tắt nội dung đồ án}
+\end{center}
+
+\vspace{0.8cm}
+
+Đồ án này trình bày quá trình phân tích, thiết kế và xây dựng một nền tảng tư vấn bất động sản thông minh tích hợp chatbot đa tác tử (multi-agent) sử dụng kỹ thuật Retrieval-Augmented Generation (RAG). Hệ thống hướng đến thị trường bất động sản Việt Nam, cung cấp cho người dùng khả năng tìm kiếm nhà đất, phân tích thị trường, tư vấn pháp lý và đầu tư thông qua giao diện hội thoại tự nhiên bằng tiếng Việt.
+
+Về phương pháp thực hiện, đồ án áp dụng kiến trúc microservices với backend FastAPI, frontend Next.js, cơ sở dữ liệu PostgreSQL tích hợp pgvector cho tìm kiếm ngữ nghĩa, và framework LangGraph để điều phối đa tác tử. Hệ thống sử dụng mô hình nhúng BGE-M3 (1024 chiều) cho embedding tiếng Việt, Google Gemini 2.0 Flash cho phân loại ý định và sinh phản hồi, cùng Cohere Rerank để xếp hạng kết quả truy xuất. Dữ liệu được thu thập từ batdongsan.com.vn qua pipeline ETL tự động hóa bằng Apache Airflow.
+
+Kết quả đạt được là một hệ thống hoàn chỉnh với các chức năng: duyệt và lọc danh sách bất động sản, xem chi tiết và bản đồ, thống kê thị trường, và đặc biệt là chatbot đa tác tử có khả năng xử lý đồng thời nhiều loại truy vấn (tìm kiếm, phân tích thị trường, tư vấn pháp lý, tư vấn đầu tư) với nguồn trích dẫn rõ ràng. Hệ thống có tính thực tế cao, có thể triển khai làm nền tảng dịch vụ bất động sản hoặc phát triển mở rộng theo hướng tích hợp thêm nguồn dữ liệu, cải thiện chất lượng embedding và bổ sung agent chuyên biệt.
+
+Qua đồ án, em đã đạt được kiến thức và kỹ năng về thiết kế hệ thống full-stack, xây dựng pipeline dữ liệu, tích hợp vector database cho tìm kiếm ngữ nghĩa, phát triển hệ thống multi-agent với LangGraph, và triển khai ứng dụng với Docker.
+
+\vspace{3cm}
+
+\begin{flushright}
+    \begin{minipage}{0.35\textwidth}
+        \centering
+        Hà Nội, ngày \dots.\ tháng \dots\ năm\dots\\[12pt]
+        {\fontsize{13}{16}\selectfont Sinh viên thực hiện}\\[20pt]
+        {\fontsize{10}{12}\selectfont Ký và ghi rõ họ tên}
+    \end{minipage}
+\end{flushright}
+
+\newpage

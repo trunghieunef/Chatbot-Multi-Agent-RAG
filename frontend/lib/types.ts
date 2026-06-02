@@ -97,13 +97,28 @@ export interface ChatMessageRequest {
 }
 
 export interface ChatSource {
-  id: number;
-  product_id: string;
-  title: string | null;
-  location: string | null;
-  price_text: string | null;
-  area_text: string | null;
-  published_at: string | null;
+  type?: "listing" | "legal_article" | "market_aggregate" | "district_comparison" | "investment_aggregate" | string;
+  id?: number;
+  product_id?: string | null;
+  title?: string | null;
+  location?: string | null;
+  price_text?: string | null;
+  area_text?: string | null;
+  published_at?: string | null;
+  source?: string | null;
+  category?: string | null;
+  url?: string | null;
+  citation?: {
+    doc_slug?: string;
+    dieu_number?: number;
+    khoan_number?: number;
+  } | null;
+  count?: number;
+  filters?: Record<string, unknown>;
+  items?: Array<Record<string, unknown>>;
+  sale?: Record<string, unknown>;
+  rent?: Record<string, unknown>;
+  rental_yield_percent?: number | null;
   score?: number;
 }
 
@@ -123,6 +138,20 @@ export interface ChatSessionResponse {
   message_count: number;
   created_at: string | null;
   updated_at: string | null;
+}
+
+export interface AuthUser {
+  id: number;
+  email: string;
+  full_name: string | null;
+  phone: string | null;
+  avatar_url: string | null;
+}
+
+export interface TokenResponse {
+  access_token: string;
+  token_type: string;
+  user: AuthUser;
 }
 
 export interface ListingFilters {

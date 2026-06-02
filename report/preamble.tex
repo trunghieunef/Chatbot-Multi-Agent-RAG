@@ -1,0 +1,111 @@
+% ============================================================
+% PREAMBLE - Cấu hình chung cho toàn bộ báo cáo
+% ============================================================
+
+% ========== PACKAGES ==========
+\usepackage{fontspec}
+\defaultfontfeatures{Ligatures=TeX}
+\setmainfont{Times New Roman}
+\setsansfont{Arial}
+\setmonofont{Courier New}
+\usepackage[vietnamese]{babel}
+\usepackage{geometry}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{indentfirst}
+\usepackage{setspace}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{enumitem}
+\usepackage{makeidx}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb}
+\usepackage{longtable}
+\usepackage{titlesec}
+
+% ========== HYPERREF ==========
+\hypersetup{
+    colorlinks=true,
+    linkcolor=black,
+    citecolor=black,
+    urlcolor=black,
+    pdfborder={0 0 0}
+}
+
+% ========== CĂN LỀ (A4, khổ chuẩn) ==========
+\geometry{
+    left=2.5cm,
+    right=2cm,
+    top=2.5cm,
+    bottom=2.5cm
+}
+
+% ========== GIÃN DÒNG ==========
+\onehalfspacing
+
+% ========== THỤT ĐẦU DÒNG ==========
+\setlength{\parindent}{1.27cm}
+\setlength{\parskip}{0pt}
+
+% ========== CHỈ MỤC ==========
+\makeindex
+
+% ========== ĐỊNH DẠNG CHƯƠNG (khớp PDF gốc) ==========
+% CHƯƠNG X. TÊN CHƯƠNG — bold, 13pt, căn trái
+\titleformat{\chapter}[hang]
+    {\bfseries\fontsize{13}{16}\selectfont}
+    {\MakeUppercase{\chaptertitlename}\ \thechapter.}
+    {0.5em}
+    {}
+\titlespacing*{\chapter}{0pt}{0pt}{12pt}
+
+% CHƯƠNG KHÔNG SỐ (Kết luận, Phụ lục, ...) — bold, 13pt, căn giữa
+\titleformat{name=\chapter,numberless}[block]
+    {\centering\bfseries\fontsize{13}{16}\selectfont}
+    {}
+    {0pt}
+    {}
+\titlespacing*{name=\chapter,numberless}{0pt}{0pt}{12pt}
+
+% ========== ĐỊNH DẠNG MỤC (Section) ==========
+\titleformat{\section}[hang]
+    {\bfseries\fontsize{13}{16}\selectfont}
+    {\thesection.}
+    {0.5em}
+    {}
+\titlespacing*{\section}{0pt}{12pt}{6pt}
+
+% ========== ĐỊNH DẠNG MỤC CON (Subsection) ==========
+\titleformat{\subsection}[hang]
+    {\bfseries\fontsize{13}{16}\selectfont}
+    {\thesubsection.}
+    {0.5em}
+    {}
+\titlespacing*{\subsection}{0pt}{12pt}{6pt}
+
+% ========== CODE LISTING ==========
+\lstset{
+    basicstyle=\ttfamily\small,
+    breaklines=true,
+    frame=single,
+    numbers=left,
+    numberstyle=\tiny,
+    commentstyle=\color{gray},
+    keywordstyle=\color{blue},
+    stringstyle=\color{red},
+    showstringspaces=false,
+    tabsize=2
+}
+
+% ========== THÔNG TIN ĐỒ ÁN - ĐIỀN VÀO ĐÂY ==========
+\newcommand{\tenDeTai}{
+Xây dựng ứng dụng hỗ trợ tư vấn bất động sản tích hợp Chatbot}
+\newcommand{\tenSinhVien}{TRẦN TRUNG HIẾU}
+\newcommand{\emailSinhVien}{hieu.tt227114@sis.hust.edu.vn}
+\newcommand{\maSinhVien}{20227114}
+\newcommand{\chuyenNganh}{Toán - Tin}
+\newcommand{\tenGVHD}{TS. Trần Anh Tú}
+\newcommand{\thangNam}{6/2026}
+\newcommand{\loaiBaoCao}{ ĐỒ ÁN TỐT NGHIỆP}

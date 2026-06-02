@@ -18,7 +18,7 @@ from app.config import get_settings
 from app.database import async_session, engine
 from app.models import Chunk, Project
 from data_pipeline.clean import row_to_project
-from data_pipeline.embed import GeminiEmbedder
+from data_pipeline.embed import BGEEmbedder
 
 
 def build_project_chunks(project: dict) -> list[dict[str, Any]]:
@@ -55,6 +55,16 @@ def build_project_chunks(project: dict) -> list[dict[str, Any]]:
     return chunks
 
 
+def empty_ingest_result() -> dict[str, int]:
+    return {
+        "published": 0,
+        "indexed": 0,
+        "chunks": 0,
+        "publish_errors": 0,
+        "index_errors": 0,
+    }
+
+
 async def upsert_project(session, project_data: dict[str, Any]) -> Project:
     slug = project_data["slug"]
     result = await session.execute(select(Project).where(Project.slug == slug))
@@ -70,96 +80,159 @@ async def upsert_project(session, project_data: dict[str, Any]) -> Project:
     return project
 
 
-async def ingest_project_rows(rows: list[dict[str, str]], batch_size: int = 25) -> dict[str, int]:
-    settings = get_settings()
-    embedder = GeminiEmbedder(
-        api_key=settings.GEMINI_API_KEY,
-        model=settings.GEMINI_EMBEDDING_MODEL,
-        batch_size=100,
-    )
+async def publish_project_batch(projects_data: list[dict[str, Any]]) -> list[Project]:
+    persisted: list[Project] = []
+    async with async_session() as session:
+        for project_data in projects_data:
+            project = await upsert_project(session, project_data)
+            persisted.append(project)
+        await session.commit()
+    return persisted
 
-    # pgvector is infrastructure (not schema). Schema lives in Alembic migrations.
+
+async def index_project_batch(
+    projects_with_chunks: list[tuple[Project, list[dict[str, Any]]]],
+    *,
+    embedder: Any,
+) -> dict[str, int]:
+    if not projects_with_chunks:
+        return {"indexed": 0, "chunks": 0, "index_errors": 0}
+
+    flat_texts = [
+        chunk["text"]
+        for _, chunks in projects_with_chunks
+        for chunk in chunks
+    ]
+    if not flat_texts:
+        return {"indexed": 0, "chunks": 0, "index_errors": 0}
+
+    try:
+        flat_vectors = await embedder.embed_texts(flat_texts)
+    except Exception as exc:
+        print(f"[projects-ingest] semantic index embed batch failed: {exc}", file=sys.stderr)
+        return {
+            "indexed": 0,
+            "chunks": 0,
+            "index_errors": len(projects_with_chunks),
+        }
+
+    cursor = 0
+    indexed = 0
+    chunks_inserted = 0
+    index_errors = 0
+
+    async with async_session() as session:
+        for project, chunks in projects_with_chunks:
+            count = len(chunks)
+            vectors = flat_vectors[cursor : cursor + count]
+            cursor += count
+            try:
+                await session.execute(
+                    delete(Chunk).where(
+                        Chunk.parent_type == "project",
+                        Chunk.parent_id == project.id,
+                    )
+                )
+                session.add_all(
+                    [
+                        Chunk(
+                            parent_type="project",
+                            parent_id=project.id,
+                            chunk_type=chunk["chunk_type"],
+                            text=chunk["text"],
+                            embedding=vector,
+                        )
+                        for chunk, vector in zip(chunks, vectors, strict=True)
+                    ]
+                )
+                indexed += 1
+                chunks_inserted += len(chunks)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                index_errors += 1
+                print(
+                    f"[projects-ingest] semantic index db write failed for {project.slug}: {exc}",
+                    file=sys.stderr,
+                )
+        await session.commit()
+
+    return {"indexed": indexed, "chunks": chunks_inserted, "index_errors": index_errors}
+
+
+async def ensure_vector_extension() -> None:
     async with engine.begin() as conn:
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
 
-    inserted = 0
-    chunks_inserted = 0
-    errors = 0
+
+async def ingest_project_rows(rows: list[dict[str, str]], batch_size: int = 25) -> dict[str, int]:
+    settings = get_settings()
+    embedder = BGEEmbedder(
+        model_name=settings.HF_EMBEDDING_MODEL,
+        batch_size=settings.EMBEDDING_BATCH_SIZE,
+        embedding_dim=settings.EMBEDDING_DIM,
+        device=settings.HF_EMBEDDING_DEVICE or None,
+    )
+
+    # pgvector is infrastructure (not schema). Schema lives in Alembic migrations.
+    await ensure_vector_extension()
+    result = empty_ingest_result()
 
     for start in range(0, len(rows), batch_size):
         batch = rows[start : start + batch_size]
 
-        # Phase 1: clean + chunk in memory.
-        prepared: list[tuple[dict[str, Any], list[dict[str, Any]]]] = []
+        # Phase 1: clean structured project data.
+        prepared: list[dict[str, Any]] = []
         for row in batch:
             try:
                 project_data = row_to_project(row)
                 if not project_data.get("slug"):
                     continue
-                chunks = build_project_chunks(project_data)
-                prepared.append((project_data, chunks))
+                prepared.append(project_data)
+            except asyncio.CancelledError:
+                raise
             except Exception as exc:
-                errors += 1
+                result["publish_errors"] += 1
                 print(
-                    f"[projects-ingest] clean/chunk failed for {row.get('slug', '?')}: {exc}",
+                    f"[projects-ingest] clean failed for {row.get('slug', '?')}: {exc}",
                     file=sys.stderr,
                 )
 
         if not prepared:
             continue
 
-        # Phase 2: one embed call per batch instead of one per project.
-        flat_texts = [chunk["text"] for _, chunks in prepared for chunk in chunks]
         try:
-            flat_vectors = await embedder.embed_texts(flat_texts)
+            persisted = await publish_project_batch(prepared)
+        except asyncio.CancelledError:
+            raise
         except Exception as exc:
-            errors += len(prepared)
-            print(f"[projects-ingest] embed batch failed: {exc}", file=sys.stderr)
+            result["publish_errors"] += len(prepared)
+            print(f"[projects-ingest] publish batch failed: {exc}", file=sys.stderr)
             continue
 
-        cursor = 0
-        with_vectors: list[tuple[dict[str, Any], list[dict[str, Any]], list[list[float]]]] = []
-        for project_data, chunks in prepared:
-            count = len(chunks)
-            with_vectors.append((project_data, chunks, flat_vectors[cursor : cursor + count]))
-            cursor += count
+        result["published"] += len(persisted)
 
-        # Phase 3: persist within a single session per batch.
-        async with async_session() as session:
-            for project_data, chunks, vectors in with_vectors:
-                try:
-                    project = await upsert_project(session, project_data)
-                    await session.execute(
-                        delete(Chunk).where(
-                            Chunk.parent_type == "project",
-                            Chunk.parent_id == project.id,
-                        )
-                    )
-                    session.add_all(
-                        [
-                            Chunk(
-                                parent_type="project",
-                                parent_id=project.id,
-                                chunk_type=chunk["chunk_type"],
-                                text=chunk["text"],
-                                embedding=vector,
-                            )
-                            for chunk, vector in zip(chunks, vectors, strict=True)
-                        ]
-                    )
-                    inserted += 1
-                    chunks_inserted += len(chunks)
-                except asyncio.CancelledError:
-                    raise
-                except Exception as exc:
-                    errors += 1
-                    print(
-                        f"[projects-ingest] db write failed for {project_data.get('slug', '?')}: {exc}",
-                        file=sys.stderr,
-                    )
-            await session.commit()
+        projects_with_chunks: list[tuple[Project, list[dict[str, Any]]]] = []
+        for project, project_data in zip(persisted, prepared, strict=True):
+            try:
+                chunks = build_project_chunks(project_data)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                result["index_errors"] += 1
+                print(
+                    f"[projects-ingest] semantic index chunk build failed for {project.slug}: {exc}",
+                    file=sys.stderr,
+                )
+                continue
+            projects_with_chunks.append((project, chunks))
 
-    return {"projects": inserted, "chunks": chunks_inserted, "errors": errors}
+        index_result = await index_project_batch(projects_with_chunks, embedder=embedder)
+        result["indexed"] += index_result["indexed"]
+        result["chunks"] += index_result["chunks"]
+        result["index_errors"] += index_result["index_errors"]
+
+    return result
 
 
 async def main() -> None:

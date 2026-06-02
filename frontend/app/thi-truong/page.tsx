@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { BarChart3, TrendingUp, Building2, MapPin } from "lucide-react";
 import {
   BarChart,
@@ -12,7 +13,6 @@ import {
   PieChart,
   Pie,
   Cell,
-  Legend,
 } from "recharts";
 import {
   getMarketStats,
@@ -59,7 +59,7 @@ export default function MarketPage() {
     <div className="mx-auto max-w-7xl px-4 py-6">
       {/* Breadcrumb */}
       <nav className="mb-4 text-xs text-muted-foreground">
-        <a href="/" className="hover:text-primary">Trang chủ</a>
+        <Link href="/" className="hover:text-primary">Trang chủ</Link>
         <span className="mx-1.5">›</span>
         <span className="text-foreground font-medium">Dữ liệu thị trường</span>
       </nav>

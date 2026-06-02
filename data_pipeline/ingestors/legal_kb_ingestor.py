@@ -19,7 +19,7 @@ from app.config import get_settings
 from app.database import Base, async_session, engine
 from app.models import Article, Chunk
 from data_pipeline.clean import slugify
-from data_pipeline.embed import GeminiEmbedder
+from data_pipeline.embed import BGEEmbedder
 from data_pipeline.legal.chunker import build_legal_chunks
 from data_pipeline.legal.html_parser import parse_html
 from data_pipeline.legal.manifest import compute_sha256, has_been_ingested, mark_ingested
@@ -118,8 +118,11 @@ async def ingest_legal_documents(
 ) -> dict[str, int]:
     """Ingest every supported legal file under raw_dir, skipping unchanged files."""
     settings = get_settings()
-    embedder = GeminiEmbedder(
-        api_key=settings.GEMINI_API_KEY, model=settings.GEMINI_EMBEDDING_MODEL
+    embedder = BGEEmbedder(
+        model_name=settings.HF_EMBEDDING_MODEL,
+        batch_size=settings.EMBEDDING_BATCH_SIZE,
+        embedding_dim=settings.EMBEDDING_DIM,
+        device=settings.HF_EMBEDDING_DEVICE or None,
     )
 
     async with engine.begin() as conn:

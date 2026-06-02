@@ -54,8 +54,6 @@ export default function FilterPanel({ filters, onChange, listingType }: Props) {
   useEffect(() => {
     if (filters.city) {
       getDistricts(filters.city).then((d) => setDistricts(d.items)).catch(() => {});
-    } else {
-      setDistricts([]);
     }
   }, [filters.city]);
 
@@ -72,6 +70,7 @@ export default function FilterPanel({ filters, onChange, listingType }: Props) {
     filters.min_price != null || filters.max_price != null ||
     filters.min_area != null || filters.max_area != null ||
     filters.bedrooms != null;
+  const visibleDistricts = filters.city ? districts : [];
 
   const filterContent = (
     <div className="space-y-5">
@@ -128,7 +127,7 @@ export default function FilterPanel({ filters, onChange, listingType }: Props) {
       </div>
 
       {/* District */}
-      {districts.length > 0 && (
+      {visibleDistricts.length > 0 && (
         <div>
           <label className="mb-1.5 block text-xs font-semibold text-foreground">
             Quận / Huyện
@@ -139,7 +138,7 @@ export default function FilterPanel({ filters, onChange, listingType }: Props) {
             className="w-full rounded-lg border border-border bg-muted px-3 py-2 text-sm outline-none focus:border-primary transition-colors"
           >
             <option value="">Tất cả</option>
-            {districts.map((d) => (
+            {visibleDistricts.map((d) => (
               <option key={d.district} value={d.district}>
                 {d.district} ({d.count})
               </option>

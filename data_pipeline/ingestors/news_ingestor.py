@@ -33,7 +33,7 @@ from app.config import get_settings
 from app.database import async_session, engine
 from app.models import Article, Chunk
 from data_pipeline.clean import row_to_article
-from data_pipeline.embed import GeminiEmbedder
+from data_pipeline.embed import BGEEmbedder
 
 
 def build_article_chunks(
@@ -68,6 +68,16 @@ def build_article_chunks(
     return chunks
 
 
+def empty_ingest_result() -> dict[str, int]:
+    return {
+        "published": 0,
+        "indexed": 0,
+        "chunks": 0,
+        "publish_errors": 0,
+        "index_errors": 0,
+    }
+
+
 async def upsert_article(session, article_data: dict[str, Any]) -> Article:
     """Upsert by ``url`` and return the persisted Article row."""
     url = article_data["url"]
@@ -84,105 +94,162 @@ async def upsert_article(session, article_data: dict[str, Any]) -> Article:
     return article
 
 
+async def publish_article_batch(articles_data: list[dict[str, Any]]) -> list[Article]:
+    persisted: list[Article] = []
+    async with async_session() as session:
+        for article_data in articles_data:
+            article = await upsert_article(session, article_data)
+            persisted.append(article)
+        await session.commit()
+    return persisted
+
+
+async def index_article_batch(
+    articles_with_chunks: list[tuple[Article, list[dict[str, Any]]]],
+    *,
+    embedder: Any,
+) -> dict[str, int]:
+    if not articles_with_chunks:
+        return {"indexed": 0, "chunks": 0, "index_errors": 0}
+
+    flat_texts = [
+        chunk["text"]
+        for _, chunks in articles_with_chunks
+        for chunk in chunks
+    ]
+    if not flat_texts:
+        return {"indexed": 0, "chunks": 0, "index_errors": 0}
+
+    try:
+        flat_vectors = await embedder.embed_texts(flat_texts)
+    except Exception as exc:
+        print(f"[news-ingest] semantic index embed batch failed: {exc}", file=sys.stderr)
+        return {
+            "indexed": 0,
+            "chunks": 0,
+            "index_errors": len(articles_with_chunks),
+        }
+
+    cursor = 0
+    indexed = 0
+    chunks_inserted = 0
+    index_errors = 0
+
+    async with async_session() as session:
+        for article, chunks in articles_with_chunks:
+            count = len(chunks)
+            vectors = flat_vectors[cursor : cursor + count]
+            cursor += count
+            try:
+                await session.execute(
+                    delete(Chunk).where(
+                        Chunk.parent_type == "article",
+                        Chunk.parent_id == article.id,
+                    )
+                )
+                session.add_all(
+                    [
+                        Chunk(
+                            parent_type="article",
+                            parent_id=article.id,
+                            chunk_type=chunk["chunk_type"],
+                            text=chunk["text"],
+                            embedding=vector,
+                        )
+                        for chunk, vector in zip(chunks, vectors, strict=True)
+                    ]
+                )
+                indexed += 1
+                chunks_inserted += len(chunks)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                index_errors += 1
+                print(
+                    f"[news-ingest] semantic index db write failed for {article.url}: {exc}",
+                    file=sys.stderr,
+                )
+        await session.commit()
+
+    return {"indexed": indexed, "chunks": chunks_inserted, "index_errors": index_errors}
+
+
+async def ensure_vector_extension() -> None:
+    async with engine.begin() as conn:
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+
+
 async def ingest_article_rows(
     rows: list[dict[str, str]], batch_size: int = 25
 ) -> dict[str, int]:
     """Run the 3-phase batched ingest pipeline over ``rows``."""
     settings = get_settings()
-    embedder = GeminiEmbedder(
-        api_key=settings.GEMINI_API_KEY,
-        model=settings.GEMINI_EMBEDDING_MODEL,
-        batch_size=100,
+    embedder = BGEEmbedder(
+        model_name=settings.HF_EMBEDDING_MODEL,
+        batch_size=settings.EMBEDDING_BATCH_SIZE,
+        embedding_dim=settings.EMBEDDING_DIM,
+        device=settings.HF_EMBEDDING_DEVICE or None,
     )
 
     # pgvector is infrastructure (not schema). Schema lives in Alembic migrations.
-    async with engine.begin() as conn:
-        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-
-    inserted = 0
-    chunks_inserted = 0
-    errors = 0
+    await ensure_vector_extension()
+    result = empty_ingest_result()
 
     for start in range(0, len(rows), batch_size):
         batch = rows[start : start + batch_size]
 
-        # Phase 1: clean + chunk in memory.
-        prepared: list[tuple[dict[str, Any], list[dict[str, Any]]]] = []
+        # Phase 1: clean structured article data.
+        prepared: list[dict[str, Any]] = []
         for row in batch:
             try:
                 article_data = row_to_article(row)
                 if not article_data.get("url"):
                     continue
-                chunks = build_article_chunks(article_data)
-                if not chunks:
-                    continue
-                prepared.append((article_data, chunks))
+                prepared.append(article_data)
+            except asyncio.CancelledError:
+                raise
             except Exception as exc:
-                errors += 1
+                result["publish_errors"] += 1
                 print(
-                    f"[news-ingest] clean/chunk failed for {row.get('url', '?')}: {exc}",
+                    f"[news-ingest] clean failed for {row.get('url', '?')}: {exc}",
                     file=sys.stderr,
                 )
 
         if not prepared:
             continue
 
-        # Phase 2: one embed call per batch.
-        flat_texts = [chunk["text"] for _, chunks in prepared for chunk in chunks]
         try:
-            flat_vectors = await embedder.embed_texts(flat_texts)
+            persisted = await publish_article_batch(prepared)
+        except asyncio.CancelledError:
+            raise
         except Exception as exc:
-            errors += len(prepared)
-            print(f"[news-ingest] embed batch failed: {exc}", file=sys.stderr)
+            result["publish_errors"] += len(prepared)
+            print(f"[news-ingest] publish batch failed: {exc}", file=sys.stderr)
             continue
 
-        cursor = 0
-        with_vectors: list[
-            tuple[dict[str, Any], list[dict[str, Any]], list[list[float]]]
-        ] = []
-        for article_data, chunks in prepared:
-            count = len(chunks)
-            with_vectors.append(
-                (article_data, chunks, flat_vectors[cursor : cursor + count])
-            )
-            cursor += count
+        result["published"] += len(persisted)
 
-        # Phase 3: persist within a single session per batch.
-        async with async_session() as session:
-            for article_data, chunks, vectors in with_vectors:
-                try:
-                    article = await upsert_article(session, article_data)
-                    await session.execute(
-                        delete(Chunk).where(
-                            Chunk.parent_type == "article",
-                            Chunk.parent_id == article.id,
-                        )
-                    )
-                    session.add_all(
-                        [
-                            Chunk(
-                                parent_type="article",
-                                parent_id=article.id,
-                                chunk_type=chunk["chunk_type"],
-                                text=chunk["text"],
-                                embedding=vector,
-                            )
-                            for chunk, vector in zip(chunks, vectors, strict=True)
-                        ]
-                    )
-                    inserted += 1
-                    chunks_inserted += len(chunks)
-                except asyncio.CancelledError:
-                    raise
-                except Exception as exc:
-                    errors += 1
-                    print(
-                        f"[news-ingest] db write failed for {article_data.get('url', '?')}: {exc}",
-                        file=sys.stderr,
-                    )
-            await session.commit()
+        articles_with_chunks: list[tuple[Article, list[dict[str, Any]]]] = []
+        for article, article_data in zip(persisted, prepared, strict=True):
+            try:
+                chunks = build_article_chunks(article_data)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                result["index_errors"] += 1
+                print(
+                    f"[news-ingest] semantic index chunk build failed for {article.url}: {exc}",
+                    file=sys.stderr,
+                )
+                continue
+            articles_with_chunks.append((article, chunks))
 
-    return {"articles": inserted, "chunks": chunks_inserted, "errors": errors}
+        index_result = await index_article_batch(articles_with_chunks, embedder=embedder)
+        result["indexed"] += index_result["indexed"]
+        result["chunks"] += index_result["chunks"]
+        result["index_errors"] += index_result["index_errors"]
+
+    return result
 
 
 async def main() -> None:

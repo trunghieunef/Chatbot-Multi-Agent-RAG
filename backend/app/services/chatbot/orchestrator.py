@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import logging
+import time
 from typing import Awaitable, Callable
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,6 +25,8 @@ AGENT_RUNNERS: dict[str, AgentRunner] = {
     "legal_advisor": run_legal_advisor,
     "investment_advisor": run_investment_advisor,
 }
+
+logger = logging.getLogger(__name__)
 
 
 def _dedupe_actions(results: list[AgentResult]) -> list[str]:
@@ -52,6 +56,7 @@ async def run_chat_pipeline(
     session_id: str | None = None,
 ) -> dict:
     """Run router, selected specialist agents, and response synthesis."""
+    started = time.perf_counter()
     routing = route_query(query)
     selected = [
         AGENT_RUNNERS[agent_name]
@@ -64,4 +69,16 @@ async def run_chat_pipeline(
     results = await asyncio.gather(
         *(runner(query, db, routing) for runner in selected)
     )
-    return _combine_results(list(results))
+    combined = _combine_results(list(results))
+    logger.info(
+        "chat_pipeline_completed",
+        extra={
+            "session_id": session_id,
+            "intent": routing.intent,
+            "target_agents": routing.target_agents,
+            "agent_used": combined["agent_used"],
+            "source_count": len(combined.get("sources") or []),
+            "latency_ms": round((time.perf_counter() - started) * 1000, 2),
+        },
+    )
+    return combined

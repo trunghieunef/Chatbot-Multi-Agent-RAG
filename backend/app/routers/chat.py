@@ -14,6 +14,7 @@ from app.database import get_db
 from app.models.chat import ChatSession, ChatMessage
 from app.models.user import User
 from app.routers.auth import get_optional_user
+from app.routers.metrics import CHAT_REQUESTS
 from app.schemas.chat import (
     ChatMessageRequest,
     ChatMessageResponse,
@@ -21,20 +22,28 @@ from app.schemas.chat import (
     ChatHistoryResponse,
 )
 from app.services.chatbot import run_chat_pipeline
-from app.services.rag import run_simple_rag
 
 router = APIRouter(prefix="/chat", tags=["Chat"])
 
 
 async def _run_chatbot_pipeline(message: str, db: AsyncSession, session_id: uuid.UUID) -> dict:
-    """Run production multi-agent chat with simple RAG fallback."""
+    """Run production multi-agent chat."""
     try:
         return await run_chat_pipeline(message, db, session_id=str(session_id))
-    except Exception:
-        try:
-            return await run_simple_rag(message, db)
-        except Exception as exc:
-            raise RuntimeError(str(exc)) from exc
+    except Exception as exc:
+        return {
+            "final_response": (
+                "Chatbot chua san sang do pipeline multi-agent gap loi. "
+                f"Chi tiet: {exc}"
+            ),
+            "agent_used": "multi_agent_error",
+            "sources": [],
+            "suggested_actions": [
+                "Kiem tra backend logs",
+                "Kiem tra du lieu da ingest",
+                "Thu lai sau",
+            ],
+        }
 
 
 @router.post("", response_model=ChatMessageResponse)
@@ -84,11 +93,12 @@ async def send_message(
             "Chatbot RAG chưa sẵn sàng do cấu hình backend còn thiếu. "
             f"Chi tiết: {exc}"
         )
-        agent_used = "simple_rag"
+        agent_used = "multi_agent_error"
         sources = []
-        suggested_actions = ["Kiểm tra GEMINI_API_KEY", "Chạy script ingest dữ liệu", "Thử lại sau"]
+        suggested_actions = ["Kiem tra backend logs", "Chay script ingest du lieu", "Thu lai sau"]
 
     # Save assistant response
+    CHAT_REQUESTS.labels(agent=agent_used or "unknown").inc()
     assistant_msg = ChatMessage(
         session_id=session.id,
         role="assistant",

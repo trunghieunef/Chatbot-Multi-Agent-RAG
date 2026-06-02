@@ -27,7 +27,7 @@ def test_prepare_chunk_rows_pairs_chunks_and_vectors():
         {"chunk_type": "dieu", "text": "Điều 1. ...", "citation": {"doc_slug": "x", "chuong": "Chương I", "dieu_number": 1, "dieu_title": "Phạm vi"}},
         {"chunk_type": "dieu", "text": "Điều 2. ...", "citation": {"doc_slug": "x", "chuong": "Chương I", "dieu_number": 2, "dieu_title": "Đối tượng"}},
     ]
-    vectors = [[0.1] * 768, [0.2] * 768]
+    vectors = [[0.1] * 1024, [0.2] * 1024]
 
     rows = prepare_chunk_rows(article_id=42, chunks=chunks, vectors=vectors)
 
@@ -35,7 +35,7 @@ def test_prepare_chunk_rows_pairs_chunks_and_vectors():
     assert rows[0]["parent_id"] == 42
     assert rows[0]["chunk_type"] == "dieu"
     assert rows[0]["text"].startswith("Điều 1")
-    assert rows[0]["embedding"] == [0.1] * 768
+    assert rows[0]["embedding"] == [0.1] * 1024
 
 
 def test_prepare_chunk_rows_persists_citation_in_metadata_json():
@@ -52,7 +52,7 @@ def test_prepare_chunk_rows_persists_citation_in_metadata_json():
             },
         },
     ]
-    vectors = [[0.0] * 768]
+    vectors = [[0.0] * 1024]
 
     rows = prepare_chunk_rows(article_id=7, chunks=chunks, vectors=vectors)
 
@@ -69,7 +69,7 @@ def test_prepare_chunk_rows_persists_citation_in_metadata_json():
 
 def test_prepare_chunk_rows_omits_metadata_json_when_no_citation():
     chunks = [{"chunk_type": "dieu", "text": "X"}]
-    vectors = [[0.0] * 768]
+    vectors = [[0.0] * 1024]
 
     rows = prepare_chunk_rows(article_id=1, chunks=chunks, vectors=vectors)
 

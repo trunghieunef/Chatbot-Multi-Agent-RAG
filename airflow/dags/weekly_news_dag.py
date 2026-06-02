@@ -47,7 +47,7 @@ def _ingest_news(**_):
 
 with DAG(
     dag_id="weekly_news_dag",
-    description="Crawl + ingest real estate news weekly",
+    description="Crawl news article CSVs, publish articles for web/API visibility, then index article chunks for chatbot retrieval",
     default_args=DEFAULT_ARGS,
     schedule_interval="0 4 * * 0",
     start_date=datetime(2026, 5, 25),

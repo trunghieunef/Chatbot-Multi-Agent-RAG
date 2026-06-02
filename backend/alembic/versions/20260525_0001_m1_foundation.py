@@ -43,7 +43,7 @@ def upgrade() -> None:
         sa.Column("parent_id", sa.Integer(), nullable=False),
         sa.Column("chunk_type", sa.String(length=50), nullable=False),
         sa.Column("text", sa.Text(), nullable=False),
-        sa.Column("embedding", Vector(dim=768), nullable=False),
+        sa.Column("embedding", Vector(dim=1024), nullable=False),
         sa.Column("created_at", sa.DateTime(), nullable=True),
         sa.PrimaryKeyConstraint("id"),
     )

@@ -127,19 +127,6 @@ async def get_listings(
     )
 
 
-@router.get("/{listing_id}", response_model=ListingResponse)
-async def get_listing_detail(
-    listing_id: int,
-    db: AsyncSession = Depends(get_db),
-):
-    """Get a single listing by ID."""
-    result = await db.execute(select(Listing).where(Listing.id == listing_id))
-    listing = result.scalar_one_or_none()
-    if not listing:
-        raise HTTPException(status_code=404, detail="Listing not found")
-    return ListingResponse.model_validate(listing)
-
-
 @router.get("/by-product-id/{product_id}", response_model=ListingResponse)
 async def get_listing_by_product_id(
     product_id: str,
@@ -185,3 +172,16 @@ async def get_similar_listings(
     similar = result.scalars().all()
 
     return [ListingCardResponse.model_validate(l) for l in similar]
+
+
+@router.get("/{listing_id}", response_model=ListingResponse)
+async def get_listing_detail(
+    listing_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Get a single listing by ID."""
+    result = await db.execute(select(Listing).where(Listing.id == listing_id))
+    listing = result.scalar_one_or_none()
+    if not listing:
+        raise HTTPException(status_code=404, detail="Listing not found")
+    return ListingResponse.model_validate(listing)

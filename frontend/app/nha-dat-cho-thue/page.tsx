@@ -3,6 +3,7 @@
 import { Suspense } from "react";
 import { useEffect, useState, useCallback } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import { ArrowUpDown } from "lucide-react";
 import { getListings } from "@/lib/api";
 import FilterPanel from "@/components/search/FilterPanel";
@@ -58,7 +59,7 @@ function RentPageContent() {
   return (
     <div className="mx-auto max-w-7xl px-4 py-6">
       <nav className="mb-4 text-xs text-muted-foreground">
-        <a href="/" className="hover:text-primary">Trang chủ</a>
+        <Link href="/" className="hover:text-primary">Trang chủ</Link>
         <span className="mx-1.5">›</span>
         <span className="text-foreground font-medium">Nhà đất cho thuê</span>
       </nav>

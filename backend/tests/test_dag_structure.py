@@ -55,6 +55,18 @@ def test_mark_active_runs_after_both_groups(dagbag):
     assert "rent.mark_rent_done" in upstream_ids
 
 
+def test_daily_listings_ingest_runs_after_crawl_details(dagbag):
+    dag = dagbag.dags["daily_listings_dag"]
+
+    for source in ("sale", "rent"):
+        crawl_details = dag.get_task(f"{source}.crawl_{source}_details")
+        ingest = dag.get_task(f"{source}.ingest_{source}")
+        mark_done = dag.get_task(f"{source}.mark_{source}_done")
+
+        assert ingest in crawl_details.downstream_list
+        assert mark_done in ingest.downstream_list
+
+
 def test_retry_policy_applied(dagbag):
     dag = dagbag.dags["weekly_projects_dag"]
     for task in dag.tasks:

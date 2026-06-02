@@ -55,7 +55,7 @@ def _ingest_projects(**_):
 
 with DAG(
     dag_id="weekly_projects_dag",
-    description="Crawl + ingest real estate projects weekly",
+    description="Crawl project CSVs, publish projects for web/API visibility, then index project chunks for chatbot retrieval",
     default_args=DEFAULT_ARGS,
     schedule_interval="0 3 * * 0",
     start_date=datetime(2026, 5, 25),

@@ -1,0 +1,34 @@
+% ============================================================
+% MAIN.TEX — File chính của báo cáo
+% Biên dịch: xelatex main.tex
+% ============================================================
+\documentclass[12pt,a4paper]{report}
+
+% Nạp toàn bộ cấu hình từ preamble
+\input{preamble}
+
+\begin{document}
+
+\fontsize{13}{16}\selectfont  % Cỡ chữ mặc định 13pt
+\pagestyle{empty}             % Không đánh số trang
+
+% ========== FRONT MATTER ==========
+\input{contents/01-cover}
+\input{contents/02-nhanxet}
+\input{contents/03-phieubaocao}
+\input{contents/04-loicamon-tomtat}
+\input{contents/05-mucluc}
+\input{contents/06-danhmuc}
+
+% ========== MAIN CONTENT (Các chương) ==========
+\input{contents/07-chuong1}
+\input{contents/08-chuong2}
+\input{contents/09-chuong3}
+
+% ========== BACK MATTER ==========
+\input{contents/10-ketluan}
+\input{contents/11-phuluc}
+\input{contents/12-chimuc}
+\input{contents/13-tailieuthamkhao}
+
+\end{document}

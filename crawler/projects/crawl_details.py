@@ -1,11 +1,9 @@
 """
 Crawl detail pages for projects scraped by `crawler.projects.crawl_urls`.
 
-NOTE: Selectors are SCAFFOLDS. The project detail DOM differs from the
-listing detail DOM, so the field extraction logic in ``parse_detail_page``
-is intentionally left as a TODO. The CLI, CSV columns, and Playwright
-boilerplate ARE finalized so that other parts of the pipeline (CSV
-shape, ingestor input contract) can rely on them today.
+Selectors are fixture-backed and intentionally kept in pure parser helpers so
+they can be tested without launching Playwright. The CLI and CSV columns remain
+stable for downstream ingestion.
 
 Output CSV columns:
     slug, name, developer, location, district, city,
@@ -16,16 +14,19 @@ Output CSV columns:
 import argparse
 import csv
 import glob
+import json
 import os
 import random
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright, Browser
 from playwright_stealth import Stealth
 
 from crawler.core.csv_writer import append_csv, merge_tmp_files, read_done_ids
+from data_pipeline.clean import slugify
 
 USER_AGENT = (
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
@@ -62,15 +63,109 @@ def _log(msg: str) -> None:
 # Parsing
 # ---------------------------------------------------------------------------
 
-def parse_detail_page(page, url: str, slug: str) -> dict | None:
-    """Extract project detail fields.
+def _text(soup: BeautifulSoup, selector: str) -> str:
+    node = soup.select_one(selector)
+    return " ".join(node.get_text(" ", strip=True).split()) if node else ""
 
-    TODO: implement project detail selectors. Until then, this returns
-    ``None`` so workers don't write empty rows. The CSV column contract is
-    fixed by ``DETAIL_FIELDS`` above; future selector work should populate
-    that shape and return the dict.
-    """
-    return None  # signal "not implemented" so workers don't write empty rows
+
+def _clean_text(value: str) -> str:
+    return " ".join((value or "").split())
+
+
+def _project_attr_map(soup: BeautifulSoup) -> dict[str, str]:
+    attrs: dict[str, str] = {}
+    for row in soup.select(".re__project-attr tr"):
+        label = _clean_text(row.select_one(".re__attr-item-label").get_text(" ", strip=True)) if row.select_one(".re__attr-item-label") else ""
+        value = _clean_text(row.select_one(".re__attr-item-value").get_text(" ", strip=True)) if row.select_one(".re__attr-item-value") else ""
+        if label and value:
+            attrs[label.lower()] = value
+    return attrs
+
+
+def _project_address(soup: BeautifulSoup) -> str:
+    address = _text(soup, ".re__project-address") or _text(
+        soup, ".project-location, [data-testid='project-location']"
+    )
+    return _clean_text(address.replace("Xem bản đồ", ""))
+
+
+def _location_parts(location: str) -> tuple[str, str]:
+    parts = [part.strip(" .") for part in location.split(",") if part.strip(" .")]
+    district = parts[-2] if len(parts) >= 2 else ""
+    city = parts[-1] if parts else ""
+    return district, city
+
+
+def _project_editor(soup: BeautifulSoup):
+    return soup.select_one(
+        ".js__prj-detail-content.re__detail-content.re__project-editor, "
+        ".re__project-editor, "
+        "[data-testid='project-description'], "
+        ".project-description"
+    )
+
+
+def _project_amenities(soup: BeautifulSoup) -> list[str]:
+    legacy_items = [
+        _clean_text(item.get_text(" ", strip=True))
+        for item in soup.select(".amenities li, [data-testid='amenity']")
+        if item.get_text(strip=True)
+    ]
+    if legacy_items:
+        return legacy_items
+
+    editor = _project_editor(soup)
+    if not editor:
+        return []
+
+    amenities: list[str] = []
+    in_amenities_section = False
+    for node in editor.find_all(["h2", "h3", "h4", "li"]):
+        text = _clean_text(node.get_text(" ", strip=True))
+        if not text:
+            continue
+        if node.name in {"h2", "h3", "h4"}:
+            normalized = text.lower()
+            in_amenities_section = "tiện ích" in normalized or "tien ich" in normalized
+            continue
+        if in_amenities_section and node.name == "li":
+            amenities.append(text)
+
+    return amenities
+
+
+def parse_project_detail(html: str, *, url: str) -> dict[str, str]:
+    soup = BeautifulSoup(html, "html.parser")
+    name = _text(soup, "h1.re__project-name") or _text(soup, "h1") or _text(soup, "[data-testid='project-title']")
+    attr_map = _project_attr_map(soup)
+    location = _project_address(soup)
+    district, city = _location_parts(location)
+    editor = _project_editor(soup)
+    description = _clean_text(editor.get_text(" ", strip=True)) if editor else ""
+    amenities = _project_amenities(soup)
+    return {
+        "slug": slugify(name) or url.rstrip("/").split("/")[-1],
+        "name": name,
+        "developer": attr_map.get("chủ đầu tư", "") or _text(soup, ".developer, [data-testid='developer']"),
+        "location": location,
+        "district": _text(soup, ".district, [data-testid='district']") or district,
+        "city": _text(soup, ".city, [data-testid='city']") or city,
+        "total_units": _text(soup, ".total-units, [data-testid='total-units']"),
+        "price_range": _text(soup, ".price-range, [data-testid='price-range']"),
+        "area_range": attr_map.get("diện tích", "") or _text(soup, ".area-range, [data-testid='area-range']"),
+        "status": _text(soup, ".status, [data-testid='status']"),
+        "project_type": _text(soup, ".project-type, [data-testid='project-type']"),
+        "description": description,
+        "amenities": json.dumps(amenities, ensure_ascii=False),
+        "url": url,
+    }
+
+
+def parse_detail_page(page, url: str, slug: str) -> dict | None:
+    """Extract project detail fields from a loaded Playwright page."""
+    row = parse_project_detail(page.content(), url=url)
+    row["slug"] = slug
+    return row if row.get("name") else None
 
 
 # ---------------------------------------------------------------------------
@@ -224,9 +319,6 @@ def main() -> None:
     if not os.path.exists(input_path):
         print(f"[ERROR] Input file not found: {input_path}")
         return
-
-    print("[NOTE] Project detail selectors are TODO. parse_detail_page returns None")
-    print("       so this run will not write rows until selectors are implemented.")
 
     all_urls = _read_input_urls(input_path)
     print(f"Loaded {len(all_urls)} project URLs from {input_path}")

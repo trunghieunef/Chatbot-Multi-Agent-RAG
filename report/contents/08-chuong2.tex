@@ -1,0 +1,92 @@
+% ============================================================
+% CHƯƠNG 2: CƠ SỞ LÝ THUYẾT
+% ============================================================
+\chapter{CƠ SỞ LÝ THUYẾT}
+
+\section{Tổng quan về lĩnh vực nghiên cứu}
+
+\subsection{Nền tảng bất động sản trực tuyến}
+
+Các nền tảng bất động sản trực tuyến như batdongsan.com.vn, alonhadat.com.vn đóng vai trò quan trọng trong việc kết nối người mua và người bán. Các nền tảng này thường cung cấp chức năng đăng tin, tìm kiếm theo bộ lọc và hiển thị thông tin chi tiết. Tuy nhiên, hầu hết các nền tảng hiện tại chưa tích hợp trợ lý ảo thông minh có khả năng tư vấn đa chiều và hiểu ngữ cảnh người dùng.
+
+\subsection{Chatbot và trợ lý ảo trong bất động sản}
+
+Chatbot trong lĩnh vực bất động sản có thể tự động hóa quy trình tư vấn, giảm tải cho nhân viên và cung cấp dịch vụ 24/7. Các thế hệ chatbot gần đây sử dụng mô hình ngôn ngữ lớn (LLM) kết hợp với kỹ thuật RAG để sinh phản hồi chính xác, dựa trên dữ liệu thực tế thay vì "ảo giác" (hallucination).
+
+\section{Các khái niệm cơ bản}
+
+\subsection{Retrieval-Augmented Generation (RAG)}
+
+RAG là kỹ thuật kết hợp giữa truy xuất thông tin (retrieval) và sinh văn bản (generation). Quy trình RAG gồm ba bước chính:
+
+\begin{enumerate}
+    \item \textbf{Truy xuất (Retrieve):} Khi nhận được câu hỏi của người dùng, hệ thống chuyển câu hỏi thành vector embedding và tìm kiếm các đoạn văn bản (chunks) có độ tương đồng cao nhất trong cơ sở dữ liệu vector.
+    \item \textbf{Tăng cường (Augment):} Các chunks được truy xuất sẽ được đưa vào prompt của LLM như ngữ cảnh bổ sung.
+    \item \textbf{Sinh (Generate):} LLM sinh câu trả lời dựa trên câu hỏi gốc và ngữ cảnh được cung cấp, kèm theo trích dẫn nguồn.
+\end{enumerate}
+
+Ưu điểm của RAG so với việc chỉ sử dụng LLM thuần túy là giảm thiểu "ảo giác", cung cấp thông tin cập nhật và có thể kiểm chứng nguồn gốc của câu trả lời.
+
+\subsection{Multi-Agent System (Hệ đa tác tử)}
+
+Hệ đa tác tử là kiến trúc trong đó nhiều agent (tác tử) chuyên biệt cùng phối hợp để giải quyết một nhiệm vụ phức tạp. Mỗi agent đảm nhận một vai trò riêng và có thể truy cập các công cụ (tools) khác nhau. Trong đồ án này, hệ thống sử dụng 5 agent:
+
+\begin{itemize}
+    \item \textbf{Router Agent:} Phân loại ý định người dùng và điều phối đến các agent chuyên biệt.
+    \item \textbf{Property Search Agent:} Tìm kiếm bất động sản phù hợp với nhu cầu.
+    \item \textbf{Market Analysis Agent:} Phân tích xu hướng và thống kê thị trường.
+    \item \textbf{Legal Advisor Agent:} Tư vấn các vấn đề pháp lý liên quan.
+    \item \textbf{Investment Advisor Agent:} Tư vấn tiềm năng đầu tư và ROI.
+\end{itemize}
+
+\subsection{Vector Embedding và Tìm kiếm ngữ nghĩa}
+
+Vector embedding là kỹ thuật chuyển đổi văn bản thành vector số trong không gian nhiều chiều, sao cho các văn bản có ngữ nghĩa tương đồng sẽ nằm gần nhau. Đồ án sử dụng mô hình BGE-M3 (BAAI/bge-m3) với không gian embedding 1024 chiều, được tối ưu cho đa ngôn ngữ bao gồm tiếng Việt. Tìm kiếm ngữ nghĩa (semantic search) sử dụng độ đo cosine similarity hoặc khoảng cách L2 để tìm các chunks liên quan nhất.
+
+\subsection{Hybrid Search và Reranking}
+
+Hybrid Search kết hợp tìm kiếm theo bộ lọc có cấu trúc (SQL WHERE) với tìm kiếm ngữ nghĩa (vector similarity) để tận dụng ưu điểm của cả hai phương pháp. Sau khi có tập kết quả ứng viên, kỹ thuật reranking (xếp hạng lại) sử dụng mô hình Cross-Encoder (Cohere Rerank Multilingual v3.0) để đánh giá lại độ liên quan của từng kết quả với câu truy vấn, cho ra thứ hạng chính xác hơn so với chỉ dùng vector similarity.
+
+\section{Các công nghệ liên quan}
+
+\subsection{FastAPI}
+
+FastAPI là web framework Python hiện đại, hỗ trợ lập trình bất đồng bộ (async/await), tự động sinh tài liệu OpenAPI và validation dữ liệu qua Pydantic. FastAPI được chọn cho backend vì hiệu năng cao, dễ tích hợp với các thư viện AI/ML và cộng đồng hỗ trợ tốt.
+
+\subsection{Next.js}
+
+Next.js là React framework hỗ trợ Server-Side Rendering (SSR), Static Site Generation (SSG) và App Router. Next.js được chọn cho frontend vì khả năng tối ưu SEO, hiệu năng tốt và hệ sinh thái phong phú. Giao diện sử dụng Tailwind CSS v4 cho styling và Recharts cho biểu đồ thống kê.
+
+\subsection{PostgreSQL + pgvector}
+
+PostgreSQL là hệ quản trị cơ sở dữ liệu quan hệ mạnh mẽ, mã nguồn mở. Extension pgvector bổ sung kiểu dữ liệu vector và các phép toán tìm kiếm tương đồng (kNN, cosine distance, L2 distance) trực tiếp trong PostgreSQL. Việc sử dụng PostgreSQL + pgvector cho phép lưu trữ cả dữ liệu có cấu trúc (listings, users, chats) và dữ liệu vector (embeddings) trong cùng một hệ thống, giảm độ phức tạp vận hành.
+
+\subsection{LangGraph}
+
+LangGraph là thư viện của LangChain cho phép xây dựng các ứng dụng multi-agent có trạng thái (stateful) dưới dạng đồ thị (graph). Mỗi agent là một node trong graph, các cạnh (edges) biểu diễn luồng điều phối. LangGraph hỗ trợ checkpoint để lưu trạng thái hội thoại và conditional routing để quyết định agent nào sẽ xử lý tiếp theo.
+
+\subsection{Google Gemini}
+
+Google Gemini 2.0 Flash là mô hình ngôn ngữ lớn đa năng, hỗ trợ đa ngôn ngữ (bao gồm tiếng Việt), có khả năng sinh văn bản, phân loại ý định và tạo embedding. Trong đồ án, Gemini được sử dụng cho hai nhiệm vụ chính: (1) phân loại ý định người dùng trong Router Agent và (2) sinh phản hồi cuối cùng từ kết quả truy xuất.
+
+\subsection{BGE-M3 Embedding}
+
+BGE-M3 (BAAI/bge-m3) là mô hình embedding đa ngôn ngữ mã nguồn mở, hỗ trợ hơn 100 ngôn ngữ bao gồm tiếng Việt. Mô hình tạo vector 1024 chiều với chất lượng cao trên các tác vụ retrieval. BGE-M3 được chọn thay vì Gemini Embedding vì chất lượng tốt hơn cho tiếng Việt và không phụ thuộc vào API bên ngoài cho việc tạo embedding số lượng lớn.
+
+\subsection{Cohere Rerank}
+
+Cohere Rerank Multilingual v3.0 là mô hình cross-encoder chuyên dụng cho việc xếp hạng lại kết quả truy xuất. Không giống như bi-encoder (tạo embedding riêng cho query và document), cross-encoder xử lý cặp (query, document) cùng lúc, cho độ chính xác cao hơn trong việc đánh giá mức độ liên quan.
+
+\subsection{Redis}
+
+Redis là cơ sở dữ liệu key-value in-memory, được sử dụng làm cache để tăng tốc truy xuất dữ liệu thường xuyên (session, kết quả tìm kiếm phổ biến) và giảm tải cho PostgreSQL.
+
+\subsection{Apache Airflow}
+
+Apache Airflow là nền tảng quản lý workflow mã nguồn mở, cho phép lập lịch và giám sát các pipeline dữ liệu dưới dạng DAG (Directed Acyclic Graph). Trong đồ án, Airflow được sử dụng để tự động hóa các tác vụ crawl định kỳ (hàng ngày, hàng tuần, hàng tháng).
+
+\subsection{Playwright}
+
+Playwright là thư viện tự động hóa trình duyệt, hỗ trợ Chromium, Firefox và WebKit. Với chế độ stealth, Playwright được sử dụng để crawl dữ liệu từ batdongsan.com.vn mà không bị phát hiện là bot.
+
+\newpage

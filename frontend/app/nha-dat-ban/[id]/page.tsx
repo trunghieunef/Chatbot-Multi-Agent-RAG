@@ -26,7 +26,6 @@ export default function ListingDetailPage() {
 
   useEffect(() => {
     if (!id) return;
-    setLoading(true);
     getListingDetail(id)
       .then((data) => {
         setListing(data);

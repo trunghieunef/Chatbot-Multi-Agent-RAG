@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import { ArrowUpDown } from "lucide-react";
 import { getListings } from "@/lib/api";
 import FilterPanel from "@/components/search/FilterPanel";
@@ -83,9 +84,9 @@ function ListingsPageContent({ listingType }: { listingType: string }) {
     <div className="mx-auto max-w-7xl px-4 py-6">
       {/* Breadcrumb */}
       <nav className="mb-4 text-xs text-muted-foreground">
-        <a href="/" className="hover:text-primary">
+        <Link href="/" className="hover:text-primary">
           Trang chủ
-        </a>
+        </Link>
         <span className="mx-1.5">›</span>
         <span className="text-foreground font-medium">{title}</span>
       </nav>

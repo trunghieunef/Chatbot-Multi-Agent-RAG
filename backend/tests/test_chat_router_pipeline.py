@@ -51,20 +51,11 @@ def test_send_message_uses_multi_agent_pipeline_by_default(monkeypatch):
     assert response.suggested_actions == ["Compare"]
 
 
-def test_send_message_falls_back_to_simple_rag_when_multi_agent_fails(monkeypatch):
+def test_send_message_returns_safe_error_when_multi_agent_fails(monkeypatch):
     async def failing_multi_agent(message, db, session_id=None):
         raise RuntimeError("multi-agent unavailable")
 
-    async def fake_simple_rag(message, db):
-        return {
-            "final_response": "Simple fallback response",
-            "agent_used": "simple_rag",
-            "sources": [],
-            "suggested_actions": ["Retry"],
-        }
-
     monkeypatch.setattr(chat, "run_chat_pipeline", failing_multi_agent, raising=False)
-    monkeypatch.setattr(chat, "run_simple_rag", fake_simple_rag)
 
     response = asyncio.run(
         chat.send_message(
@@ -74,20 +65,18 @@ def test_send_message_falls_back_to_simple_rag_when_multi_agent_fails(monkeypatc
         )
     )
 
-    assert response.content == "Simple fallback response"
-    assert response.agent_used == "simple_rag"
-    assert response.suggested_actions == ["Retry"]
+    assert "chua san sang" in response.content
+    assert response.agent_used == "multi_agent_error"
+    assert response.sources == []
+    assert response.suggested_actions
 
 
-def test_send_message_returns_safe_error_when_all_pipelines_fail(monkeypatch):
+def test_send_message_does_not_call_simple_rag(monkeypatch):
     async def failing_multi_agent(message, db, session_id=None):
         raise ValueError("multi-agent unavailable")
 
-    async def failing_simple_rag(message, db):
-        raise ValueError("network unavailable")
-
     monkeypatch.setattr(chat, "run_chat_pipeline", failing_multi_agent, raising=False)
-    monkeypatch.setattr(chat, "run_simple_rag", failing_simple_rag)
+    assert not hasattr(chat, "run_simple_rag")
 
     response = asyncio.run(
         chat.send_message(
@@ -97,6 +86,6 @@ def test_send_message_returns_safe_error_when_all_pipelines_fail(monkeypatch):
         )
     )
 
-    assert response.agent_used == "simple_rag"
+    assert response.agent_used == "multi_agent_error"
     assert response.sources == []
     assert response.suggested_actions

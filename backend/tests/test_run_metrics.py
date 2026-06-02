@@ -72,6 +72,45 @@ def test_collect_metrics_from_dag_run_aggregates_return_value_xcoms():
     assert metrics == {"listings": 15, "chunks": 42}
 
 
+def test_collect_metrics_from_dag_run_aggregates_listing_publish_metrics():
+    context = {
+        "dag_run": _fake_dag_run(
+            [
+                _fake_ti(
+                    "ingest_sale",
+                    {
+                        "published": 10,
+                        "indexed": 8,
+                        "chunks": 30,
+                        "publish_errors": 1,
+                        "index_errors": 2,
+                    },
+                ),
+                _fake_ti(
+                    "ingest_rent",
+                    {
+                        "published": 5,
+                        "indexed": 5,
+                        "chunks": 12,
+                        "publish_errors": 0,
+                        "index_errors": 1,
+                    },
+                ),
+            ]
+        ),
+    }
+
+    metrics = collect_metrics_from_dag_run(context)
+
+    assert metrics == {
+        "published": 15,
+        "indexed": 13,
+        "chunks": 42,
+        "publish_errors": 1,
+        "index_errors": 3,
+    }
+
+
 def test_collect_metrics_from_dag_run_returns_empty_when_no_dag_run():
     assert collect_metrics_from_dag_run({}) == {}
 
