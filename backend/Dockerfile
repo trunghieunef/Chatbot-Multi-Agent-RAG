@@ -1,6 +1,7 @@
 FROM python:3.12-slim
 
 WORKDIR /app
+ENV HF_HOME=/app/.cache/huggingface
 
 # System deps for asyncpg and bcrypt
 RUN apt-get update && apt-get install -y --no-install-recommends \

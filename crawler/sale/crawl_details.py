@@ -46,6 +46,7 @@ DETAIL_FIELDS = [
     "product_id",
     "title",
     "price_text",
+    "price_unit",
     "area_text",
     "price_per_m2_text",
     "bedrooms",

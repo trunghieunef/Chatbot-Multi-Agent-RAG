@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PermissionRequest": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \".codex\\hooks\\approval-sound.ps1\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

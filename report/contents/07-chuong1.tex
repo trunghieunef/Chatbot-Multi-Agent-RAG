@@ -1,0 +1,53 @@
+% ============================================================
+% CHƯƠNG 1: GIỚI THIỆU
+% ============================================================
+\chapter{GIỚI THIỆU}
+
+\section{Đặt vấn đề}
+
+Thị trường bất động sản Việt Nam đang phát triển nhanh chóng với lượng giao dịch lớn và nhu cầu thông tin ngày càng cao từ phía người mua, người bán và nhà đầu tư. Tuy nhiên, việc tiếp cận thông tin bất động sản một cách toàn diện và đáng tin cậy vẫn còn nhiều thách thức:
+
+\begin{itemize}
+    \item \textbf{Thông tin phân mảnh:} Dữ liệu bất động sản nằm rải rác trên nhiều nền tảng, khó tổng hợp và so sánh.
+    \item \textbf{Thiếu tư vấn chuyên sâu:} Người dùng cần được tư vấn về pháp lý, xu hướng thị trường và tiềm năng đầu tư, nhưng các nền tảng hiện tại chủ yếu chỉ hiển thị danh sách tin đăng.
+    \item \textbf{Rào cản ngôn ngữ và ngữ cảnh:} Các giải pháp tìm kiếm bằng tiếng Việt chưa thực sự hiệu quả trong việc hiểu ngữ nghĩa và ngữ cảnh của truy vấn bất động sản.
+    \item \textbf{Thiếu tự động hóa:} Quy trình thu thập, làm sạch và cập nhật dữ liệu bất động sản thường thủ công, tốn nhiều thời gian và công sức.
+\end{itemize}
+
+Trước bối cảnh đó, việc xây dựng một nền tảng bất động sản thông minh, tích hợp chatbot có khả năng hiểu ngôn ngữ tự nhiên tiếng Việt và tư vấn đa lĩnh vực là một nhu cầu cấp thiết, mang lại giá trị thiết thực cho người dùng.
+
+\section{Mục tiêu của đề tài}
+
+Đồ án hướng đến các mục tiêu chính sau:
+
+\begin{enumerate}
+    \item \textbf{Xây dựng nền tảng web bất động sản hoàn chỉnh} với các chức năng: duyệt danh sách nhà đất, lọc theo nhiều tiêu chí, xem chi tiết bất động sản kèm bản đồ, thống kê và phân tích thị trường.
+    \item \textbf{Phát triển chatbot đa tác tử (Multi-Agent)} tích hợp kỹ thuật RAG (Retrieval-Augmented Generation), có khả năng tư vấn về tìm kiếm bất động sản, phân tích thị trường, tư vấn pháp lý và tư vấn đầu tư.
+    \item \textbf{Xây dựng pipeline thu thập và xử lý dữ liệu tự động} từ nguồn batdongsan.com.vn, bao gồm các bước: crawl, làm sạch, làm giàu (geocoding, intent tagging), chunking, embedding và nạp vào cơ sở dữ liệu.
+    \item \textbf{Triển khai hệ thống tìm kiếm lai (Hybrid Search)} kết hợp tìm kiếm theo bộ lọc SQL và tìm kiếm ngữ nghĩa qua pgvector, với xếp hạng lại bằng Cohere Rerank.
+\end{enumerate}
+
+\section{Phạm vi nghiên cứu}
+
+Đồ án tập trung vào các phạm vi sau:
+
+\begin{itemize}
+    \item \textbf{Thị trường:} Bất động sản Việt Nam, dữ liệu được thu thập từ batdongsan.com.vn.
+    \item \textbf{Loại hình bất động sản:} Nhà đất bán và cho thuê (căn hộ chung cư, nhà riêng, nhà mặt phố, đất nền, biệt thự).
+    \item \textbf{Chức năng chính:} Tìm kiếm và duyệt bất động sản, chatbot tư vấn đa lĩnh vực, thống kê thị trường, xác thực người dùng.
+    \item \textbf{Công nghệ:} Hệ thống full-stack với Next.js (frontend), FastAPI (backend), PostgreSQL + pgvector (cơ sở dữ liệu), Redis (cache), LangGraph (điều phối agent), Google Gemini và BGE-M3 (AI/ML).
+    \item \textbf{Ngôn ngữ:} Giao diện và chatbot hỗ trợ tiếng Việt.
+\end{itemize}
+
+\section{Bố cục của báo cáo}
+
+Báo cáo được tổ chức thành 3 chương chính và phần kết luận:
+
+\begin{itemize}
+    \item \textbf{Chương 1 -- Giới thiệu:} Đặt vấn đề, mục tiêu, phạm vi nghiên cứu và bố cục báo cáo.
+    \item \textbf{Chương 2 -- Cơ sở lý thuyết:} Trình bày các khái niệm nền tảng về RAG, multi-agent system, vector search, embedding và các công nghệ sử dụng trong đồ án.
+    \item \textbf{Chương 3 -- Phân tích thiết kế hệ thống:} Phân tích yêu cầu chức năng và phi chức năng, thiết kế kiến trúc tổng thể, cơ sở dữ liệu, giao diện người dùng, quy trình triển khai và kết quả kiểm thử.
+    \item \textbf{Kết luận:} Tổng kết kết quả đạt được, hạn chế và hướng phát triển trong tương lai.
+\end{itemize}
+
+\newpage

@@ -4,6 +4,10 @@
 
 Xây dựng nền tảng bất động sản toàn diện lấy cảm hứng từ **batdongsan.com.vn**, tích hợp **chatbot multi-agent RAG** để tư vấn thông minh về mọi vấn đề bất động sản.
 
+> **Current HEAD note:** The active retrieval path is PostgreSQL + pgvector, not ChromaDB/Qdrant. Current HEAD uses BGE-M3 dense embeddings with 1024 dimensions. Migration `20260801_0007_bge_m3_embeddings.py` clears existing `chunks`, changes `chunks.embedding` to `vector(1024)`, and requires re-ingesting indexed sources.
+
+> **Crawler status note:** `crawler/projects/` and `crawler/news/` selectors are still scaffold-only. They can produce empty CSVs until parser selectors are implemented. Sale, rent, and legal KB are the currently usable ingestion paths.
+
 ## Phân tích hiện trạng
 
 ### Những gì đã có ✅
@@ -58,7 +62,7 @@ graph TB
     subgraph "Data Layer"
         R[(PostgreSQL + pgvector)]
         S[(Redis Cache)]
-        T[ChromaDB / Qdrant]
+        T[PostgreSQL pgvector chunks]
     end
 
     subgraph "Data Pipeline"
@@ -88,9 +92,9 @@ graph TB
 | **Backend** | **FastAPI (Python)** | Async, type-safe, tích hợp ML/AI dễ dàng |
 | **Database** | **PostgreSQL + pgvector** | Relational + vector search trong 1 DB |
 | **Cache** | **Redis** | Cache API responses, session, rate limiting |
-| **Vector Store** | **ChromaDB** (dev) / **Qdrant** (prod) | Lưu embeddings cho RAG |
+| **Vector Store** | **PostgreSQL + pgvector** | Single source of truth for structured records and chunk vectors |
 | **LLM** | **Google Gemini 2.0 Flash** hoặc **GPT-4o-mini** | Giá rẻ, nhanh, đủ thông minh |
-| **Embeddings** | **text-embedding-3-small** hoặc **Gemini Embedding** | Chuyển text → vector |
+| **Embeddings** | **BGE-M3 `BAAI/bge-m3` (1024 dim)** | Chuyển text → vector |
 | **Agent Framework** | **LangGraph** | Stateful multi-agent orchestration |
 | **Crawler** | **Playwright + Stealth** (đã có) | Bypass bot detection |
 | **Containerization** | **Docker Compose** | Dễ deploy, quản lý services |
@@ -221,7 +225,7 @@ RealEstate_Chatbot_v2/
 │   ├── enrich.py                  # Thêm geocoding, phân loại
 │   ├── embed.py                   # Tạo embeddings cho listings
 │   ├── load_db.py                 # Load vào PostgreSQL
-│   └── load_vectordb.py           # Load vào ChromaDB/Qdrant
+│   └── ingestors/                 # Upsert records + chunks into PostgreSQL/pgvector
 │
 ├── data/                          # Data storage
 │   ├── raw/                       # CSV thô từ crawler
@@ -271,7 +275,7 @@ graph LR
     B --> C[Enrich: Geocode, Classify]
     C --> D[Load PostgreSQL]
     C --> E[Chunk & Embed]
-    E --> F[Load Vector Store]
+    E --> F[Load chunks.embedding vector(1024)]
 ```
 
 #### Database Schema (PostgreSQL)
@@ -579,7 +583,7 @@ class ChatState(MessagesState):
 ### Phase 3: RAG & Chatbot (Tuần 3-4)
 > Multi-agent system + Vector store
 
-- [ ] Setup ChromaDB/Qdrant
+- [ ] Setup PostgreSQL pgvector chunk retrieval
 - [ ] Tạo embeddings cho tất cả listings + knowledge docs
 - [ ] Implement LangGraph workflow
 - [ ] Build 5 agents + tools
@@ -619,14 +623,6 @@ services:
     ports:
       - "6379:6379"
 
-  # ChromaDB (Vector Store)
-  chromadb:
-    image: chromadb/chroma:latest
-    ports:
-      - "8001:8000"
-    volumes:
-      - chromadata:/chroma/chroma
-
   # Backend API
   backend:
     build: ./backend
@@ -635,7 +631,6 @@ services:
     depends_on:
       - postgres
       - redis
-      - chromadb
     env_file: .env
 
   # Frontend
@@ -648,7 +643,6 @@ services:
 
 volumes:
   pgdata:
-  chromadata:
 ```
 
 ---

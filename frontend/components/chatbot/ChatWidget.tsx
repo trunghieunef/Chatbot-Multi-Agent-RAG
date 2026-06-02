@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Home, MapPin, MessageCircle, X, Send, Bot, User, Sparkles } from "lucide-react";
+import { BarChart3, FileText, Home, MapPin, MessageCircle, Scale, Send, Bot, TrendingUp, User, Sparkles, X } from "lucide-react";
 import { sendChatMessage } from "@/lib/api";
 import type { ChatMessageResponse, ChatSource } from "@/lib/types";
 
@@ -78,11 +78,30 @@ export default function ChatWidget() {
   }
 
   const agentLabels: Record<string, string> = {
-    property_search: "🏠 Tìm kiếm",
-    market_analysis: "📊 Thị trường",
-    legal_advisor: "⚖️ Pháp lý",
-    investment_advisor: "💰 Đầu tư",
-    placeholder: "🤖 AI",
+    property_search: "Tìm kiếm",
+    market_analysis: "Thị trường",
+    legal_advisor: "Pháp lý",
+    investment_advisor: "Đầu tư",
+    simple_rag: "RAG",
+    placeholder: "AI",
+  };
+
+  const getAgentLabels = (agentUsed?: string | null) =>
+    (agentUsed || "")
+      .split(",")
+      .map((agent) => agent.trim())
+      .filter((agent) => agent && agent !== "none" && agent !== "placeholder")
+      .map((agent) => agentLabels[agent] || agent);
+
+  const formatCitation = (source: ChatSource) => {
+    const citation = source.citation;
+    if (!citation) return source.source || source.title || "Nguồn pháp lý";
+    const parts = [
+      citation.doc_slug,
+      citation.dieu_number ? `Điều ${citation.dieu_number}` : null,
+      citation.khoan_number ? `Khoản ${citation.khoan_number}` : null,
+    ].filter(Boolean);
+    return parts.join(" · ");
   };
 
   return (
@@ -150,31 +169,68 @@ export default function ChatWidget() {
                         : "bg-muted text-card-foreground rounded-tl-none"
                     }`}
                   >
-                    {msg.agent_used &&
-                      msg.agent_used !== "none" &&
-                      msg.agent_used !== "placeholder" && (
-                        <span className="mb-1 inline-block rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
-                          {agentLabels[msg.agent_used] || msg.agent_used}
-                        </span>
-                      )}
+                    {getAgentLabels(msg.agent_used).length > 0 && (
+                      <div className="mb-1 flex flex-wrap gap-1">
+                        {getAgentLabels(msg.agent_used).map((label) => (
+                          <span key={label} className="inline-block rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                            {label}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                     <p className="whitespace-pre-wrap">{msg.content}</p>
                     {msg.sources && msg.sources.length > 0 && (
                       <div className="mt-2 space-y-1.5 border-t border-border/70 pt-2">
-                        {msg.sources.slice(0, 3).map((source) => (
-                          <div key={source.product_id} className="rounded-md bg-card/70 p-2 text-[11px] leading-snug">
-                            <div className="flex items-start gap-1.5 font-medium">
-                              <Home size={12} className="mt-0.5 shrink-0" />
-                              <span className="line-clamp-2">{source.title || "Tin bất động sản"}</span>
+                        {msg.sources.slice(0, 3).map((source, sourceIndex) => {
+                          const key = `${source.type || "source"}-${source.product_id || source.id || sourceIndex}`;
+                          const isLegal = source.type === "legal_article";
+                          const isMarket = source.type?.includes("aggregate") || source.type === "district_comparison";
+                          const Icon = isLegal ? Scale : isMarket ? BarChart3 : Home;
+
+                          return (
+                            <div key={key} className="rounded-md bg-card/70 p-2 text-[11px] leading-snug">
+                              <div className="flex items-start gap-1.5 font-medium">
+                                <Icon size={12} className="mt-0.5 shrink-0" />
+                                <span className="line-clamp-2">
+                                  {isLegal
+                                    ? source.title || source.source || "Nguồn pháp lý"
+                                    : isMarket
+                                      ? source.type === "investment_aggregate"
+                                        ? "Tổng hợp đầu tư"
+                                        : "Thống kê thị trường"
+                                      : source.title || "Tin bất động sản"}
+                                </span>
+                              </div>
+                              {isLegal ? (
+                                <div className="mt-1 flex items-center gap-1 text-muted-foreground">
+                                  <FileText size={11} className="shrink-0" />
+                                  <span className="truncate">{formatCitation(source)}</span>
+                                </div>
+                              ) : isMarket ? (
+                                <div className="mt-1 flex items-center gap-1 text-muted-foreground">
+                                  <TrendingUp size={11} className="shrink-0" />
+                                  <span className="truncate">
+                                    {source.rental_yield_percent
+                                      ? `Rental yield ${source.rental_yield_percent}%/năm`
+                                      : source.count !== undefined
+                                        ? `${source.count} tin dữ liệu`
+                                        : "Dữ liệu tổng hợp"}
+                                  </span>
+                                </div>
+                              ) : (
+                                <>
+                                  <div className="mt-1 flex items-center gap-1 text-muted-foreground">
+                                    <MapPin size={11} className="shrink-0" />
+                                    <span className="truncate">{source.location || "Chưa rõ vị trí"}</span>
+                                  </div>
+                                  <div className="mt-1 text-muted-foreground">
+                                    {[source.price_text, source.area_text].filter(Boolean).join(" · ")}
+                                  </div>
+                                </>
+                              )}
                             </div>
-                            <div className="mt-1 flex items-center gap-1 text-muted-foreground">
-                              <MapPin size={11} className="shrink-0" />
-                              <span className="truncate">{source.location || "Chưa rõ vị trí"}</span>
-                            </div>
-                            <div className="mt-1 text-muted-foreground">
-                              {[source.price_text, source.area_text].filter(Boolean).join(" · ")}
-                            </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                   </div>

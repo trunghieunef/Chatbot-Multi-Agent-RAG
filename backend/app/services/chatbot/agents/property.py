@@ -1,4 +1,4 @@
-"""Property search agent backed by the existing pgvector retrieval path."""
+"""Property search agent backed by chunk-based hybrid retrieval."""
 
 from __future__ import annotations
 
@@ -6,12 +6,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.chatbot.contracts import AgentResult, RoutingDecision
 from app.services.rag.simple_rag import (
-    GeminiClient,
-    _retrieve_listings,
-    build_fallback_answer,
-    format_listing_source,
+    build_record_fallback_answer,
+    format_listing_record_source,
 )
-from app.config import get_settings
+from app.services.rag.hybrid_search import hybrid_search
 
 
 async def run_property_search(
@@ -20,19 +18,19 @@ async def run_property_search(
     routing: RoutingDecision | None,
 ) -> AgentResult:
     """Find matching listings and summarize them for the user."""
-    settings = get_settings()
-    client = GeminiClient(
-        api_key=settings.GEMINI_API_KEY,
-        model=settings.GEMINI_MODEL,
-        embedding_model=settings.GEMINI_EMBEDDING_MODEL,
-    )
+    filters = routing.search_filters if routing else {}
     try:
-        query_embedding = await client.embed_text(query)
-        ranked = await _retrieve_listings(db, query_embedding, (routing.search_filters if routing else {}), top_k=5)
-    except RuntimeError:
-        ranked = []
+        listings = await hybrid_search(
+            query=query,
+            filters=filters,
+            parent_type="listing",
+            top_k=20,
+            rerank_to=5,
+        )
+    except Exception:
+        listings = []
 
-    if not ranked:
+    if not listings:
         return AgentResult(
             agent_name="property_search",
             content="Toi chua tim thay tin dang phu hop trong du lieu da lap chi muc. Hay thu noi rong khu vuc, muc gia hoac dien tich.",
@@ -41,16 +39,10 @@ async def run_property_search(
             confidence=0.4,
         )
 
-    listings = [listing for listing, _score in ranked]
-    try:
-        content = await client.generate_answer(query, listings)
-    except Exception:
-        content = build_fallback_answer(query, listings)
-
     return AgentResult(
         agent_name="property_search",
-        content=content,
-        sources=[format_listing_source(listing, score) for listing, score in ranked],
+        content=build_record_fallback_answer(query, listings),
+        sources=[format_listing_record_source(listing) for listing in listings],
         suggested_actions=["So sanh cac lua chon", "Tim them cung khu vuc", "Hoi ve phap ly khi mua nha"],
         confidence=0.85,
     )

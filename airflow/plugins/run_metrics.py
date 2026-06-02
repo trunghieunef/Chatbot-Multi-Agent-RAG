@@ -16,7 +16,18 @@ for path in (str(REPO_ROOT), str(BACKEND)):
 logger = logging.getLogger(__name__)
 
 
-_METRIC_KEYS = ("listings", "chunks", "projects", "articles", "documents", "skipped")
+_METRIC_KEYS = (
+    "listings",
+    "published",
+    "indexed",
+    "chunks",
+    "publish_errors",
+    "index_errors",
+    "projects",
+    "articles",
+    "documents",
+    "skipped",
+)
 
 
 def build_run_summary(

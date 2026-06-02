@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
-from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.listing import Listing
+from app.services.chatbot.analytics import get_district_comparison, get_market_snapshot
 from app.services.chatbot.contracts import AgentResult, RoutingDecision
+
+
+def _fmt_number(value, digits: int = 2) -> str:
+    return str(round(value, digits)) if value is not None else "chua ro"
 
 
 async def run_market_analysis(
@@ -16,32 +19,33 @@ async def run_market_analysis(
 ) -> AgentResult:
     """Summarize current market statistics from listing data."""
     filters = routing.search_filters if routing else {}
-    statement = select(
-        func.count(Listing.id),
-        func.avg(Listing.price),
-        func.avg(Listing.area),
-        func.avg(Listing.price_per_m2),
-    ).where(Listing.is_active == True)
-    if filters.get("city"):
-        statement = statement.where(Listing.city.ilike(f"%{filters['city']}%"))
-    if filters.get("district"):
-        statement = statement.where(Listing.district.ilike(f"%{filters['district']}%"))
-    if filters.get("listing_type"):
-        statement = statement.where(Listing.listing_type == filters["listing_type"])
+    snapshot = await get_market_snapshot(db, filters)
+    comparison = await get_district_comparison(db, filters, limit=5)
 
-    row = (await db.execute(statement)).one()
-    total, avg_price, avg_area, avg_price_per_m2 = row
-    content = (
-        f"Du lieu hien co ghi nhan {total or 0} tin dang phu hop. "
-        f"Gia trung binh khoang {round(avg_price, 2) if avg_price else 'chua ro'} ty, "
-        f"dien tich trung binh {round(avg_area, 1) if avg_area else 'chua ro'} m2, "
-        f"gia/m2 trung binh {round(avg_price_per_m2, 2) if avg_price_per_m2 else 'chua ro'} trieu/m2. "
-        "Nen xem day la chi bao tham khao vi du lieu phu thuoc vao chat luong tin dang."
-    )
+    lines = [
+        f"Du lieu hien co ghi nhan {snapshot['count']} tin dang phu hop.",
+        (
+            f"Gia trung binh khoang {_fmt_number(snapshot['avg_price'])} ty, "
+            f"dien tich trung binh {_fmt_number(snapshot['avg_area'], 1)} m2, "
+            f"gia/m2 trung binh {_fmt_number(snapshot['avg_price_per_m2'])} trieu/m2."
+        ),
+    ]
+    if comparison:
+        lines.append("So sanh nhanh theo quan:")
+        for row in comparison:
+            lines.append(
+                f"- {row['district']}: {row['count']} tin, "
+                f"gia TB {_fmt_number(row['avg_price'])} ty, "
+                f"gia/m2 TB {_fmt_number(row['avg_price_per_m2'])} trieu/m2."
+            )
+    lines.append("Nen xem day la chi bao tham khao vi du lieu phu thuoc vao chat luong tin dang.")
     return AgentResult(
         agent_name="market_analysis",
-        content=content,
-        sources=[{"type": "market_aggregate", "filters": filters, "count": total or 0}],
+        content="\n".join(lines),
+        sources=[
+            {"type": "market_aggregate", "filters": filters, **snapshot},
+            {"type": "district_comparison", "filters": filters, "items": comparison},
+        ],
         suggested_actions=["So sanh theo quan", "Loc theo loai hinh", "Xem tin dang noi bat"],
-        confidence=0.75,
+        confidence=0.75 if snapshot["count"] else 0.35,
     )

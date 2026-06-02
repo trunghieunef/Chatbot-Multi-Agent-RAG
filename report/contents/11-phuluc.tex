@@ -1,0 +1,132 @@
+% ============================================================
+% PHỤ LỤC
+% ============================================================
+\chapter*{PHỤ LỤC}
+\addcontentsline{toc}{chapter}{PHỤ LỤC}
+
+\vspace{0.5cm}
+
+\hspace{1cm}{\fontsize{13}{16}\selectfont\bfseries Phụ lục A \quad CẤU TRÚC THƯ MỤC DỰ ÁN}
+
+\vspace{0.3cm}
+
+Cấu trúc thư mục chính của dự án (rút gọn):
+
+\begin{lstlisting}[basicstyle=\ttfamily\footnotesize]
+RealEstate_Chatbot_v2/
+├── frontend/                  # Next.js 16 Application
+│   ├── app/                   # App Router pages
+│   ├── components/            # React components
+│   │   ├── layout/            # Header, Footer, ChatWidget
+│   │   ├── listing/           # ListingCard, ListingGrid
+│   │   ├── search/            # SearchBar, FilterPanel
+│   │   ├── chatbot/           # ChatMessage, ChatInput
+│   │   └── market/            # PriceChart, MarketStats
+│   └── lib/                   # api.ts, types.ts
+├── backend/                   # FastAPI Backend
+│   ├── app/
+│   │   ├── models/            # ORM models (7 tables)
+│   │   ├── schemas/           # Pydantic contracts
+│   │   ├── routers/           # API endpoints (5 routers)
+│   │   └── services/          # Business logic + chatbot
+│   └── tests/                 # Backend test suite
+├── chatbot/                   # LangGraph sandbox
+│   ├── agents/                # 5 specialized agents
+│   └── tools/                 # hybrid_search, cache
+├── data_pipeline/             # ETL modules
+│   ├── clean.py               # Data cleaning
+│   ├── enrich.py              # Geocoding + intent tags
+│   ├── chunk.py               # Semantic chunking
+│   ├── embed.py               # BGE-M3 embedding
+│   └── load_db.py             # PostgreSQL upsert
+├── airflow/                   # Airflow DAGs
+│   └── dags/                  # 4 scheduled DAGs
+├── Crawl/                     # Playwright crawlers
+├── docker-compose.yml         # Infrastructure
+└── docs/                      # Project documentation
+\end{lstlisting}
+
+\newpage
+
+\hspace{1cm}{\fontsize{13}{16}\selectfont\bfseries Phụ lục B \quad SƠ ĐỒ LUỒNG DỮ LIỆU}
+
+\vspace{0.3cm}
+
+\begin{figure}[H]
+    \centering
+    % Chèn sơ đồ luồng dữ liệu tại đây
+    \caption{Sơ đồ luồng dữ liệu từ crawl đến hiển thị}
+    \label{fig:dataflow}
+\end{figure}
+
+Quy trình xử lý dữ liệu qua các bước:
+
+\begin{enumerate}
+    \item \textbf{Crawl:} Playwright thu thập dữ liệu từ batdongsan.com.vn $\rightarrow$ CSV.
+    \item \textbf{Clean:} Chuẩn hóa giá (parse ``4,68 tỷ'' $\rightarrow$ 4.68), diện tích, phân loại.
+    \item \textbf{Enrich:} Geocode địa chỉ $\rightarrow$ tọa độ (lat/lon), trích xuất intent tags.
+    \item \textbf{Chunk:} Chia mỗi listing thành 4 loại chunk (overview, description, location, intent\_tags).
+    \item \textbf{Embed:} Tạo vector BGE-M3 1024 chiều cho từng chunk.
+    \item \textbf{Load DB:} Upsert vào PostgreSQL (listings) và pgvector (chunks).
+    \item \textbf{Serve:} FastAPI truy xuất dữ liệu qua SQL + kNN, frontend hiển thị.
+\end{enumerate}
+
+\newpage
+
+\hspace{1cm}{\fontsize{13}{16}\selectfont\bfseries Phụ lục C \quad API ENDPOINTS CHÍNH}
+
+\vspace{0.3cm}
+
+\begin{longtable}{|p{3.5cm}|p{2cm}|p{7cm}|}
+    \hline
+    \textbf{Endpoint} & \textbf{Method} & \textbf{Mô tả} \\
+    \hline
+    \texttt{/api/v1/listings} & GET & Danh sách bất động sản (hỗ trợ filter, phân trang) \\
+    \hline
+    \texttt{/api/v1/listings/\{id\}} & GET & Chi tiết một bất động sản \\
+    \hline
+    \texttt{/api/v1/listings/similar/\{id\}} & GET & Bất động sản tương tự (vector similarity) \\
+    \hline
+    \texttt{/api/v1/market/stats} & GET & Thống kê tổng quan thị trường \\
+    \hline
+    \texttt{/api/v1/market/price-by-district} & GET & Giá trung bình theo quận \\
+    \hline
+    \texttt{/api/v1/market/cities} & GET & Danh sách thành phố có dữ liệu \\
+    \hline
+    \texttt{/api/v1/chat} & POST & Gửi tin nhắn đến chatbot \\
+    \hline
+    \texttt{/api/v1/auth/register} & POST & Đăng ký tài khoản \\
+    \hline
+    \texttt{/api/v1/auth/login} & POST & Đăng nhập, nhận JWT token \\
+    \hline
+    \texttt{/api/v1/auth/me} & GET & Thông tin người dùng hiện tại \\
+    \hline
+    \texttt{/metrics} & GET & Prometheus metrics \\
+    \hline
+\end{longtable}
+
+\newpage
+
+\hspace{1cm}{\fontsize{13}{16}\selectfont\bfseries Phụ lục D \quad VÍ DỤ PHẢN HỒI CHATBOT}
+
+\vspace{0.3cm}
+
+\textbf{Ví dụ 1: Tìm kiếm bất động sản}
+
+\begin{quote}
+\textbf{User:} ``Tôi muốn mua căn hộ chung cư ở Quận 7, giá dưới 5 tỷ, 2 phòng ngủ''
+
+\textbf{Agent sử dụng:} investment\_advisor, property\_search
+
+\textbf{Phản hồi:}
+Dựa trên yêu cầu của bạn, tôi tìm thấy một số căn hộ phù hợp tại Quận 7:
+
+1. \textbf{Căn hộ chung cư ABC} -- 4.2 tỷ, 72m\textsuperscript{2}, 2PN, Phường Tân Phong. View sông, nội thất đầy đủ.
+2. \textbf{Căn hộ Sunshine City} -- 4.8 tỷ, 78m\textsuperscript{2}, 2PN, Phường Phú Thuận. Gần trường học, an ninh tốt.
+
+\textbf{Nguồn:} [Link listing 1], [Link listing 2]
+
+\textbf{Gợi ý:} ``So sánh giá/m\textsuperscript{2} các căn hộ này'', ``Thủ tục mua chung cư cần những gì?''
+\end{quote}
+
+\newpage

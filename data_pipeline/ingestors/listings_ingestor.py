@@ -20,12 +20,12 @@ from app.database import async_session, engine
 from app.models import Chunk, Listing
 from data_pipeline.chunk import build_listing_chunks
 from data_pipeline.clean import row_to_listing
-from data_pipeline.embed import GeminiEmbedder
+from data_pipeline.embed import BGEEmbedder
 from data_pipeline.enrich import GeminiIntentExtractor, build_geocoder
 
 
 def read_csv_rows(csv_path: str) -> list[dict[str, str]]:
-    with open(csv_path, newline="", encoding="utf-8") as handle:
+    with open(csv_path, newline="", encoding="utf-8-sig") as handle:
         return list(csv.DictReader(handle))
 
 
@@ -46,6 +46,16 @@ def prepare_listing_chunks(
         }
         for chunk, vector in zip(chunks, vectors, strict=True)
     ]
+
+
+def empty_ingest_result() -> dict[str, int]:
+    return {
+        "published": 0,
+        "indexed": 0,
+        "chunks": 0,
+        "publish_errors": 0,
+        "index_errors": 0,
+    }
 
 
 async def enrich_listing_data(listing: dict, *, geocoder, intent_extractor) -> dict:
@@ -112,12 +122,94 @@ async def upsert_listing(session, listing_data: dict[str, Any]) -> Listing:
     return listing
 
 
+async def publish_listing_batch(
+    listings_data: list[dict[str, Any]],
+) -> list[Listing]:
+    persisted: list[Listing] = []
+    async with async_session() as session:
+        for listing_data in listings_data:
+            listing = await upsert_listing(session, listing_data)
+            persisted.append(listing)
+        await session.commit()
+    return persisted
+
+
+async def index_listing_batch(
+    listings_with_chunks: list[tuple[Listing, list[dict[str, Any]]]],
+    *,
+    embedder: Any,
+) -> dict[str, int]:
+    if not listings_with_chunks:
+        return {"indexed": 0, "chunks": 0, "index_errors": 0}
+
+    flat_texts = [
+        chunk["text"]
+        for _, chunks in listings_with_chunks
+        for chunk in chunks
+    ]
+    if not flat_texts:
+        return {"indexed": 0, "chunks": 0, "index_errors": 0}
+
+    try:
+        flat_vectors = await embedder.embed_texts(flat_texts)
+    except Exception as exc:
+        print(f"[ingest] semantic index embed batch failed: {exc}", file=sys.stderr)
+        return {
+            "indexed": 0,
+            "chunks": 0,
+            "index_errors": len(listings_with_chunks),
+        }
+
+    cursor = 0
+    indexed = 0
+    chunks_inserted = 0
+    index_errors = 0
+
+    async with async_session() as session:
+        for listing, chunks in listings_with_chunks:
+            count = len(chunks)
+            vectors = flat_vectors[cursor : cursor + count]
+            cursor += count
+            try:
+                chunk_rows = prepare_listing_chunks(listing.id, chunks, vectors)
+                await session.execute(
+                    delete(Chunk).where(
+                        Chunk.parent_type == "listing",
+                        Chunk.parent_id == listing.id,
+                    )
+                )
+                session.add_all([Chunk(**chunk_row) for chunk_row in chunk_rows])
+                indexed += 1
+                chunks_inserted += len(chunk_rows)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                index_errors += 1
+                print(
+                    f"[ingest] semantic index db write failed for {listing.product_id}: {exc}",
+                    file=sys.stderr,
+                )
+        await session.commit()
+
+    return {
+        "indexed": indexed,
+        "chunks": chunks_inserted,
+        "index_errors": index_errors,
+    }
+
+
+async def ensure_vector_extension() -> None:
+    async with engine.begin() as conn:
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+
+
 async def ingest_listing_rows(rows: list[dict[str, str]], batch_size: int = 50) -> dict[str, int]:
     settings = get_settings()
-    embedder = GeminiEmbedder(
-        api_key=settings.GEMINI_API_KEY,
-        model=settings.GEMINI_EMBEDDING_MODEL,
-        batch_size=100,
+    embedder = BGEEmbedder(
+        model_name=settings.HF_EMBEDDING_MODEL,
+        batch_size=settings.EMBEDDING_BATCH_SIZE,
+        embedding_dim=settings.EMBEDDING_DIM,
+        device=settings.HF_EMBEDDING_DEVICE or None,
     )
 
     geocoder = build_geocoder(
@@ -137,18 +229,15 @@ async def ingest_listing_rows(rows: list[dict[str, str]], batch_size: int = 50) 
         intent_extractor = _NoOpIntent()
 
     # pgvector is infrastructure (not schema). Schema lives in Alembic migrations.
-    async with engine.begin() as conn:
-        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+    await ensure_vector_extension()
 
-    inserted_or_updated = 0
-    chunks_inserted = 0
-    errors = 0
+    result = empty_ingest_result()
 
     for start in range(0, len(rows), batch_size):
         batch = rows[start : start + batch_size]
 
-        # Phase 1: clean + enrich + chunk in-memory (geocode + intent network calls).
-        prepared: list[tuple[dict[str, Any], list[dict[str, Any]]]] = []
+        # Phase 1: clean + enrich structured listing data.
+        prepared: list[dict[str, Any]] = []
         for row in batch:
             try:
                 listing_data = row_to_listing(row)
@@ -159,64 +248,51 @@ async def ingest_listing_rows(rows: list[dict[str, str]], batch_size: int = 50) 
                     geocoder=geocoder,
                     intent_extractor=intent_extractor,
                 )
-                chunks = build_listing_chunks(listing_data)
-                prepared.append((listing_data, chunks))
+                prepared.append(listing_data)
+            except asyncio.CancelledError:
+                raise
             except Exception as exc:
-                errors += 1
+                result["publish_errors"] += 1
                 print(
-                    f"[ingest] clean/chunk failed for {row.get('product_id', '?')}: {exc}",
+                    f"[ingest] clean/enrich failed for {row.get('product_id', '?')}: {exc}",
                     file=sys.stderr,
                 )
 
         if not prepared:
             continue
 
-        # Phase 2: one embed call per batch instead of one per listing.
-        flat_texts = [chunk["text"] for _, chunks in prepared for chunk in chunks]
         try:
-            flat_vectors = await embedder.embed_texts(flat_texts)
+            persisted = await publish_listing_batch(prepared)
+        except asyncio.CancelledError:
+            raise
         except Exception as exc:
-            errors += len(prepared)
-            print(f"[ingest] embed batch failed: {exc}", file=sys.stderr)
+            result["publish_errors"] += len(prepared)
+            print(f"[ingest] publish batch failed: {exc}", file=sys.stderr)
             continue
 
-        cursor = 0
-        with_vectors: list[tuple[dict[str, Any], list[dict[str, Any]], list[list[float]]]] = []
-        for listing_data, chunks in prepared:
-            count = len(chunks)
-            with_vectors.append((listing_data, chunks, flat_vectors[cursor : cursor + count]))
-            cursor += count
+        result["published"] += len(persisted)
 
-        # Phase 3: persist within a single session per batch.
-        async with async_session() as session:
-            for listing_data, chunks, vectors in with_vectors:
-                try:
-                    listing = await upsert_listing(session, listing_data)
-                    chunk_rows = prepare_listing_chunks(listing.id, chunks, vectors)
-                    await session.execute(
-                        delete(Chunk).where(
-                            Chunk.parent_type == "listing",
-                            Chunk.parent_id == listing.id,
-                        )
-                    )
-                    session.add_all([Chunk(**chunk_row) for chunk_row in chunk_rows])
-                    inserted_or_updated += 1
-                    chunks_inserted += len(chunk_rows)
-                except asyncio.CancelledError:
-                    raise
-                except Exception as exc:
-                    errors += 1
-                    print(
-                        f"[ingest] db write failed for {listing_data.get('product_id', '?')}: {exc}",
-                        file=sys.stderr,
-                    )
-            await session.commit()
+        listings_with_chunks: list[tuple[Listing, list[dict[str, Any]]]] = []
+        for listing, listing_data in zip(persisted, prepared, strict=True):
+            try:
+                chunks = build_listing_chunks(listing_data)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                result["index_errors"] += 1
+                print(
+                    f"[ingest] semantic index chunk build failed for {listing.product_id}: {exc}",
+                    file=sys.stderr,
+                )
+                continue
+            listings_with_chunks.append((listing, chunks))
 
-    return {
-        "listings": inserted_or_updated,
-        "chunks": chunks_inserted,
-        "errors": errors,
-    }
+        index_result = await index_listing_batch(listings_with_chunks, embedder=embedder)
+        result["indexed"] += index_result["indexed"]
+        result["chunks"] += index_result["chunks"]
+        result["index_errors"] += index_result["index_errors"]
+
+    return result
 
 
 async def load_csv_to_db(csv_path: str, batch_size: int = 50) -> dict[str, int]:

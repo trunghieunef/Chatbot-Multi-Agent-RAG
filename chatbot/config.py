@@ -1,5 +1,5 @@
 """
-RAG configuration for Google Gemini and vector store.
+RAG configuration for Gemini routing and pgvector-backed retrieval.
 """
 
 import os
@@ -8,7 +8,10 @@ import os
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 GEMINI_EMBEDDING_MODEL = os.getenv("GEMINI_EMBEDDING_MODEL", "gemini-embedding-001")
-EMBEDDING_DIM = int(os.getenv("EMBEDDING_DIM", "768"))
+EMBEDDING_PROVIDER = os.getenv("EMBEDDING_PROVIDER", "bge_m3")
+HF_EMBEDDING_MODEL = os.getenv("HF_EMBEDDING_MODEL", "BAAI/bge-m3")
+EMBEDDING_DIM = int(os.getenv("EMBEDDING_DIM", "1024"))
+EMBEDDING_BATCH_SIZE = int(os.getenv("EMBEDDING_BATCH_SIZE", "16"))
 CHUNK_SIZE_TOKENS = int(os.getenv("CHUNK_SIZE_TOKENS", "400"))
 CHUNK_OVERLAP_TOKENS = int(os.getenv("CHUNK_OVERLAP_TOKENS", "80"))
 
@@ -16,15 +19,6 @@ COHERE_API_KEY = os.getenv("COHERE_API_KEY", "")
 RERANK_PROVIDER = os.getenv("RERANK_PROVIDER", "cohere")
 RERANK_MODEL = os.getenv("RERANK_MODEL", "rerank-multilingual-v3.0")
 RERANK_TOP_N = int(os.getenv("RERANK_TOP_N", "5"))
-
-# ChromaDB
-CHROMA_HOST = os.getenv("CHROMA_HOST", "localhost")
-CHROMA_PORT = int(os.getenv("CHROMA_PORT", "8001"))
-
-# Collection names
-COLLECTION_LISTINGS = "real_estate_listings"
-COLLECTION_PROJECTS = "real_estate_projects"
-COLLECTION_KNOWLEDGE = "legal_knowledge"
 
 # RAG settings
 CHUNK_SIZE = 1000

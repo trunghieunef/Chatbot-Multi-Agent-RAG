@@ -6,7 +6,6 @@ from sqlalchemy import (
     Column, DateTime, Float, Integer, String, Text, func,
 )
 from sqlalchemy.dialects.postgresql import ARRAY
-from pgvector.sqlalchemy import Vector
 
 from app.database import Base
 
@@ -43,9 +42,6 @@ class Project(Base):
 
     # Meta
     url = Column(Text)
-
-    # Vector embedding
-    embedding = Column(Vector(768))
 
     # Timestamps
     created_at = Column(DateTime, default=func.now())

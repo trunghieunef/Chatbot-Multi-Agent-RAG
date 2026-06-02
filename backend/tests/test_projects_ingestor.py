@@ -1,4 +1,38 @@
+import pytest
+
+from data_pipeline.ingestors import projects_ingestor as pi
 from data_pipeline.ingestors.projects_ingestor import build_project_chunks
+
+
+class FailingEmbedder:
+    async def embed_texts(self, texts):
+        raise RuntimeError("embedding unavailable")
+
+
+class StubEmbedder:
+    async def embed_texts(self, texts):
+        return [[0.1] * 1024 for _ in texts]
+
+
+async def noop_ensure_vector_extension():
+    return None
+
+
+def sample_project_row():
+    return {
+        "slug": "project-publish-1",
+        "name": "Project Publish 1",
+        "developer": "Demo Developer",
+        "district": "Quan 7",
+        "city": "Ho Chi Minh",
+        "status": "selling",
+        "price_range": "5-7 ty",
+        "area_range": "50-80 m2",
+        "project_type": "apartment",
+        "description": "Project description",
+        "amenities": '["pool", "school"]',
+        "url": "https://example.test/projects/project-publish-1",
+    }
 
 
 def test_build_project_chunks_creates_overview_and_amenities_chunks():
@@ -21,3 +55,59 @@ def test_build_project_chunks_creates_overview_and_amenities_chunks():
     assert "overview" in chunk_types
     assert "description" in chunk_types
     assert "amenities" in chunk_types
+
+
+def test_project_empty_ingest_result_shape():
+    assert pi.empty_ingest_result() == {
+        "published": 0,
+        "indexed": 0,
+        "chunks": 0,
+        "publish_errors": 0,
+        "index_errors": 0,
+    }
+
+
+@pytest.mark.asyncio
+async def test_project_publish_survives_embedding_failure(monkeypatch):
+    async def fake_publish_batch(rows):
+        assert rows[0]["slug"] == "project-publish-1"
+        return [type("PersistedProject", (), {"id": 201, "slug": "project-publish-1"})()]
+
+    monkeypatch.setattr(pi, "publish_project_batch", fake_publish_batch)
+    monkeypatch.setattr(pi, "BGEEmbedder", lambda **kwargs: FailingEmbedder())
+    monkeypatch.setattr(pi, "ensure_vector_extension", noop_ensure_vector_extension)
+
+    result = await pi.ingest_project_rows([sample_project_row()], batch_size=1)
+
+    assert result["published"] == 1
+    assert result["indexed"] == 0
+    assert result["chunks"] == 0
+    assert result["publish_errors"] == 0
+    assert result["index_errors"] == 1
+
+
+@pytest.mark.asyncio
+async def test_project_parser_record_indexes_after_publish(monkeypatch):
+    async def fake_publish_batch(rows):
+        return [type("PersistedProject", (), {"id": 202, "slug": rows[0]["slug"]})()]
+
+    async def fake_index_batch(projects_with_chunks, *, embedder):
+        assert projects_with_chunks[0][1]
+        return {
+            "indexed": 1,
+            "chunks": len(projects_with_chunks[0][1]),
+            "index_errors": 0,
+        }
+
+    monkeypatch.setattr(pi, "publish_project_batch", fake_publish_batch)
+    monkeypatch.setattr(pi, "index_project_batch", fake_index_batch)
+    monkeypatch.setattr(pi, "BGEEmbedder", lambda **kwargs: StubEmbedder())
+    monkeypatch.setattr(pi, "ensure_vector_extension", noop_ensure_vector_extension)
+
+    result = await pi.ingest_project_rows([sample_project_row()], batch_size=1)
+
+    assert result["published"] == 1
+    assert result["indexed"] == 1
+    assert result["chunks"] >= 1
+    assert result["publish_errors"] == 0
+    assert result["index_errors"] == 0

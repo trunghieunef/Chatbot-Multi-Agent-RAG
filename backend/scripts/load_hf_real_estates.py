@@ -2,8 +2,8 @@
 
 Usage:
     python backend/scripts/load_hf_real_estates.py --limit 200000
+    python backend/scripts/load_hf_real_estates.py --all
     cd backend && python scripts/load_hf_real_estates.py --limit 200000
-    cd backend && python scripts/load_hf_real_estates.py --limit 50000 --with-embeddings
 """
 
 from __future__ import annotations
@@ -25,8 +25,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from app.config import get_settings
 from app.database import Base, async_session, engine
 from app.models import Listing
-from app.services.rag.ingest import build_listing_document, hf_row_to_listing_data
-from app.services.rag.simple_rag import GeminiClient
+from app.services.rag.ingest import hf_row_to_listing_data
 
 
 DATASET_NAME = "tinixai/vietnam-real-estates"
@@ -63,33 +62,29 @@ async def _insert_batch(rows: list[dict[str, Any]]) -> int:
     return inserted
 
 
-def _build_embedding_client(with_embeddings: bool) -> GeminiClient | None:
+def _validate_embedding_mode(with_embeddings: bool) -> None:
     if not with_embeddings:
-        return None
-
+        return
     settings = get_settings()
-    if not settings.GEMINI_API_KEY:
-        raise RuntimeError("GEMINI_API_KEY chua duoc cau hinh.")
-    return GeminiClient(
-        api_key=settings.GEMINI_API_KEY,
-        model=settings.GEMINI_MODEL,
-        embedding_model=settings.GEMINI_EMBEDDING_MODEL,
+    raise RuntimeError(
+        "Listing.embedding da bi loai bo. Hay ingest embeddings qua chunks bang "
+        f"{settings.EMBEDDING_PROVIDER}/{settings.HF_EMBEDDING_MODEL}."
     )
 
 
-async def load_dataset(limit: int, batch_size: int, with_embeddings: bool = False) -> None:
+async def load_dataset(limit: int | None, batch_size: int, with_embeddings: bool = False) -> None:
     try:
         from datasets import load_dataset
     except ImportError as exc:
         raise RuntimeError("Thieu dependency datasets/pyarrow. Hay cai backend requirements.") from exc
 
-    if limit <= 0:
-        raise ValueError("--limit phai lon hon 0.")
+    if limit is not None and limit < 0:
+        raise ValueError("--limit phai >= 0.")
     if batch_size <= 0:
         raise ValueError("--batch-size phai lon hon 0.")
 
     await _ensure_schema()
-    client = _build_embedding_client(with_embeddings)
+    _validate_embedding_mode(with_embeddings)
 
     dataset = load_dataset(DATASET_NAME, split="train", streaming=True)
     batch: list[dict[str, Any]] = []
@@ -97,13 +92,10 @@ async def load_dataset(limit: int, batch_size: int, with_embeddings: bool = Fals
     seen = 0
 
     for row_index, row in enumerate(dataset):
-        if row_index >= limit:
+        if limit and row_index >= limit:
             break
 
         listing_data = hf_row_to_listing_data(dict(row), row_index=row_index)
-        if client is not None:
-            document = build_listing_document(listing_data)
-            listing_data["embedding"] = await client.embed_text(document)
         batch.append(listing_data)
         seen += 1
 
@@ -118,21 +110,32 @@ async def load_dataset(limit: int, batch_size: int, with_embeddings: bool = Fals
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=f"Load {DATASET_NAME} into PostgreSQL.")
-    parser.add_argument("--limit", type=int, default=200_000, help="Maximum rows to read from the train split.")
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=200_000,
+        help="Maximum rows to read from the train split. Use 0 for all rows.",
+    )
+    parser.add_argument(
+        "--all",
+        action="store_true",
+        help="Read the full train split. Equivalent to --limit 0.",
+    )
     parser.add_argument("--batch-size", type=int, default=1_000, help="Database insert batch size.")
     parser.add_argument(
         "--with-embeddings",
         action="store_true",
-        help="Generate Gemini embeddings while importing. Requires GEMINI_API_KEY and is slower.",
+        help="Deprecated. Use chunk ingestors for BGE-M3 embeddings.",
     )
     return parser.parse_args(argv)
 
 
 def main() -> None:
     args = parse_args()
+    limit = None if args.all or args.limit == 0 else args.limit
     asyncio.run(
         load_dataset(
-            limit=args.limit,
+            limit=limit,
             batch_size=args.batch_size,
             with_embeddings=args.with_embeddings,
         )

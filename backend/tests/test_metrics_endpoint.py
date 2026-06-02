@@ -5,7 +5,12 @@ from app.main import app
 
 
 @pytest.mark.asyncio
-async def test_metrics_endpoint_exposes_prometheus_text():
+async def test_metrics_endpoint_exposes_prometheus_text(monkeypatch):
+    async def no_db_refresh():
+        return None
+
+    monkeypatch.setattr("app.routers.metrics._refresh_gauges", no_db_refresh)
+
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.get("/api/v1/metrics")

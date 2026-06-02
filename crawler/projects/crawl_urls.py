@@ -1,12 +1,9 @@
 """
 Crawl real estate project URLs from batdongsan.com.vn/du-an.
 
-NOTE: Selectors below are SCAFFOLDS. The project listing pages have a
-different DOM than the regular listing pages and the field extraction
-logic must be verified against the live DOM before this script is used
-to crawl real data. Until that happens, the parser returns no rows
-and this module exists primarily to fix the package layout, CLI flags,
-and CSV columns.
+Selectors are fixture-backed and intentionally kept in pure parser helpers so
+they can be tested without launching Playwright. Live DOM and anti-bot behavior
+can still change, so run small smoke crawls before relying on large batches.
 
 Modeled on `crawler/sale/crawl_urls.py`. When selectors are wired up,
 keep the same structure: parallel ThreadPoolExecutor workers, each
@@ -21,7 +18,9 @@ import random
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from urllib.parse import urljoin
 
+from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright, Browser
 from playwright_stealth import Stealth
 
@@ -52,15 +51,32 @@ def _log(msg: str) -> None:
 # Parsing
 # ---------------------------------------------------------------------------
 
-def parse_card(card) -> dict | None:
-    """Extract project card data.
+def _slug_from_project_url(url: str) -> str:
+    return url.rstrip("/").split("/")[-1]
 
-    TODO: implement project listing card selectors. The /du-an pages do not
-    share the `.js__card` / `.js__product-link-for-product-id` markup used
-    by listing pages, so reuse from sale/crawl_urls is not safe.
-    """
-    # TODO: implement project selectors
-    return None
+
+def extract_project_urls(html: str, *, base_url: str) -> list[str]:
+    soup = BeautifulSoup(html, "html.parser")
+    main_left = soup.select_one(".re__project-main-left")
+    if main_left is None:
+        return []
+
+    urls: list[str] = []
+    for anchor in main_left.select("a[href]"):
+        href = anchor.get("href") or ""
+        if "/du-an/" not in href and "/du-an-" not in href:
+            continue
+        absolute = urljoin(base_url, href)
+        if absolute not in urls:
+            urls.append(absolute)
+    return urls
+
+
+def parse_project_listing(html: str, *, base_url: str) -> list[dict]:
+    rows: list[dict] = []
+    for url in extract_project_urls(html, base_url=base_url):
+        rows.append({"slug": _slug_from_project_url(url), "name": "", "url": url})
+    return rows
 
 
 # ---------------------------------------------------------------------------
@@ -68,12 +84,7 @@ def parse_card(card) -> dict | None:
 # ---------------------------------------------------------------------------
 
 def crawl_page(browser: Browser, page_num: int, stealth_obj: Stealth, retries: int = 2) -> list[dict]:
-    """Load a single project listing page and extract cards.
-
-    The Playwright launch + stealth + retry skeleton is wired up so the
-    module is runnable; the actual card harvesting is gated on selector
-    work (see ``parse_card``).
-    """
+    """Load a single project listing page and extract project URL rows."""
     url = BASE_URL if page_num == 1 else f"{BASE_URL}/p{page_num}"
 
     for attempt in range(retries + 1):
@@ -83,9 +94,7 @@ def crawl_page(browser: Browser, page_num: int, stealth_obj: Stealth, retries: i
         try:
             page.goto(url, timeout=30000, wait_until="domcontentloaded")
             time.sleep(2)
-            # TODO: replace with the verified project-card selector.
-            cards = page.query_selector_all(".js__card")
-            rows = [r for card in cards if (r := parse_card(card))]
+            rows = parse_project_listing(page.content(), base_url=BASE_URL)
             if rows:
                 return rows
             if attempt < retries:
@@ -181,8 +190,6 @@ def main() -> None:
         f"Crawling project pages {start}-{end} "
         f"({len(pages)} pages, {num_workers} workers) -> {args.output}"
     )
-    print("[NOTE] Project page selectors are TODO. This run will produce empty CSVs")
-    print("       until parse_card / project listing markup is verified.")
     for i, chunk in enumerate(chunks):
         print(f"  W{i}: p{chunk[0]}-p{chunk[-1]} ({len(chunk)} pages)")
 

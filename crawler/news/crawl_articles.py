@@ -1,21 +1,16 @@
 """
 Crawl news articles from batdongsan.com.vn/tin-tuc.
 
-NOTE: Selectors below are SCAFFOLDS. The article list page and the per-article
-DOM are non-trivial: list pages render headline cards, and each article body
-needs to be visited individually to extract title/body/post_date. The actual
-selector logic must be verified against the live DOM before this script can be
-used to crawl real data. Until that happens, ``parse_article_page`` returns
-``None`` and this module exists primarily to fix the package layout, CLI flags,
-and CSV columns so the downstream ingestor (``data_pipeline/ingestors/news_ingestor.py``)
-can be developed and tested against a stable contract.
+Selectors are fixture-backed and intentionally kept in pure parser helpers so
+they can be tested without launching Playwright. Live DOM and anti-bot behavior
+can still change, so run small smoke crawls before relying on large batches.
 
 Modeled on ``crawler/projects/crawl_urls.py`` + ``crawl_details.py`` -
 parallel ThreadPoolExecutor workers, each running its own Chromium with
 stealth, writing to per-worker tmp files that are merged + deduplicated at the
 end. Output CSV columns:
 
-    title, body, category, post_date, url
+    title, body, category, source, post_date, url
 """
 
 import argparse
@@ -25,7 +20,9 @@ import random
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from urllib.parse import urljoin
 
+from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright, Browser
 from playwright_stealth import Stealth
 
@@ -43,6 +40,7 @@ FIELDS = [
     "title",
     "body",
     "category",
+    "source",
     "post_date",
     "url",
 ]
@@ -59,33 +57,63 @@ def _log(msg: str) -> None:
 # Parsing
 # ---------------------------------------------------------------------------
 
-def parse_article_card(card) -> dict | None:
-    """Extract minimal article-card fields (title + url) from a list page.
+def extract_article_urls(html: str, *, base_url: str) -> list[str]:
+    soup = BeautifulSoup(html, "html.parser")
+    urls: list[str] = []
+    for anchor in soup.select("a[href]"):
+        href = anchor.get("href") or ""
+        if "/tin-tuc/" not in href and "/wiki/" not in href:
+            continue
+        absolute = urljoin(base_url, href)
+        if absolute not in urls:
+            urls.append(absolute)
+    return urls
 
-    TODO: implement article list-card selectors. The /tin-tuc list page does
-    not share the listing-card markup used elsewhere on the site.
-    """
-    # TODO: implement article list-card selectors
-    return None
+
+def parse_article_listing(html: str, *, base_url: str) -> list[dict]:
+    return [{"url": url} for url in extract_article_urls(html, base_url=base_url)]
+
+
+def _text(soup: BeautifulSoup, selector: str) -> str:
+    node = soup.select_one(selector)
+    return " ".join(node.get_text(" ", strip=True).split()) if node else ""
+
+
+def _category_from_text(category_text: str) -> str:
+    lowered = category_text.lower()
+    if "phap ly" in lowered or "pháp lý" in lowered:
+        return "legal"
+    if "thi truong" in lowered or "thị trường" in lowered:
+        return "market"
+    if "huong dan" in lowered or "hướng dẫn" in lowered:
+        return "guide"
+    return "news"
+
+
+def parse_article(html: str, *, url: str) -> dict[str, str]:
+    soup = BeautifulSoup(html, "html.parser")
+    title = _text(soup, "h1") or _text(soup, "[data-testid='article-title']")
+    body_nodes = soup.select("article p, .article-content p, [data-testid='article-body'] p")
+    body = "\n".join(
+        " ".join(node.get_text(" ", strip=True).split())
+        for node in body_nodes
+        if node.get_text(strip=True)
+    )
+    category_text = _text(soup, ".breadcrumb a:last-child, [data-testid='category']")
+    return {
+        "title": title,
+        "body": body,
+        "category": _category_from_text(category_text),
+        "source": "batdongsan.com",
+        "post_date": _text(soup, "time, .date, [data-testid='post-date']"),
+        "url": url,
+    }
 
 
 def parse_article_page(page, url: str) -> dict | None:
-    """Visit an article URL and extract ``title``, ``body``, ``post_date``.
-
-    TODO: implement article-detail selectors. Returns ``None`` until the
-    selectors for ``title``, ``body``, and ``post_date`` are verified against
-    the live DOM. Output dict shape (when implemented):
-
-        {
-            "title": str,
-            "body": str,
-            "category": "news",
-            "post_date": "YYYY-MM-DD",
-            "url": str,
-        }
-    """
-    # TODO: implement article-detail selectors
-    return None
+    """Visit an article URL and extract ``title``, ``body``, ``post_date``."""
+    row = parse_article(page.content(), url=url)
+    return row if row.get("title") and row.get("body") else None
 
 
 # ---------------------------------------------------------------------------
@@ -108,9 +136,7 @@ def crawl_list_page(browser: Browser, page_num: int, stealth_obj: Stealth, retri
         try:
             page.goto(url, timeout=30000, wait_until="domcontentloaded")
             time.sleep(2)
-            # TODO: replace with the verified article-card selector.
-            cards = page.query_selector_all(".js__card")
-            rows = [r for card in cards if (r := parse_article_card(card))]
+            rows = parse_article_listing(page.content(), base_url=BASE_URL)
             if rows:
                 return rows
             if attempt < retries:
@@ -242,8 +268,6 @@ def main() -> None:
         f"Crawling news pages {start}-{end} "
         f"({len(pages)} pages, {num_workers} workers) -> {args.output}"
     )
-    print("[NOTE] Article selectors are TODO. parse_article_page returns None")
-    print("       so this run will not write rows until selectors are implemented.")
     for i, chunk in enumerate(chunks):
         print(f"  W{i}: p{chunk[0]}-p{chunk[-1]} ({len(chunk)} pages)")
 

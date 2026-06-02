@@ -85,9 +85,10 @@ def _ingest(source: str, **_):
 with DAG(
     dag_id="daily_listings_dag",
     description=(
-        "Crawl + ingest sale and rent listings daily, then deactivate expired "
-        "listings. Requires the `realestate_app` Airflow connection (Admin -> "
-        "Connections) pointing at the app Postgres."
+        "Crawl sale and rent listings, publish detail CSV rows to PostgreSQL for "
+        "web visibility, then run semantic chunk indexing for chatbot retrieval. "
+        "Requires the `realestate_app` Airflow connection (Admin -> Connections) "
+        "pointing at the app Postgres."
     ),
     default_args=DEFAULT_ARGS,
     schedule_interval="0 2 * * *",

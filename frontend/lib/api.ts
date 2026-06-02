@@ -13,6 +13,7 @@ import type {
   ChatMessageRequest,
   ChatMessageResponse,
   ListingFilters,
+  TokenResponse,
 } from "./types";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
@@ -119,7 +120,7 @@ export async function sendChatMessage(
 export async function login(
   email: string,
   password: string
-): Promise<{ access_token: string; token_type: string }> {
+): Promise<TokenResponse> {
   return fetchJSON(`${BASE}/auth/login`, {
     method: "POST",
     body: JSON.stringify({ email, password }),
@@ -130,7 +131,7 @@ export async function register(body: {
   email: string;
   password: string;
   full_name: string;
-}): Promise<{ id: string; email: string; full_name: string }> {
+}): Promise<TokenResponse> {
   return fetchJSON(`${BASE}/auth/register`, {
     method: "POST",
     body: JSON.stringify(body),

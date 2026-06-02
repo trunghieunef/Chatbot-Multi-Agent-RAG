@@ -5,6 +5,7 @@ Loads settings from environment variables with sensible defaults.
 """
 
 from functools import lru_cache
+from pydantic import field_validator
 from pydantic_settings import BaseSettings
 
 
@@ -22,15 +23,15 @@ class Settings(BaseSettings):
     # Redis
     REDIS_URL: str = "redis://localhost:6379/0"
 
-    # ChromaDB
-    CHROMA_HOST: str = "localhost"
-    CHROMA_PORT: int = 8001
-
     # Google Gemini
     GEMINI_API_KEY: str = ""
     GEMINI_MODEL: str = "gemini-2.0-flash"
     GEMINI_EMBEDDING_MODEL: str = "gemini-embedding-001"
-    EMBEDDING_DIM: int = 768
+    EMBEDDING_PROVIDER: str = "bge_m3"
+    HF_EMBEDDING_MODEL: str = "BAAI/bge-m3"
+    EMBEDDING_DIM: int = 1024
+    EMBEDDING_BATCH_SIZE: int = 16
+    HF_EMBEDDING_DEVICE: str = ""
     CHUNK_SIZE_TOKENS: int = 400
     CHUNK_OVERLAP_TOKENS: int = 80
 
@@ -57,6 +58,13 @@ class Settings(BaseSettings):
     # Intent extraction
     INTENT_EXTRACTOR: str = "rule"                # 'rule' | 'gemini'
     GEMINI_INTENT_MODEL: str = "gemini-2.0-flash"
+
+    @field_validator("DEBUG", mode="before")
+    @classmethod
+    def parse_debug(cls, value):
+        if isinstance(value, str) and value.lower() in {"release", "prod", "production"}:
+            return False
+        return value
 
     @property
     def cors_origins_list(self) -> list[str]:
