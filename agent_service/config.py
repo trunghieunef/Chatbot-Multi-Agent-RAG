@@ -1,0 +1,47 @@
+from functools import lru_cache
+
+from pydantic import field_validator
+from pydantic_settings import BaseSettings
+
+
+class AgentSettings(BaseSettings):
+    """Settings for the internal Agent Service."""
+
+    SERVICE_NAME: str = "agent-service"
+    DEBUG: bool = True
+
+    DATABASE_URL: str = "postgresql+asyncpg://admin:realestate_secret_2026@localhost:5432/realestate"
+    REDIS_URL: str = "redis://localhost:6379/0"
+
+    AGENT_INTERNAL_KEY: str = "dev-agent-internal-key"
+    CHATBOT_TRACE_LEVEL: str = "full"
+    AGENT_GRAPH_VERSION: str = "agent-graph-v1"
+    AGENT_PROMPT_VERSION: str = "prompts-v1"
+
+    GEMINI_API_KEY: str = ""
+    GEMINI_MODEL: str = "gemini-2.0-flash"
+    GEMINI_JUDGE_MODEL: str = "gemini-2.0-flash"
+
+    COHERE_API_KEY: str = ""
+    HF_EMBEDDING_MODEL: str = "BAAI/bge-m3"
+    EMBEDDING_DIM: int = 1024
+
+    AGENT_REQUEST_TIMEOUT_SECONDS: float = 45.0
+    AGENT_LLM_TIMEOUT_SECONDS: float = 30.0
+
+    @field_validator("DEBUG", mode="before")
+    @classmethod
+    def parse_debug(cls, value):
+        if isinstance(value, str) and value.lower() in {"release", "prod", "production"}:
+            return False
+        return value
+
+    class Config:
+        env_file = ".env"
+        case_sensitive = True
+        extra = "ignore"
+
+
+@lru_cache
+def get_agent_settings() -> AgentSettings:
+    return AgentSettings()

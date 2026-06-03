@@ -1,0 +1,55 @@
+from fastapi.testclient import TestClient
+
+from agent_service.config import get_agent_settings
+from agent_service.main import app
+
+
+def test_agent_settings_defaults_are_internal_safe(monkeypatch):
+    get_agent_settings.cache_clear()
+    monkeypatch.delenv("AGENT_INTERNAL_KEY", raising=False)
+    settings = get_agent_settings()
+
+    assert settings.AGENT_INTERNAL_KEY == "dev-agent-internal-key"
+    assert settings.GEMINI_MODEL == "gemini-2.0-flash"
+    assert settings.CHATBOT_TRACE_LEVEL == "full"
+
+
+def test_internal_health_requires_agent_key(monkeypatch):
+    get_agent_settings.cache_clear()
+    monkeypatch.setenv("AGENT_INTERNAL_KEY", "secret-test-key")
+    client = TestClient(app)
+
+    response = client.get("/internal/agent/health")
+
+    assert response.status_code == 401
+
+
+def test_internal_health_accepts_agent_key(monkeypatch):
+    get_agent_settings.cache_clear()
+    monkeypatch.setenv("AGENT_INTERNAL_KEY", "secret-test-key")
+    client = TestClient(app)
+
+    response = client.get(
+        "/internal/agent/health",
+        headers={"X-Internal-Agent-Key": "secret-test-key"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+    assert response.json()["service"] == "agent-service"
+
+
+def test_internal_readiness_accepts_agent_key(monkeypatch):
+    get_agent_settings.cache_clear()
+    monkeypatch.setenv("AGENT_INTERNAL_KEY", "secret-test-key")
+    client = TestClient(app)
+
+    response = client.get(
+        "/internal/agent/readiness",
+        headers={"X-Internal-Agent-Key": "secret-test-key"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "ok"
+    assert body["sources"] == {}
