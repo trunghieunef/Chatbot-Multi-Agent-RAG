@@ -13,6 +13,6 @@ class SourceReadiness(Base):
     parent_count = Column(Integer, nullable=False, default=0)
     chunk_count = Column(Integer, nullable=False, default=0)
     last_indexed_at = Column(DateTime, nullable=True)
-    details_json = Column(JSONB, nullable=False, default={})
+    details_json = Column(JSONB, nullable=False, default=dict)
     warning = Column(Text, nullable=True)
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())

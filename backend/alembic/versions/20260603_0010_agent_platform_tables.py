@@ -1,7 +1,7 @@
 """add agent platform memory observability eval readiness tables
 
 Revision ID: 20260603_0010
-Revises: 20260801_0007
+Revises: 20260603_0009
 Create Date: 2026-06-03 00:10:00
 """
 
@@ -13,7 +13,7 @@ from sqlalchemy.dialects import postgresql
 
 
 revision: str = "20260603_0010"
-down_revision: Union[str, None] = "20260801_0007"
+down_revision: Union[str, None] = "20260603_0009"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
