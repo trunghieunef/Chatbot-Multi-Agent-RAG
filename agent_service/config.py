@@ -1,11 +1,13 @@
 from functools import lru_cache
 
 from pydantic import field_validator
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class AgentSettings(BaseSettings):
     """Settings for the internal Agent Service."""
+
+    model_config = SettingsConfigDict(env_file=".env", case_sensitive=True, extra="ignore")
 
     SERVICE_NAME: str = "agent-service"
     DEBUG: bool = True
@@ -35,11 +37,6 @@ class AgentSettings(BaseSettings):
         if isinstance(value, str) and value.lower() in {"release", "prod", "production"}:
             return False
         return value
-
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
-        extra = "ignore"
 
 
 @lru_cache

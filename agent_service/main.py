@@ -5,8 +5,6 @@ from agent_service.contracts import AgentChatRequest, AgentChatResponse, TraceSu
 from agent_service.security import require_internal_key
 
 
-settings = get_agent_settings()
-
 app = FastAPI(
     title="Real Estate Agent Service",
     version="0.1.0",
@@ -16,6 +14,7 @@ app = FastAPI(
 
 @app.get("/internal/agent/health")
 async def health(_: None = Depends(require_internal_key)) -> dict:
+    settings = get_agent_settings()
     return {
         "status": "ok",
         "service": settings.SERVICE_NAME,
