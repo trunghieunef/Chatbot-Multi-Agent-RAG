@@ -1,4 +1,5 @@
 import json
+import traceback
 
 import httpx
 import pytest
@@ -21,6 +22,10 @@ AGENT_SERVICE_SETTING_ENV_VARS = (
     "ANON_CHAT_DAILY_LIMIT",
     "AUTH_CHAT_DAILY_LIMIT",
 )
+
+
+def _format_exception(exc: BaseException) -> str:
+    return "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
 
 
 def test_agent_service_settings_defaults(monkeypatch):
@@ -130,6 +135,13 @@ async def test_agent_service_client_raises_safe_error_on_500():
     assert "boom" not in message
     assert "customer-budget-7-ty" not in message
     assert "Tim nha" not in message
+    assert exc.value.__cause__ is None
+
+    formatted = _format_exception(exc.value)
+    assert "secret" not in formatted
+    assert "boom" not in formatted
+    assert "customer-budget-7-ty" not in formatted
+    assert "Tim nha" not in formatted
 
 
 @pytest.mark.asyncio
@@ -166,3 +178,10 @@ async def test_agent_service_client_raises_safe_error_on_invalid_response():
     assert "gan song" not in message
     assert "budget-secret-9-ty" not in message
     assert "secret" not in message
+    assert exc.value.__cause__ is None
+
+    formatted = _format_exception(exc.value)
+    assert "Tim nha" not in formatted
+    assert "gan song" not in formatted
+    assert "budget-secret-9-ty" not in formatted
+    assert "secret" not in formatted

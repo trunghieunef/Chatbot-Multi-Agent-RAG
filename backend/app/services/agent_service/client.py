@@ -43,16 +43,16 @@ class AgentServiceClient:
             status_code = exc.response.status_code
             raise AgentServiceError(
                 f"Agent Service request failed: HTTP {status_code}"
-            ) from exc
+            ) from None
         except httpx.HTTPError as exc:
             error_type = exc.__class__.__name__
             raise AgentServiceError(
                 f"Agent Service request failed: {error_type}"
-            ) from exc
+            ) from None
         except ValueError as exc:
             raise AgentServiceError(
                 "Agent Service request failed: invalid response"
-            ) from exc
+            ) from None
 
 
 def get_agent_service_client() -> AgentServiceClient:
