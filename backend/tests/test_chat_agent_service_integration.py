@@ -1,6 +1,7 @@
 import asyncio
 import uuid
 from datetime import datetime
+from types import SimpleNamespace
 
 from app.routers import chat
 from app.schemas.chat import ChatMessageRequest
@@ -124,3 +125,59 @@ def test_feature_flag_disabled_falls_back_to_existing_backend_pipeline(monkeypat
     assert response.agents_used == ["market_analysis", "property_search"]
     assert response.trace_summary["intent"] == "legacy"
     assert response.sources == [{"product_id": "hf-2"}]
+
+
+def test_legacy_agent_shape_uses_safe_fallback_answer():
+    response = chat._legacy_response_to_agent_shape(
+        "req-legacy",
+        {
+            "agent_used": "",
+            "sources": [],
+            "suggested_actions": [],
+        },
+    )
+
+    assert response.final_response == "Toi chua tao duoc cau tra loi phu hop."
+    assert response.agents_used == ["unknown"]
+
+
+def test_memory_proposals_store_value_wrapper_for_authenticated_user():
+    db = FakeDB()
+    session_id = uuid.uuid4()
+    response = AgentChatResponse(
+        request_id="req-memory",
+        final_response="Agent answer",
+        agents_used=["property_search"],
+        sources=[],
+        suggested_actions=[],
+        trace_summary=TraceSummary(
+            intent="property_search",
+            agents=["property_search"],
+            source_count=0,
+            latency_ms=1,
+        ),
+        full_trace={},
+        memory_proposals=[
+            MemoryProposal(
+                action="upsert",
+                key="budget",
+                value={"max": 3000000000},
+                confidence=0.8,
+                evidence="User mentioned budget",
+                requires_user_confirmation=True,
+            )
+        ],
+    )
+
+    hints = chat.handle_memory_proposals(
+        db,
+        SimpleNamespace(id=session_id),
+        SimpleNamespace(id=42),
+        response,
+    )
+
+    persisted = [
+        item for item in db.added if item.__class__.__name__ == "MemoryProposal"
+    ][0]
+    assert persisted.value_json == {"value": {"max": 3000000000}}
+    assert hints[0]["key"] == "budget"

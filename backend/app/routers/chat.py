@@ -84,7 +84,7 @@ def _legacy_response_to_agent_shape(
     ]
     return AgentChatResponse(
         request_id=request_id,
-        final_response=result["final_response"],
+        final_response=result.get("final_response") or "Toi chua tao duoc cau tra loi phu hop.",
         agents_used=agents_used,
         sources=sources,
         suggested_actions=result.get("suggested_actions", []),
@@ -203,7 +203,7 @@ def handle_memory_proposals(
                 request_id=response.request_id,
                 action=proposal.action,
                 key=proposal.key,
-                value_json=proposal.value,
+                value_json={"value": proposal.value},
                 confidence=proposal.confidence,
                 evidence=proposal.evidence,
                 requires_user_confirmation=proposal.requires_user_confirmation,
