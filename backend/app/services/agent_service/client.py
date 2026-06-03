@@ -39,8 +39,20 @@ class AgentServiceClient:
                 )
                 response.raise_for_status()
                 return AgentChatResponse.model_validate(response.json())
-        except (httpx.HTTPError, ValueError) as exc:
-            raise AgentServiceError(f"Agent Service request failed: {exc}") from exc
+        except httpx.HTTPStatusError as exc:
+            status_code = exc.response.status_code
+            raise AgentServiceError(
+                f"Agent Service request failed: HTTP {status_code}"
+            ) from exc
+        except httpx.HTTPError as exc:
+            error_type = exc.__class__.__name__
+            raise AgentServiceError(
+                f"Agent Service request failed: {error_type}"
+            ) from exc
+        except ValueError as exc:
+            raise AgentServiceError(
+                "Agent Service request failed: invalid response"
+            ) from exc
 
 
 def get_agent_service_client() -> AgentServiceClient:
