@@ -19,8 +19,13 @@ class ChatMessageResponse(BaseModel):
     role: str
     content: str
     agent_used: str | None = None
+    agents_used: list[str] = Field(default_factory=list)
     sources: list[dict] | None = None
     suggested_actions: list[str] | None = None
+    trace_summary: dict | None = None
+    memory_hints: list[dict] | None = None
+    feedback_id: str | None = None
+    request_id: str | None = None
     created_at: datetime | None = None
 
     class Config:
