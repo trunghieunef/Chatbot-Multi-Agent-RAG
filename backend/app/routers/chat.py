@@ -15,7 +15,7 @@ from app.config import get_settings
 from app.database import get_db
 from app.models.agent_observability import AgentTrace
 from app.models.chat import ChatMessage, ChatSession
-from app.models.preference import MemoryProposal
+from app.models.preference import MemoryProposal, UserPreference
 from app.models.user import User
 from app.routers.auth import get_optional_user
 from app.routers.metrics import CHAT_REQUESTS
@@ -212,6 +212,16 @@ def handle_memory_proposals(
         )
         if proposal.requires_user_confirmation:
             hints.append(proposal.model_dump(mode="json"))
+        else:
+            db.add(
+                UserPreference(
+                    user_id=user.id,
+                    key=proposal.key,
+                    value_json={"value": proposal.value},
+                    confidence=proposal.confidence,
+                    source="agent",
+                )
+            )
     return hints
 
 
@@ -237,6 +247,8 @@ async def send_message(
         session = result.scalar_one_or_none()
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
+        if session.user_id is not None and (user is None or session.user_id != user.id):
+            raise HTTPException(status_code=404, detail="Session not found")
     else:
         session = ChatSession(
             user_id=user.id if user else None,
@@ -245,14 +257,6 @@ async def send_message(
         db.add(session)
         await db.flush()
 
-    # Save user message
-    user_msg = ChatMessage(
-        session_id=session.id,
-        role="user",
-        content=body.message,
-    )
-    db.add(user_msg)
-
     agent_response = await _run_agent_service_pipeline(
         body.message,
         db,
@@ -260,6 +264,14 @@ async def send_message(
         user,
         request_id,
     )
+
+    # Save user message
+    user_msg = ChatMessage(
+        session_id=session.id,
+        role="user",
+        content=body.message,
+    )
+    db.add(user_msg)
     response_text = agent_response.final_response
     agents_used = agent_response.agents_used
     agent_used = ", ".join(agents_used) if agents_used else "unknown"

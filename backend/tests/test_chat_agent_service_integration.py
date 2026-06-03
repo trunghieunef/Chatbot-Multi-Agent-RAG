@@ -3,6 +3,8 @@ import uuid
 from datetime import datetime
 from types import SimpleNamespace
 
+from fastapi import HTTPException
+
 from app.routers import chat
 from app.schemas.chat import ChatMessageRequest
 from app.services.agent_service.contracts import (
@@ -13,11 +15,15 @@ from app.services.agent_service.contracts import (
 
 
 class FakeDB:
-    def __init__(self):
+    def __init__(self, session=None):
         self.added = []
+        self.session = session
 
     def add(self, obj):
         self.added.append(obj)
+
+    async def execute(self, query):
+        return SimpleNamespace(scalar_one_or_none=lambda: self.session)
 
     async def flush(self):
         for obj in self.added:
@@ -127,6 +133,86 @@ def test_feature_flag_disabled_falls_back_to_existing_backend_pipeline(monkeypat
     assert response.sources == [{"product_id": "hf-2"}]
 
 
+def test_authenticated_user_cannot_use_another_users_session(monkeypatch):
+    session_id = uuid.uuid4()
+    db = FakeDB(session=SimpleNamespace(id=session_id, user_id=7))
+
+    async def fail_pipeline(*args):
+        raise AssertionError("foreign session must not reach agent pipeline")
+
+    monkeypatch.setattr(chat, "_run_agent_service_pipeline", fail_pipeline)
+
+    try:
+        asyncio.run(
+            chat.send_message(
+                ChatMessageRequest(message="Tim nha", session_id=session_id),
+                user=SimpleNamespace(id=42),
+                db=db,
+            )
+        )
+    except HTTPException as exc:
+        assert exc.status_code == 404
+    else:
+        raise AssertionError("expected session ownership rejection")
+
+    assert db.added == []
+
+
+def test_anonymous_user_cannot_use_authenticated_session(monkeypatch):
+    session_id = uuid.uuid4()
+    db = FakeDB(session=SimpleNamespace(id=session_id, user_id=7))
+
+    async def fail_pipeline(*args):
+        raise AssertionError("authenticated session must not reach agent pipeline")
+
+    monkeypatch.setattr(chat, "_run_agent_service_pipeline", fail_pipeline)
+
+    try:
+        asyncio.run(
+            chat.send_message(
+                ChatMessageRequest(message="Tim nha", session_id=session_id),
+                user=None,
+                db=db,
+            )
+        )
+    except HTTPException as exc:
+        assert exc.status_code == 404
+    else:
+        raise AssertionError("expected session ownership rejection")
+
+    assert db.added == []
+
+
+def test_agent_service_context_excludes_current_user_message(monkeypatch):
+    fake_client = FakeAgentClient()
+
+    def inspect_context(db, session_id):
+        current_user_messages = [
+            item
+            for item in db.added
+            if item.__class__.__name__ == "ChatMessage" and item.role == "user"
+        ]
+        assert current_user_messages == []
+        return []
+
+    monkeypatch.setattr(chat, "is_agent_service_enabled", lambda: True)
+    monkeypatch.setattr(chat, "get_agent_service_client", lambda: fake_client)
+    monkeypatch.setattr(chat, "build_conversation_context", inspect_context)
+    monkeypatch.setattr(chat, "load_user_preferences", lambda db, user_id: {})
+    monkeypatch.setattr(chat, "persist_agent_observability", lambda *args: None)
+    monkeypatch.setattr(chat, "handle_memory_proposals", lambda *args: [])
+
+    response = asyncio.run(
+        chat.send_message(
+            ChatMessageRequest(message="Tin moi nhat"),
+            user=None,
+            db=FakeDB(),
+        )
+    )
+
+    assert response.content == "Agent answer"
+
+
 def test_legacy_agent_shape_uses_safe_fallback_answer():
     response = chat._legacy_response_to_agent_shape(
         "req-legacy",
@@ -181,3 +267,53 @@ def test_memory_proposals_store_value_wrapper_for_authenticated_user():
     ][0]
     assert persisted.value_json == {"value": {"max": 3000000000}}
     assert hints[0]["key"] == "budget"
+
+
+def test_auto_applied_memory_proposal_creates_user_preference():
+    db = FakeDB()
+    session_id = uuid.uuid4()
+    response = AgentChatResponse(
+        request_id="req-memory-auto",
+        final_response="Agent answer",
+        agents_used=["property_search"],
+        sources=[],
+        suggested_actions=[],
+        trace_summary=TraceSummary(
+            intent="property_search",
+            agents=["property_search"],
+            source_count=0,
+            latency_ms=1,
+        ),
+        full_trace={},
+        memory_proposals=[
+            MemoryProposal(
+                action="upsert",
+                key="preferred_city",
+                value="Da Nang",
+                confidence=0.9,
+                evidence="User said they prefer Da Nang",
+                requires_user_confirmation=False,
+            )
+        ],
+    )
+
+    hints = chat.handle_memory_proposals(
+        db,
+        SimpleNamespace(id=session_id),
+        SimpleNamespace(id=42),
+        response,
+    )
+
+    proposal = [
+        item for item in db.added if item.__class__.__name__ == "MemoryProposal"
+    ][0]
+    preference = [
+        item for item in db.added if item.__class__.__name__ == "UserPreference"
+    ][0]
+    assert proposal.status == "auto_applied"
+    assert preference.user_id == 42
+    assert preference.key == "preferred_city"
+    assert preference.value_json == {"value": "Da Nang"}
+    assert preference.confidence == 0.9
+    assert preference.source == "agent"
+    assert hints == []
