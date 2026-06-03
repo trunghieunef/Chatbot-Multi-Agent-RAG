@@ -16,6 +16,7 @@ class AgentSettings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379/0"
 
     AGENT_INTERNAL_KEY: str = "dev-agent-internal-key"
+    AGENT_ALLOW_DEV_INTERNAL_KEY: bool = False
     CHATBOT_TRACE_LEVEL: str = "full"
     AGENT_GRAPH_VERSION: str = "agent-graph-v1"
     AGENT_PROMPT_VERSION: str = "prompts-v1"
