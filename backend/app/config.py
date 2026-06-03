@@ -41,6 +41,21 @@ class Settings(BaseSettings):
     RERANK_MODEL: str = "rerank-multilingual-v3.0"
     RERANK_TOP_N: int = 5
 
+    # Internal Agent Service
+    AGENT_SERVICE_URL: str = "http://localhost:8100"
+    AGENT_INTERNAL_KEY: str = "dev-agent-internal-key"
+    AGENT_SERVICE_TIMEOUT_SECONDS: float = 45.0
+    CHATBOT_AGENT_SERVICE_ENABLED: bool = False
+    CHATBOT_LLM_JUDGE_ENABLED: bool = False
+    CHATBOT_MEMORY_ENABLED: bool = True
+    CHATBOT_ADMIN_ENABLED: bool = True
+    CHATBOT_TRACE_LEVEL: str = "full"
+    GEMINI_JUDGE_MODEL: str = "gemini-2.0-flash"
+
+    # Chat quotas
+    ANON_CHAT_DAILY_LIMIT: int = 20
+    AUTH_CHAT_DAILY_LIMIT: int = 200
+
     # JWT
     JWT_SECRET_KEY: str = "your-super-secret-jwt-key-change-in-production"
     JWT_ALGORITHM: str = "HS256"
