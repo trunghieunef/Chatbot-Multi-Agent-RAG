@@ -122,14 +122,81 @@ export interface ChatSource {
   score?: number;
 }
 
+export interface TraceSummary {
+  intent: string | null;
+  agents: string[];
+  source_count: number;
+  latency_ms: number;
+  warnings: string[];
+  [key: string]: unknown;
+}
+
+export interface MemoryHint {
+  id?: number;
+  request_id?: string;
+  action: string;
+  key: string;
+  value?: unknown;
+  value_json?: unknown;
+  confidence: number;
+  evidence: string;
+  requires_user_confirmation: boolean;
+  status?: string;
+  [key: string]: unknown;
+}
+
 export interface ChatMessageResponse {
   session_id: string;
   role: string;
   content: string;
   agent_used: string | null;
+  agents_used?: string[] | null;
   sources: ChatSource[] | null;
   suggested_actions: string[] | null;
+  trace_summary?: Partial<TraceSummary> | null;
+  memory_hints?: MemoryHint[] | null;
+  feedback_id?: string | null;
+  request_id?: string | null;
   created_at: string | null;
+}
+
+export interface ChatFeedbackRequest {
+  session_id: string;
+  request_id: string;
+  rating: "positive" | "negative" | "neutral" | "up" | "down" | string;
+  issue_type?: string | null;
+  comment?: string | null;
+  metadata_json?: Record<string, unknown>;
+}
+
+export interface AdminTraceListItem {
+  id: number;
+  request_id: string;
+  session_id: string | null;
+  user_id: number | null;
+  intent: string | null;
+  agents_used: unknown[];
+  trace_summary_json: Partial<TraceSummary> & Record<string, unknown>;
+  latency_ms: number;
+  status: string;
+  error_message?: string | null;
+  graph_version?: string | null;
+  prompt_version?: string | null;
+  model_name?: string | null;
+  created_at?: string | null;
+}
+
+export interface AdminPipelineReadinessItem {
+  id?: number;
+  source_name?: string;
+  status?: string;
+  parent_count?: number;
+  chunk_count?: number;
+  last_indexed_at?: string | null;
+  details_json?: Record<string, unknown>;
+  warning?: string | null;
+  updated_at?: string | null;
+  [key: string]: unknown;
 }
 
 export interface ChatSessionResponse {
