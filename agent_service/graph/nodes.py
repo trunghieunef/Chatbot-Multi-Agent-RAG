@@ -5,7 +5,15 @@ import time
 import unicodedata
 from typing import Any
 
-from agent_service.contracts import MemoryProposal
+from agent_service.agents.specialists import (
+    run_investment_agent,
+    run_legal_agent,
+    run_market_agent,
+    run_news_agent,
+    run_project_agent,
+    run_property_agent,
+)
+from agent_service.contracts import AgentSource, MemoryProposal
 from agent_service.graph.state import AgentGraphState
 from agent_service.tools.readiness import build_readiness_snapshot
 
@@ -160,23 +168,30 @@ def retrieval_planner_node(state: AgentGraphState) -> AgentGraphState:
     }
 
 
-def specialist_agents_node(state: AgentGraphState) -> AgentGraphState:
+async def specialist_agents_node(state: AgentGraphState) -> AgentGraphState:
     start_time = time.perf_counter()
     request = state["request"]
     evidence = state.get("evidence", {})
-    agent_results = {
-        agent: {
-            "agent_name": agent,
-            "content": (
-                f"{agent} processed request {request.request_id} offline "
-                f"for query: {request.message}"
-            ),
-            "sources": evidence.get(agent, []),
-            "confidence": 0.0,
-            "warnings": [],
-        }
-        for agent in state.get("agents_to_run", [])
+    runners = {
+        "property_search": run_property_agent,
+        "project_agent": run_project_agent,
+        "market_analysis": run_market_agent,
+        "news_agent": run_news_agent,
+        "legal_advisor": run_legal_agent,
+        "investment_advisor": run_investment_agent,
     }
+    agent_results = {}
+    for agent in state.get("agents_to_run", []):
+        runner = runners.get(agent)
+        if runner is None:
+            continue
+        agent_results[agent] = await runner(
+            query=request.message,
+            evidence=evidence.get(agent, []),
+            preferences=request.user_preferences,
+            readiness=state.get("readiness", {}),
+        )
+
     return {
         "agent_results": agent_results,
         "trace_steps": _append_trace(
@@ -191,21 +206,36 @@ def specialist_agents_node(state: AgentGraphState) -> AgentGraphState:
 def synthesizer_node(state: AgentGraphState) -> AgentGraphState:
     start_time = time.perf_counter()
     agent_results = state.get("agent_results", {})
-    content = " ".join(
-        agent_results[agent].get("content", "")
-        for agent in state.get("agents_to_run", [])
-        if agent in agent_results
-    )
-    final_response = content or "No specialist agents produced a response."
-    suggested_actions = ["review_sources", "refine_search"]
+    parts: list[str] = []
+    sources: list[AgentSource] = []
+    warnings = list(state.get("warnings", []))
+
+    for agent in state.get("agents_to_run", []):
+        result = agent_results.get(agent)
+        if not result:
+            continue
+        content = result.get("content", "")
+        if content:
+            parts.append(content)
+        warnings.extend(result.get("warnings", []))
+        for source in result.get("sources", []):
+            if isinstance(source, AgentSource):
+                sources.append(source)
+            else:
+                sources.append(AgentSource.model_validate(source))
+
+    final_response = "\n\n".join(parts) or "Chua co du thong tin de tra loi yeu cau nay."
+    suggested_actions = ["So sanh lua chon", "Hoi them ve phap ly", "Xem xu huong khu vuc"]
     return {
         "final_response": final_response,
+        "sources": sources,
         "suggested_actions": suggested_actions,
+        "warnings": warnings,
         "trace_steps": _append_trace(
             state,
             "synthesizer",
             start_time,
-            {"suggested_actions": suggested_actions},
+            {"answer_length": len(final_response), "source_count": len(sources)},
         ),
     }
 
