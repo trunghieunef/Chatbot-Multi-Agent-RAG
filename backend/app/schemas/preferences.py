@@ -6,8 +6,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class UserPreferenceUpdate(BaseModel):
+    key: str = Field(..., min_length=1, max_length=100)
     value_json: dict[str, Any]
-    confidence: float | None = Field(default=None, ge=0.0, le=1.0)
 
 
 class UserPreferenceResponse(BaseModel):

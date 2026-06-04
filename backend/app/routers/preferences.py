@@ -37,9 +37,8 @@ async def list_preferences(
     return result.scalars().all()
 
 
-@router.patch("/{key}", response_model=UserPreferenceResponse)
+@router.patch("", response_model=UserPreferenceResponse)
 async def upsert_preference(
-    key: str,
     body: UserPreferenceUpdate,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -47,7 +46,7 @@ async def upsert_preference(
     result = await db.execute(
         select(UserPreference).where(
             UserPreference.user_id == user.id,
-            UserPreference.key == key,
+            UserPreference.key == body.key,
         )
     )
     preference = result.scalar_one_or_none()
@@ -55,16 +54,15 @@ async def upsert_preference(
     if preference is None:
         preference = UserPreference(
             user_id=user.id,
-            key=key,
+            key=body.key,
             value_json=body.value_json,
-            confidence=body.confidence if body.confidence is not None else 1.0,
+            confidence=1.0,
             source="user",
         )
         db.add(preference)
     else:
         preference.value_json = body.value_json
-        if body.confidence is not None:
-            preference.confidence = body.confidence
+        preference.confidence = 1.0
         preference.source = "user"
 
     await db.flush()

@@ -4,7 +4,8 @@ from types import SimpleNamespace
 
 from app.models.preference import MemoryProposal as MemoryProposalModel
 from app.models.preference import UserPreference
-from app.routers import chat
+from app.routers import chat, preferences
+from app.schemas.preferences import UserPreferenceUpdate
 from app.services.agent_service.contracts import (
     AgentChatResponse,
     MemoryProposal,
@@ -72,7 +73,7 @@ def test_high_confidence_auto_apply_key_auto_applies():
 def test_low_confidence_auto_apply_key_stays_pending():
     proposal = make_agent_proposal(
         key="preferred_district",
-        confidence=0.79,
+        confidence=0.5,
         requires_user_confirmation=False,
     )
 
@@ -81,7 +82,7 @@ def test_low_confidence_auto_apply_key_stays_pending():
 
 def test_confirmation_required_key_stays_pending():
     proposal = make_agent_proposal(
-        key="budget_max",
+        key="risk_preferences",
         confidence=0.95,
         requires_user_confirmation=True,
     )
@@ -165,3 +166,30 @@ def test_apply_memory_proposal_upserts_preference_and_resolves_proposal():
     assert existing_preference.source == "agent_proposal"
     assert proposal.status == "accepted"
     assert isinstance(proposal.resolved_at, datetime)
+
+
+def test_patch_preference_uses_body_key_and_forces_user_confidence_source():
+    existing_preference = UserPreference(
+        user_id=42,
+        key="preferred_city",
+        value_json={"value": "Hue"},
+        confidence=0.25,
+        source="agent_proposal",
+    )
+    db = FakeDB(existing_preference=existing_preference)
+
+    updated = asyncio.run(
+        preferences.upsert_preference(
+            body=UserPreferenceUpdate(
+                key="preferred_city",
+                value_json={"value": "Da Nang"},
+            ),
+            user=SimpleNamespace(id=42),
+            db=db,
+        )
+    )
+
+    assert updated is existing_preference
+    assert existing_preference.value_json == {"value": "Da Nang"}
+    assert existing_preference.confidence == 1.0
+    assert existing_preference.source == "user"
