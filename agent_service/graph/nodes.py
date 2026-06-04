@@ -45,6 +45,22 @@ KEYWORDS_BY_AGENT = {
     "property_search": ["tim", "mua", "thue", "can ho", "nha", "dat", "quan "],
 }
 
+SOURCE_BACKED_AGENTS = {
+    "legal_advisor",
+    "news_agent",
+    "project_agent",
+    "property_search",
+}
+
+NO_SOURCE_WARNINGS = {
+    "legal_kb_not_ready",
+    "no_legal_evidence",
+    "no_listing_evidence",
+    "no_news_evidence",
+    "no_project_evidence",
+    "project_source_not_ready",
+}
+
 
 def _strip_accents(value: str | None) -> str:
     normalized = unicodedata.normalize("NFD", value or "")
@@ -271,6 +287,62 @@ def synthesizer_node(state: AgentGraphState) -> AgentGraphState:
             "synthesizer",
             start_time,
             {"answer_length": len(final_response), "source_count": len(sources)},
+        ),
+    }
+
+
+def safety_validator_node(state: AgentGraphState) -> AgentGraphState:
+    start_time = time.perf_counter()
+    final_response = str(state.get("final_response") or "")
+    sources = list(state.get("sources") or [])
+    suggested_actions = list(state.get("suggested_actions") or [])
+    agents_to_run = list(state.get("agents_to_run") or [])
+    warnings = [
+        str(warning)
+        for warning in state.get("warnings") or []
+        if warning
+    ]
+    normalized_response = _strip_accents(final_response)
+    added_warnings: list[str] = []
+
+    if (
+        final_response
+        and not sources
+        and any(agent in SOURCE_BACKED_AGENTS for agent in agents_to_run)
+        and not any(warning in NO_SOURCE_WARNINGS for warning in warnings)
+    ):
+        added_warnings.append("final_response_missing_sources")
+
+    if "legal_advisor" in agents_to_run and not any(
+        phrase in normalized_response
+        for phrase in (
+            "tham khao",
+            "chuyen gia phap ly",
+            "tu van phap ly chuyen nghiep",
+        )
+    ):
+        added_warnings.append("legal_disclaimer_missing")
+
+    if (
+        "investment_advisor" in agents_to_run
+        and "khong phai loi khuyen tai chinh" not in normalized_response
+    ):
+        added_warnings.append("financial_disclaimer_missing")
+
+    warnings = _dedupe_warnings([*warnings, *added_warnings])
+    return {
+        "final_response": final_response,
+        "sources": sources,
+        "suggested_actions": suggested_actions,
+        "warnings": warnings,
+        "trace_steps": _append_trace(
+            state,
+            "safety_validator",
+            start_time,
+            {
+                "warning_count": len(warnings),
+                "added_warnings": added_warnings,
+            },
         ),
     }
 

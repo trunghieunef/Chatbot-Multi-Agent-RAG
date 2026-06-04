@@ -9,6 +9,7 @@ from agent_service.graph.nodes import (
     readiness_checker,
     retrieval_planner_node,
     router_node,
+    safety_validator_node,
     specialist_agents_node,
     synthesizer_node,
 )
@@ -23,6 +24,7 @@ def build_agent_graph():
     workflow.add_node("retrieval_planner", retrieval_planner_node)
     workflow.add_node("specialist_agents", specialist_agents_node)
     workflow.add_node("synthesizer", synthesizer_node)
+    workflow.add_node("safety_validator", safety_validator_node)
     workflow.add_node("memory_proposals", memory_proposal_node)
 
     workflow.set_entry_point("context_builder")
@@ -31,7 +33,8 @@ def build_agent_graph():
     workflow.add_edge("router", "retrieval_planner")
     workflow.add_edge("retrieval_planner", "specialist_agents")
     workflow.add_edge("specialist_agents", "synthesizer")
-    workflow.add_edge("synthesizer", "memory_proposals")
+    workflow.add_edge("synthesizer", "safety_validator")
+    workflow.add_edge("safety_validator", "memory_proposals")
     workflow.add_edge("memory_proposals", END)
     return workflow.compile()
 
