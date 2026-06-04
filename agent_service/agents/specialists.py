@@ -117,12 +117,22 @@ async def run_project_agent(
     preferences: dict[str, Any],
     readiness: dict[str, Any],
 ) -> dict[str, Any]:
-    if _readiness_status(readiness, "projects") != "ready" and not evidence:
+    if not evidence:
+        source_ready = _readiness_status(readiness, "projects") == "ready"
+        warning = (
+            "no_project_evidence" if source_ready else "project_source_not_ready"
+        )
+        content = (
+            "Chua co bang chung du an de danh gia du an cu the. "
+            "Toi se khong dua ra thong tin chi tiet neu chua co nguon kem theo."
+            if source_ready
+            else "Nguon du an chua san sang, nen toi chua co du bang chung de danh gia du an cu the."
+        )
         return _agent_result(
             agent_name="project_agent",
-            content="Nguon du an chua san sang, nen toi chua co du bang chung de danh gia du an cu the.",
+            content=content,
             confidence=0.3,
-            warnings=["project_source_not_ready"],
+            warnings=[warning],
         )
 
     content = "Thong tin du an lien quan:\n" + "\n".join(
@@ -190,15 +200,25 @@ async def run_legal_agent(
     preferences: dict[str, Any],
     readiness: dict[str, Any],
 ) -> dict[str, Any]:
-    if _readiness_status(readiness, "legal") != "ready" and not evidence:
-        return _agent_result(
-            agent_name="legal_advisor",
-            content=(
+    if not evidence:
+        source_ready = _readiness_status(readiness, "legal") == "ready"
+        warning = (
+            "no_legal_evidence" if source_ready else "legal_kb_not_ready"
+        )
+        content = (
+            "Chua co bang chung phap ly de tra loi cu the. "
+            "Vui long doi chieu van ban hien hanh hoac hoi chuyen gia phap ly truoc khi thuc hien."
+            if source_ready
+            else (
                 "Kho tri thuc phap ly chua san sang, nen cau tra loi chi mang tinh tham khao. "
                 "Vui long doi chieu van ban hien hanh hoac hoi chuyen gia phap ly truoc khi thuc hien."
-            ),
+            )
+        )
+        return _agent_result(
+            agent_name="legal_advisor",
+            content=content,
             confidence=0.3,
-            warnings=["legal_kb_not_ready"],
+            warnings=[warning],
         )
 
     content = (

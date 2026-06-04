@@ -92,6 +92,39 @@ def _append_trace(
     return trace_steps
 
 
+def _dedupe_warnings(warnings: list[str]) -> list[str]:
+    seen: set[str] = set()
+    unique: list[str] = []
+    for warning in warnings:
+        if warning in seen:
+            continue
+        seen.add(warning)
+        unique.append(warning)
+    return unique
+
+
+def _source_key(source: AgentSource) -> tuple[Any, ...]:
+    return (
+        source.type,
+        source.id,
+        source.product_id,
+        source.url,
+        source.title,
+    )
+
+
+def _dedupe_sources(sources: list[AgentSource]) -> list[AgentSource]:
+    seen: set[tuple[Any, ...]] = set()
+    unique: list[AgentSource] = []
+    for source in sources:
+        key = _source_key(source)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(source)
+    return unique
+
+
 def context_builder(state: AgentGraphState) -> AgentGraphState:
     start_time = time.perf_counter()
     request = state["request"]
@@ -224,6 +257,8 @@ def synthesizer_node(state: AgentGraphState) -> AgentGraphState:
             else:
                 sources.append(AgentSource.model_validate(source))
 
+    warnings = _dedupe_warnings(warnings)
+    sources = _dedupe_sources(sources)
     final_response = "\n\n".join(parts) or "Chua co du thong tin de tra loi yeu cau nay."
     suggested_actions = ["So sanh lua chon", "Hoi them ve phap ly", "Xem xu huong khu vuc"]
     return {
