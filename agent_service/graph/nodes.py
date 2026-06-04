@@ -7,6 +7,7 @@ from typing import Any
 
 from agent_service.contracts import MemoryProposal
 from agent_service.graph.state import AgentGraphState
+from agent_service.tools.readiness import build_readiness_snapshot
 
 
 AGENT_ORDER = [
@@ -98,24 +99,12 @@ def context_builder(state: AgentGraphState) -> AgentGraphState:
     }
 
 
-def readiness_checker(state: AgentGraphState) -> AgentGraphState:
-    start_time = time.perf_counter()
-    readiness = {
-        "listings": {"status": "unknown"},
-        "projects": {"status": "unknown"},
-        "news": {"status": "unknown"},
-        "legal": {"status": "unknown"},
-        "chunks": {"status": "unknown"},
-    }
-    return {
-        "readiness": readiness,
-        "trace_steps": _append_trace(
-            state,
-            "readiness_checker",
-            start_time,
-            {"sources": readiness},
-        ),
-    }
+async def readiness_checker(state: AgentGraphState) -> AgentGraphState:
+    started = time.perf_counter()
+    readiness = await build_readiness_snapshot()
+    steps = state.get("trace_steps", [])
+    steps.append(_trace_step("readiness_checker", started, readiness))
+    return {**state, "readiness": readiness, "trace_steps": steps}
 
 
 def router_node(state: AgentGraphState) -> AgentGraphState:
