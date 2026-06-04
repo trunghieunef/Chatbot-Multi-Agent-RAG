@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import time
 import unicodedata
 from typing import Any
@@ -42,6 +43,24 @@ def _strip_accents(value: str | None) -> str:
         char for char in normalized if unicodedata.category(char) != "Mn"
     )
     return without_marks.lower()
+
+
+def _normalized_tokens(value: str) -> set[str]:
+    return set(re.findall(r"[a-z0-9]+", value))
+
+
+def _keyword_matches(
+    keyword: str,
+    normalized_query: str,
+    normalized_tokens: set[str],
+) -> bool:
+    normalized_keyword = _strip_accents(keyword)
+    stripped_keyword = normalized_keyword.strip()
+    if not stripped_keyword:
+        return False
+    if stripped_keyword != normalized_keyword or " " in stripped_keyword:
+        return normalized_keyword in normalized_query
+    return stripped_keyword in normalized_tokens
 
 
 def _trace_step(name: str, started: float, output: dict[str, Any]) -> dict[str, Any]:
@@ -102,10 +121,14 @@ def readiness_checker(state: AgentGraphState) -> AgentGraphState:
 def router_node(state: AgentGraphState) -> AgentGraphState:
     start_time = time.perf_counter()
     normalized_query = state.get("normalized_query", "")
+    normalized_tokens = _normalized_tokens(normalized_query)
     agents_to_run = [
         agent
         for agent in AGENT_ORDER
-        if any(keyword in normalized_query for keyword in KEYWORDS_BY_AGENT[agent])
+        if any(
+            _keyword_matches(keyword, normalized_query, normalized_tokens)
+            for keyword in KEYWORDS_BY_AGENT[agent]
+        )
     ]
 
     if not agents_to_run:

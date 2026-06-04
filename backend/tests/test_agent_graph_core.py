@@ -46,3 +46,18 @@ async def test_agent_graph_routes_legal_question_without_llm_key():
 
     assert response.agents_used == ["legal_advisor"]
     assert response.trace_summary.intent == "legal_advice"
+
+
+@pytest.mark.asyncio
+async def test_agent_graph_does_not_route_property_from_keyword_substring():
+    request = AgentChatRequest(
+        request_id="req-news-1",
+        message="Cap nhat tin tuc thi truong",
+        session_id="session-1",
+    )
+
+    response = await run_agent_graph(request)
+
+    assert "property_search" not in response.agents_used
+    assert response.agents_used == ["market_analysis", "news_agent"]
+    assert response.trace_summary.intent == "mixed"
