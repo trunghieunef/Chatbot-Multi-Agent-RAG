@@ -1,10 +1,45 @@
+import inspect
+
 import pytest
 
 from agent_service.agents.specialists import (
+    _source_from_record,
     run_investment_agent,
     run_legal_agent,
     run_property_agent,
 )
+from agent_service.llm.gemini import GeminiClient
+
+
+@pytest.mark.asyncio
+async def test_gemini_client_generation_methods_are_async_without_api_key():
+    assert inspect.iscoroutinefunction(GeminiClient.generate_text)
+    assert inspect.iscoroutinefunction(GeminiClient.generate_json)
+
+    client = GeminiClient(api_key="")
+
+    assert await client.generate_text("x") == ""
+    assert await client.generate_json("x") == {}
+
+
+def test_source_from_record_uses_rag_fallback_fields():
+    source = _source_from_record(
+        {
+            "id": 123,
+            "product_id": "p-123",
+            "name": "Fallback listing name",
+            "price_range": "4-5 ty",
+            "area_range": "60-70 m2",
+            "score": 0.12,
+            "matched_chunk": {"rerank_score": 0.87},
+        },
+        "listing",
+    )
+
+    assert source["title"] == "Fallback listing name"
+    assert source["score"] == 0.87
+    assert source["metadata"]["price_text"] == "4-5 ty"
+    assert source["metadata"]["area_text"] == "60-70 m2"
 
 
 @pytest.mark.asyncio

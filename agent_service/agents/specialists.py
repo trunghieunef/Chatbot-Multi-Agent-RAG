@@ -22,20 +22,29 @@ def _record_location(record: dict[str, Any]) -> str | None:
 
 
 def _source_from_record(record: dict[str, Any], source_type: str) -> dict[str, Any]:
-    metadata = {
-        key: record.get(key)
-        for key in ("price_text", "area_text", "category")
-        if record.get(key) is not None
-    }
+    metadata = {}
+    price_text = record.get("price_text") or record.get("price_range")
+    area_text = record.get("area_text") or record.get("area_range")
+    if price_text is not None:
+        metadata["price_text"] = price_text
+    if area_text is not None:
+        metadata["area_text"] = area_text
+    if record.get("category") is not None:
+        metadata["category"] = record.get("category")
+
+    matched_chunk = record.get("matched_chunk") or {}
+    rerank_score = (
+        matched_chunk.get("rerank_score") if isinstance(matched_chunk, dict) else None
+    )
     return {
         "type": source_type,
         "id": record.get("id"),
         "product_id": record.get("product_id"),
-        "title": record.get("title"),
+        "title": record.get("title") or record.get("name"),
         "url": record.get("url"),
         "location": _record_location(record),
         "citation": record.get("citation"),
-        "score": record.get("score"),
+        "score": rerank_score,
         "metadata": metadata,
     }
 

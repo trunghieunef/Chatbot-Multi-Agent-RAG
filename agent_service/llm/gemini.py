@@ -13,7 +13,7 @@ class GeminiClient:
         self.api_key = api_key if api_key is not None else settings.GEMINI_API_KEY
         self.model = model or settings.GEMINI_MODEL
 
-    def generate_text(self, prompt: str) -> str:
+    async def generate_text(self, prompt: str) -> str:
         if not self.api_key:
             return ""
 
@@ -23,8 +23,8 @@ class GeminiClient:
         response = client.models.generate_content(model=self.model, contents=prompt)
         return response.text or ""
 
-    def generate_json(self, prompt: str) -> dict[str, Any]:
-        text = self.generate_text(prompt)
+    async def generate_json(self, prompt: str) -> dict[str, Any]:
+        text = await self.generate_text(prompt)
         if not text:
             return {}
 
