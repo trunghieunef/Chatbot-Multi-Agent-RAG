@@ -1,7 +1,8 @@
 from fastapi import BackgroundTasks, Depends, FastAPI
 
 from agent_service.config import get_agent_settings
-from agent_service.contracts import AgentChatRequest, AgentChatResponse, TraceSummary
+from agent_service.contracts import AgentChatRequest, AgentChatResponse
+from agent_service.graph.workflow import run_agent_graph
 from agent_service.security import require_internal_key
 
 
@@ -34,17 +35,4 @@ async def chat(
     _: None = Depends(require_internal_key),
 ) -> AgentChatResponse:
     del background_tasks
-    return AgentChatResponse(
-        request_id=body.request_id,
-        final_response="Agent Service is reachable. LangGraph workflow is not wired yet.",
-        agents_used=[],
-        trace_summary=TraceSummary(
-            intent="bootstrap",
-            agents=[],
-            source_count=0,
-            latency_ms=0.0,
-            warnings=["graph_not_wired"],
-        ),
-        full_trace={"request_id": body.request_id, "status": "bootstrap"},
-        readiness={"status": "bootstrap"},
-    )
+    return await run_agent_graph(body)
