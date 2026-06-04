@@ -2,6 +2,7 @@ from fastapi import BackgroundTasks, Depends, FastAPI
 
 from agent_service.config import get_agent_settings
 from agent_service.contracts import AgentChatRequest, AgentChatResponse
+from agent_service.evaluation.judge import judge_answer
 from agent_service.graph.workflow import run_agent_graph
 from agent_service.security import require_internal_key
 
@@ -36,3 +37,17 @@ async def chat(
 ) -> AgentChatResponse:
     del background_tasks
     return await run_agent_graph(body)
+
+
+@app.post("/internal/agent/evaluate")
+async def evaluate(body: dict, _: None = Depends(require_internal_key)) -> dict:
+    settings = get_agent_settings()
+    return await judge_answer(
+        question=body.get("question", ""),
+        answer=body.get("answer", ""),
+        sources=body.get("sources", []),
+        trace=body.get("trace", {}),
+        graph_version=body.get("graph_version") or settings.AGENT_GRAPH_VERSION,
+        prompt_version=body.get("prompt_version") or settings.AGENT_PROMPT_VERSION,
+        model_name=body.get("model_name") or settings.GEMINI_JUDGE_MODEL,
+    )
