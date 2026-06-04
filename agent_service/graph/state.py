@@ -12,8 +12,8 @@ class AgentGraphState(TypedDict, total=False):
     agents_to_run: list[str]
     routing_filters: dict[str, Any]
     readiness: dict[str, Any]
-    evidence: dict[str, list[AgentSource]]
-    agent_results: dict[str, str]
+    evidence: dict[str, list[dict[str, Any]]]
+    agent_results: dict[str, dict[str, Any]]
     final_response: str
     sources: list[AgentSource]
     suggested_actions: list[str]

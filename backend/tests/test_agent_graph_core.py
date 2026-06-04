@@ -1,7 +1,12 @@
 import pytest
 
 from agent_service.contracts import AgentChatRequest
+from agent_service.graph.nodes import _strip_accents
 from agent_service.graph.workflow import run_agent_graph
+
+
+def test_strip_accents_handles_none():
+    assert _strip_accents(None) == ""
 
 
 @pytest.mark.asyncio
@@ -21,6 +26,12 @@ async def test_agent_graph_returns_trace_summary_without_llm_key(monkeypatch):
     assert response.trace_summary.intent == "property_search"
     assert response.full_trace["request_id"] == "req-graph-1"
     assert response.full_trace["steps"]
+    assert response.readiness["listings"]["status"] == "unknown"
+    assert all(
+        step["status"] == "success" for step in response.full_trace["steps"]
+    )
+    assert isinstance(response.full_trace["agent_results"]["property_search"], dict)
+    assert response.full_trace["agent_results"]["property_search"]["content"]
 
 
 @pytest.mark.asyncio

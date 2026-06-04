@@ -36,25 +36,20 @@ KEYWORDS_BY_AGENT = {
 }
 
 
-def _strip_accents(value: str) -> str:
-    normalized = unicodedata.normalize("NFD", value)
+def _strip_accents(value: str | None) -> str:
+    normalized = unicodedata.normalize("NFD", value or "")
     without_marks = "".join(
         char for char in normalized if unicodedata.category(char) != "Mn"
     )
     return without_marks.lower()
 
 
-def _trace_step(
-    step_name: str,
-    status: str = "ok",
-    latency_ms: float = 0.0,
-    output: dict[str, Any] | None = None,
-) -> dict[str, Any]:
+def _trace_step(name: str, started: float, output: dict[str, Any]) -> dict[str, Any]:
     return {
-        "step_name": step_name,
-        "status": status,
-        "latency_ms": latency_ms,
-        "output": output or {},
+        "step_name": name,
+        "status": "success",
+        "latency_ms": round((time.perf_counter() - started) * 1000, 2),
+        "output": output,
     }
 
 
@@ -65,13 +60,7 @@ def _append_trace(
     output: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     trace_steps = list(state.get("trace_steps", []))
-    trace_steps.append(
-        _trace_step(
-            step_name=step_name,
-            latency_ms=(time.perf_counter() - start_time) * 1000,
-            output=output,
-        )
-    )
+    trace_steps.append(_trace_step(step_name, start_time, output or {}))
     return trace_steps
 
 
@@ -93,11 +82,11 @@ def context_builder(state: AgentGraphState) -> AgentGraphState:
 def readiness_checker(state: AgentGraphState) -> AgentGraphState:
     start_time = time.perf_counter()
     readiness = {
-        "listings": "unknown",
-        "projects": "unknown",
-        "news": "unknown",
-        "legal": "unknown",
-        "chunks": "unknown",
+        "listings": {"status": "unknown"},
+        "projects": {"status": "unknown"},
+        "news": {"status": "unknown"},
+        "legal": {"status": "unknown"},
+        "chunks": {"status": "unknown"},
     }
     return {
         "readiness": readiness,
@@ -162,11 +151,18 @@ def retrieval_planner_node(state: AgentGraphState) -> AgentGraphState:
 def specialist_agents_node(state: AgentGraphState) -> AgentGraphState:
     start_time = time.perf_counter()
     request = state["request"]
+    evidence = state.get("evidence", {})
     agent_results = {
-        agent: (
-            f"{agent} processed request {request.request_id} offline "
-            f"for query: {request.message}"
-        )
+        agent: {
+            "agent_name": agent,
+            "content": (
+                f"{agent} processed request {request.request_id} offline "
+                f"for query: {request.message}"
+            ),
+            "sources": evidence.get(agent, []),
+            "confidence": 0.0,
+            "warnings": [],
+        }
         for agent in state.get("agents_to_run", [])
     }
     return {
@@ -183,7 +179,11 @@ def specialist_agents_node(state: AgentGraphState) -> AgentGraphState:
 def synthesizer_node(state: AgentGraphState) -> AgentGraphState:
     start_time = time.perf_counter()
     agent_results = state.get("agent_results", {})
-    content = " ".join(agent_results[agent] for agent in state.get("agents_to_run", []))
+    content = " ".join(
+        agent_results[agent].get("content", "")
+        for agent in state.get("agents_to_run", [])
+        if agent in agent_results
+    )
     final_response = content or "No specialist agents produced a response."
     suggested_actions = ["review_sources", "refine_search"]
     return {
