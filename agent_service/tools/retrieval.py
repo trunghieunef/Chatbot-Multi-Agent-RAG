@@ -20,7 +20,7 @@ class RetrievalTrace:
         filters: dict[str, Any] | None,
         result_count: int,
         latency_ms: float,
-        status: str,
+        status: str = "success",
         error_message: str | None = None,
     ) -> None:
         self.events.append(
@@ -44,6 +44,8 @@ async def _run_hybrid_tool(
     trace: RetrievalTrace,
     tool_name: str,
     parent_type: str,
+    top_k: int = 20,
+    rerank_to: int = 5,
 ) -> list[dict[str, Any]]:
     started = time.perf_counter()
     try:
@@ -51,8 +53,8 @@ async def _run_hybrid_tool(
             query=query,
             filters=filters,
             parent_type=parent_type,
-            top_k=20,
-            rerank_to=5,
+            top_k=top_k,
+            rerank_to=rerank_to,
         )
     except Exception as exc:
         trace.add_event(

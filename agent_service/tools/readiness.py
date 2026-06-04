@@ -45,7 +45,11 @@ async def count_source(source_name: str) -> dict[str, Any]:
                 .where(Chunk.parent_type == "article", Article.category == "legal")
             )
         else:
-            raise ValueError(f"Unsupported source: {source_name}")
+            return {
+                "status": "not_ready",
+                "parent_count": 0,
+                "chunk_count": 0,
+            }
 
         parent_count = int(parent_result.scalar_one())
         chunk_count = int(chunk_result.scalar_one())
