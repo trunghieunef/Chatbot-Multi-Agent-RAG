@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -21,10 +21,6 @@ class UserPreferenceResponse(BaseModel):
     updated_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)
-
-
-class MemoryProposalUpdate(BaseModel):
-    status: Literal["accepted", "rejected"]
 
 
 class MemoryProposalResponse(BaseModel):

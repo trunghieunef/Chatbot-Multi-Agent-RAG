@@ -15,7 +15,7 @@ from app.config import get_settings
 from app.database import get_db
 from app.models.agent_observability import AgentTrace
 from app.models.chat import ChatMessage, ChatSession
-from app.models.preference import MemoryProposal, UserPreference
+from app.models.preference import MemoryProposal
 from app.models.user import User
 from app.routers.auth import get_optional_user
 from app.routers.metrics import CHAT_REQUESTS
@@ -40,7 +40,11 @@ from app.services.chatbot.context import (
     load_user_preferences,
     split_agents,
 )
-from app.services.chatbot.memory import decide_memory_status
+from app.services.chatbot.memory import (
+    decide_memory_status,
+    mark_memory_proposal_resolved,
+    upsert_user_preference,
+)
 
 router = APIRouter(prefix="/chat", tags=["Chat"])
 
@@ -185,7 +189,21 @@ def persist_agent_observability(
     )
 
 
-def handle_memory_proposals(
+def _memory_proposal_hint(record: MemoryProposal) -> dict:
+    return {
+        "id": record.id,
+        "request_id": record.request_id,
+        "action": record.action,
+        "key": record.key,
+        "value_json": record.value_json,
+        "confidence": record.confidence,
+        "evidence": record.evidence,
+        "requires_user_confirmation": record.requires_user_confirmation,
+        "status": record.status,
+    }
+
+
+async def handle_memory_proposals(
     db: AsyncSession,
     session: ChatSession,
     user: User | None,
@@ -197,31 +215,31 @@ def handle_memory_proposals(
     hints = []
     for proposal in response.memory_proposals:
         status = decide_memory_status(proposal)
-        db.add(
-            MemoryProposal(
+        record = MemoryProposal(
+            user_id=user.id,
+            session_id=session.id,
+            request_id=response.request_id,
+            action=proposal.action,
+            key=proposal.key,
+            value_json={"value": proposal.value},
+            confidence=proposal.confidence,
+            evidence=proposal.evidence,
+            requires_user_confirmation=proposal.requires_user_confirmation,
+            status=status,
+        )
+        db.add(record)
+        if status == "pending":
+            await db.flush()
+            hints.append(_memory_proposal_hint(record))
+        if status == "auto_applied":
+            mark_memory_proposal_resolved(record, status="auto_applied")
+            await upsert_user_preference(
+                db,
                 user_id=user.id,
-                session_id=session.id,
-                request_id=response.request_id,
-                action=proposal.action,
                 key=proposal.key,
                 value_json={"value": proposal.value},
                 confidence=proposal.confidence,
-                evidence=proposal.evidence,
-                requires_user_confirmation=proposal.requires_user_confirmation,
-                status=status,
-            )
-        )
-        if status == "pending":
-            hints.append(proposal.model_dump(mode="json"))
-        if status == "auto_applied":
-            db.add(
-                UserPreference(
-                    user_id=user.id,
-                    key=proposal.key,
-                    value_json={"value": proposal.value},
-                    confidence=proposal.confidence,
-                    source="agent_proposal",
-                )
+                source="agent_proposal",
             )
     return hints
 
@@ -280,7 +298,7 @@ async def send_message(
     suggested_actions = agent_response.suggested_actions
     trace_summary = _trace_summary_dict(agent_response)
     persist_agent_observability(db, session, user, agent_response)
-    memory_hints = handle_memory_proposals(db, session, user, agent_response)
+    memory_hints = await handle_memory_proposals(db, session, user, agent_response)
 
     # Save assistant response
     CHAT_REQUESTS.labels(agent=agent_used or "unknown").inc()

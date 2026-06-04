@@ -87,6 +87,14 @@ async def _get_user_memory_proposal(
     return proposal
 
 
+def _require_pending_memory_proposal(proposal: MemoryProposal) -> None:
+    if proposal.status != "pending":
+        raise HTTPException(
+            status_code=409,
+            detail="Memory proposal already resolved",
+        )
+
+
 @memory_router.post(
     "/{proposal_id}/accept",
     response_model=MemoryProposalResponse,
@@ -101,6 +109,7 @@ async def accept_memory_proposal(
         proposal_id=proposal_id,
         user_id=user.id,
     )
+    _require_pending_memory_proposal(proposal)
     await apply_memory_proposal(db, proposal=proposal)
     return proposal
 
@@ -119,6 +128,7 @@ async def reject_memory_proposal(
         proposal_id=proposal_id,
         user_id=user.id,
     )
+    _require_pending_memory_proposal(proposal)
     proposal.status = "rejected"
     proposal.resolved_at = _utcnow()
     await db.flush()

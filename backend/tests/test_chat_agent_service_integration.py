@@ -31,6 +31,15 @@ class FakeDB:
                 obj.id = uuid.uuid4()
             if obj.__class__.__name__ == "ChatMessage" and obj.created_at is None:
                 obj.created_at = datetime(2026, 1, 1)
+            if obj.__class__.__name__ == "MemoryProposal" and obj.id is None:
+                obj.id = len(
+                    [
+                        item
+                        for item in self.added
+                        if item.__class__.__name__ == "MemoryProposal"
+                        and item.id is not None
+                    ]
+                ) + 1
 
 
 class FakeAgentClient:
@@ -71,12 +80,15 @@ def test_feature_flag_enabled_calls_internal_agent_service(monkeypatch):
     fake_client = FakeAgentClient()
     context = [{"role": "user", "content": "Earlier", "created_at": None, "sources": []}]
 
+    async def memory_hints(*args):
+        return [{"key": "budget"}]
+
     monkeypatch.setattr(chat, "is_agent_service_enabled", lambda: True)
     monkeypatch.setattr(chat, "get_agent_service_client", lambda: fake_client)
     monkeypatch.setattr(chat, "build_conversation_context", lambda db, session_id: context)
     monkeypatch.setattr(chat, "load_user_preferences", lambda db, user_id: {"city": "HCMC"})
     monkeypatch.setattr(chat, "persist_agent_observability", lambda *args: None)
-    monkeypatch.setattr(chat, "handle_memory_proposals", lambda *args: [{"key": "budget"}])
+    monkeypatch.setattr(chat, "handle_memory_proposals", memory_hints)
 
     response = asyncio.run(
         chat.send_message(
@@ -112,10 +124,13 @@ def test_feature_flag_disabled_falls_back_to_existing_backend_pipeline(monkeypat
             "suggested_actions": ["Schedule viewing"],
         }
 
+    async def memory_hints(*args):
+        return []
+
     monkeypatch.setattr(chat, "is_agent_service_enabled", lambda: False)
     monkeypatch.setattr(chat, "_run_chatbot_pipeline", fake_pipeline)
     monkeypatch.setattr(chat, "persist_agent_observability", lambda *args: None)
-    monkeypatch.setattr(chat, "handle_memory_proposals", lambda *args: [])
+    monkeypatch.setattr(chat, "handle_memory_proposals", memory_hints)
 
     response = asyncio.run(
         chat.send_message(
@@ -195,12 +210,15 @@ def test_agent_service_context_excludes_current_user_message(monkeypatch):
         assert current_user_messages == []
         return []
 
+    async def memory_hints(*args):
+        return []
+
     monkeypatch.setattr(chat, "is_agent_service_enabled", lambda: True)
     monkeypatch.setattr(chat, "get_agent_service_client", lambda: fake_client)
     monkeypatch.setattr(chat, "build_conversation_context", inspect_context)
     monkeypatch.setattr(chat, "load_user_preferences", lambda db, user_id: {})
     monkeypatch.setattr(chat, "persist_agent_observability", lambda *args: None)
-    monkeypatch.setattr(chat, "handle_memory_proposals", lambda *args: [])
+    monkeypatch.setattr(chat, "handle_memory_proposals", memory_hints)
 
     response = asyncio.run(
         chat.send_message(
@@ -255,11 +273,13 @@ def test_memory_proposals_store_value_wrapper_for_authenticated_user():
         ],
     )
 
-    hints = chat.handle_memory_proposals(
-        db,
-        SimpleNamespace(id=session_id),
-        SimpleNamespace(id=42),
-        response,
+    hints = asyncio.run(
+        chat.handle_memory_proposals(
+            db,
+            SimpleNamespace(id=session_id),
+            SimpleNamespace(id=42),
+            response,
+        )
     )
 
     persisted = [
@@ -297,11 +317,13 @@ def test_auto_applied_memory_proposal_creates_user_preference():
         ],
     )
 
-    hints = chat.handle_memory_proposals(
-        db,
-        SimpleNamespace(id=session_id),
-        SimpleNamespace(id=42),
-        response,
+    hints = asyncio.run(
+        chat.handle_memory_proposals(
+            db,
+            SimpleNamespace(id=session_id),
+            SimpleNamespace(id=42),
+            response,
+        )
     )
 
     proposal = [
