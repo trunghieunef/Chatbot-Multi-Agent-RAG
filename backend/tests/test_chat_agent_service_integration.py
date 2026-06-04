@@ -315,5 +315,5 @@ def test_auto_applied_memory_proposal_creates_user_preference():
     assert preference.key == "preferred_city"
     assert preference.value_json == {"value": "Da Nang"}
     assert preference.confidence == 0.9
-    assert preference.source == "agent"
+    assert preference.source == "agent_proposal"
     assert hints == []

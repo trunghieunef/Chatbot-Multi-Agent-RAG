@@ -40,6 +40,7 @@ from app.services.chatbot.context import (
     load_user_preferences,
     split_agents,
 )
+from app.services.chatbot.memory import decide_memory_status
 
 router = APIRouter(prefix="/chat", tags=["Chat"])
 
@@ -195,7 +196,7 @@ def handle_memory_proposals(
 
     hints = []
     for proposal in response.memory_proposals:
-        status = "pending" if proposal.requires_user_confirmation else "auto_applied"
+        status = decide_memory_status(proposal)
         db.add(
             MemoryProposal(
                 user_id=user.id,
@@ -210,16 +211,16 @@ def handle_memory_proposals(
                 status=status,
             )
         )
-        if proposal.requires_user_confirmation:
+        if status == "pending":
             hints.append(proposal.model_dump(mode="json"))
-        else:
+        if status == "auto_applied":
             db.add(
                 UserPreference(
                     user_id=user.id,
                     key=proposal.key,
                     value_json={"value": proposal.value},
                     confidence=proposal.confidence,
-                    source="agent",
+                    source="agent_proposal",
                 )
             )
     return hints
