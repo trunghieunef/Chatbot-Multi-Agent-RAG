@@ -116,7 +116,7 @@ async def test_judge_answer_falls_back_when_client_returns_empty():
 
     assert result["status"] == "skipped"
     assert result["scores"]["groundedness"]["score"] == 0.0
-    assert "empty judge response" in result["scores"]["groundedness"]["rationale"]
+    assert "judge unavailable" in result["scores"]["groundedness"]["rationale"]
 
 
 def test_internal_evaluate_requires_agent_key(monkeypatch):

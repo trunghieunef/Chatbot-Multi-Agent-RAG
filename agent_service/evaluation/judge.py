@@ -104,5 +104,5 @@ async def judge_answer(
     judge_client = client or GeminiClient(model=model_name)
     data = await judge_client.generate_json(prompt)
     if not data:
-        return fallback_scores("empty judge response")
+        return fallback_scores("judge unavailable")
     return {"status": "completed", "scores": data.get("scores", data)}
