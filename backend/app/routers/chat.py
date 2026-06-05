@@ -15,11 +15,13 @@ from app.config import get_settings
 from app.database import get_db
 from app.models.agent_observability import AgentTrace
 from app.models.chat import ChatMessage, ChatSession
-from app.models.preference import MemoryProposal
+from app.models.preference import ChatFeedback, MemoryProposal
 from app.models.user import User
 from app.routers.auth import get_optional_user
 from app.routers.metrics import CHAT_REQUESTS
 from app.schemas.chat import (
+    ChatFeedbackRequest,
+    ChatFeedbackResponse,
     ChatHistoryResponse,
     ChatMessageRequest,
     ChatMessageResponse,
@@ -242,6 +244,36 @@ async def handle_memory_proposals(
                 source="agent_proposal",
             )
     return hints
+
+
+@router.post("/feedback", response_model=ChatFeedbackResponse)
+async def submit_feedback(
+    body: ChatFeedbackRequest,
+    user: User | None = Depends(get_optional_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Store feedback for a chat response."""
+    result = await db.execute(
+        select(ChatSession).where(ChatSession.id == body.session_id)
+    )
+    session = result.scalar_one_or_none()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.user_id is not None and (user is None or session.user_id != user.id):
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    feedback = ChatFeedback(
+        user_id=user.id if user else None,
+        session_id=body.session_id,
+        request_id=body.request_id,
+        rating=body.rating,
+        issue_type=body.issue_type,
+        comment=body.comment,
+        metadata_json=body.metadata_json or {},
+    )
+    db.add(feedback)
+    await db.flush()
+    return ChatFeedbackResponse(id=feedback.id)
 
 
 @router.post("", response_model=ChatMessageResponse)

@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from fastapi import HTTPException
 
 from app.routers import chat
-from app.schemas.chat import ChatMessageRequest
+from app.schemas.chat import ChatFeedbackRequest, ChatMessageRequest
 from app.services.agent_service.contracts import (
     AgentChatResponse,
     MemoryProposal,
@@ -31,6 +31,15 @@ class FakeDB:
                 obj.id = uuid.uuid4()
             if obj.__class__.__name__ == "ChatMessage" and obj.created_at is None:
                 obj.created_at = datetime(2026, 1, 1)
+            if obj.__class__.__name__ == "ChatFeedback" and obj.id is None:
+                obj.id = len(
+                    [
+                        item
+                        for item in self.added
+                        if item.__class__.__name__ == "ChatFeedback"
+                        and item.id is not None
+                    ]
+                ) + 1
             if obj.__class__.__name__ == "MemoryProposal" and obj.id is None:
                 obj.id = len(
                     [
@@ -339,3 +348,83 @@ def test_auto_applied_memory_proposal_creates_user_preference():
     assert preference.confidence == 0.9
     assert preference.source == "agent_proposal"
     assert hints == []
+
+
+def test_submit_feedback_persists_session_feedback():
+    session_id = uuid.uuid4()
+    db = FakeDB(session=SimpleNamespace(id=session_id, user_id=None))
+
+    response = asyncio.run(
+        chat.submit_feedback(
+            ChatFeedbackRequest(
+                session_id=session_id,
+                request_id="req-feedback",
+                rating="negative",
+                issue_type="wrong_listing",
+                comment="The recommendation missed my district.",
+                metadata_json={"source": "chat_panel"},
+            ),
+            user=None,
+            db=db,
+        )
+    )
+
+    feedback = [
+        item for item in db.added if item.__class__.__name__ == "ChatFeedback"
+    ][0]
+    assert response.id == 1
+    assert feedback.user_id is None
+    assert feedback.session_id == session_id
+    assert feedback.request_id == "req-feedback"
+    assert feedback.rating == "negative"
+    assert feedback.issue_type == "wrong_listing"
+    assert feedback.comment == "The recommendation missed my district."
+    assert feedback.metadata_json == {"source": "chat_panel"}
+
+
+def test_authenticated_user_cannot_submit_feedback_for_another_users_session():
+    session_id = uuid.uuid4()
+    db = FakeDB(session=SimpleNamespace(id=session_id, user_id=7))
+
+    try:
+        asyncio.run(
+            chat.submit_feedback(
+                ChatFeedbackRequest(
+                    session_id=session_id,
+                    request_id="req-feedback",
+                    rating="positive",
+                ),
+                user=SimpleNamespace(id=42),
+                db=db,
+            )
+        )
+    except HTTPException as exc:
+        assert exc.status_code == 404
+    else:
+        raise AssertionError("expected session ownership rejection")
+
+    assert db.added == []
+
+
+def test_submit_feedback_returns_not_found_for_missing_session():
+    session_id = uuid.uuid4()
+    db = FakeDB(session=None)
+
+    try:
+        asyncio.run(
+            chat.submit_feedback(
+                ChatFeedbackRequest(
+                    session_id=session_id,
+                    request_id="req-feedback",
+                    rating="positive",
+                ),
+                user=None,
+                db=db,
+            )
+        )
+    except HTTPException as exc:
+        assert exc.status_code == 404
+    else:
+        raise AssertionError("expected missing session rejection")
+
+    assert db.added == []

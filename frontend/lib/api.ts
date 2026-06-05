@@ -129,7 +129,7 @@ export async function sendChatMessage(
 
 export async function sendChatFeedback(
   body: ChatFeedbackRequest
-): Promise<Record<string, unknown>> {
+): Promise<{ id: number }> {
   return fetchJSON(`${BASE}/chat/feedback`, {
     method: "POST",
     headers: authHeaders(),
@@ -153,7 +153,13 @@ export async function getAdminPipelineReadiness(): Promise<{
   >(`${BASE}/admin/pipeline-readiness`, {
     headers: authHeaders(),
   });
-  return { items: Array.isArray(data) ? data : data.items ?? [] };
+  let items: AdminPipelineReadinessItem[] = [];
+  if (Array.isArray(data)) {
+    items = data;
+  } else if (Array.isArray(data.items)) {
+    items = data.items;
+  }
+  return { items };
 }
 
 /* ─── Auth ─── */
