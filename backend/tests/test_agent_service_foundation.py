@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -13,6 +15,7 @@ def clear_agent_settings_cache():
 
 
 def test_agent_settings_defaults_are_internal_safe(monkeypatch):
+    monkeypatch.chdir(Path(__file__).parent)
     monkeypatch.delenv("AGENT_INTERNAL_KEY", raising=False)
     monkeypatch.delenv("AGENT_ALLOW_DEV_INTERNAL_KEY", raising=False)
     settings = get_agent_settings()
@@ -62,7 +65,7 @@ def test_internal_health_uses_current_agent_settings(monkeypatch):
 
 def test_internal_health_rejects_default_key_without_dev_opt_in(monkeypatch):
     monkeypatch.delenv("DEBUG", raising=False)
-    monkeypatch.delenv("AGENT_INTERNAL_KEY", raising=False)
+    monkeypatch.setenv("AGENT_INTERNAL_KEY", "dev-agent-internal-key")
     monkeypatch.delenv("AGENT_ALLOW_DEV_INTERNAL_KEY", raising=False)
     client = TestClient(app)
 
@@ -75,8 +78,23 @@ def test_internal_health_rejects_default_key_without_dev_opt_in(monkeypatch):
     assert response.json()["detail"] == "Agent internal key is not configured securely"
 
 
+def test_internal_health_rejects_env_example_placeholder_key(monkeypatch):
+    monkeypatch.delenv("DEBUG", raising=False)
+    monkeypatch.setenv("AGENT_INTERNAL_KEY", "change-me-internal-agent-key")
+    monkeypatch.delenv("AGENT_ALLOW_DEV_INTERNAL_KEY", raising=False)
+    client = TestClient(app)
+
+    response = client.get(
+        "/internal/agent/health",
+        headers={"X-Internal-Agent-Key": "change-me-internal-agent-key"},
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "Agent internal key is not configured securely"
+
+
 def test_internal_health_allows_default_key_with_dev_opt_in(monkeypatch):
-    monkeypatch.delenv("AGENT_INTERNAL_KEY", raising=False)
+    monkeypatch.setenv("AGENT_INTERNAL_KEY", "dev-agent-internal-key")
     monkeypatch.setenv("AGENT_ALLOW_DEV_INTERNAL_KEY", "true")
     client = TestClient(app)
 

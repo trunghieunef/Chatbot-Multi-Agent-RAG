@@ -43,19 +43,15 @@ services:
         condition: service_healthy
       agent-service:
         condition: service_healthy
-    env_file:
-      - path: .env
-        required: false
+    env_file: .env
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-admin}:${POSTGRES_PASSWORD:-realestate_secret_2026}@postgres:5432/${POSTGRES_DB:-realestate}
       REDIS_URL: redis://redis:6379/0
       AGENT_SERVICE_URL: http://agent-service:8100
-      AGENT_INTERNAL_KEY: ${AGENT_INTERNAL_KEY:-dev-agent-internal-key}
+      AGENT_INTERNAL_KEY: ${AGENT_INTERNAL_KEY}
       CHATBOT_AGENT_SERVICE_ENABLED: ${CHATBOT_AGENT_SERVICE_ENABLED:-false}
     volumes:
-      - ./backend:/app
       - ./data:/app/data
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
   agent-service:
     build:
@@ -67,23 +63,18 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    env_file:
-      - path: .env
-        required: false
+    env_file: .env
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-admin}:${POSTGRES_PASSWORD:-realestate_secret_2026}@postgres:5432/${POSTGRES_DB:-realestate}
       REDIS_URL: redis://redis:6379/0
-      AGENT_INTERNAL_KEY: ${AGENT_INTERNAL_KEY:-dev-agent-internal-key}
+      AGENT_INTERNAL_KEY: ${AGENT_INTERNAL_KEY}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.0-flash}
       GEMINI_JUDGE_MODEL: ${GEMINI_JUDGE_MODEL:-gemini-2.0-flash}
     volumes:
-      - ./agent_service:/app/agent_service
-      - ./backend:/app/backend
       - ./data:/app/data
-    command: uvicorn agent_service.main:app --host 0.0.0.0 --port 8100 --reload
     healthcheck:
-      test: ["CMD-SHELL", "curl -f -H \"X-Internal-Agent-Key: ${AGENT_INTERNAL_KEY:-dev-agent-internal-key}\" http://localhost:8100/internal/agent/health"]
+      test: ["CMD-SHELL", "curl -f -H \"X-Internal-Agent-Key: ${AGENT_INTERNAL_KEY}\" http://localhost:8100/internal/agent/health"]
       interval: 10s
       timeout: 5s
       retries: 12
@@ -93,6 +84,9 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        INTERNAL_API_URL: http://backend:8000
+        NEXT_PUBLIC_API_URL: /api/v1
     container_name: realestate_frontend
     ports:
       - "3000:3000"
@@ -101,10 +95,6 @@ services:
     environment:
       NEXT_PUBLIC_API_URL: /api/v1
       INTERNAL_API_URL: http://backend:8000
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-      - /app/.next
 
 volumes:
   pgdata:

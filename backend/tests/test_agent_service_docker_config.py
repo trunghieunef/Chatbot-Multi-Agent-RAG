@@ -6,6 +6,8 @@ def test_docker_compose_contains_agent_service():
 
     assert "agent-service:" in compose
     assert "AGENT_INTERNAL_KEY" in compose
+    assert "dev-agent-internal-key" not in compose
+    assert "required: false" not in compose
     assert "8100:8100" not in compose
     assert "http://agent-service:8100" in compose
 
@@ -15,6 +17,16 @@ def test_backend_waits_for_internal_agent_service():
 
     assert "agent-service:\n        condition: service_healthy" in compose
     assert "CHATBOT_AGENT_SERVICE_ENABLED: ${CHATBOT_AGENT_SERVICE_ENABLED:-false}" in compose
+
+
+def test_compose_uses_production_commands_and_images():
+    compose = Path("docker-compose.yml").read_text()
+
+    assert "--reload" not in compose
+    assert "./backend:/app" not in compose
+    assert "./agent_service:/app/agent_service" not in compose
+    assert "./frontend:/app" not in compose
+    assert "INTERNAL_API_URL: http://backend:8000" in compose
 
 
 def test_compose_referenced_dockerfiles_exist():
@@ -38,3 +50,15 @@ def test_frontend_rewrite_uses_internal_api_url_for_compose():
 
     assert "process.env.INTERNAL_API_URL" in next_config
     assert 'destination: `${internalApiUrl}/api/v1/:path*`' in next_config
+
+
+def test_frontend_dockerfile_builds_and_runs_next_start():
+    dockerfile = Path("frontend/Dockerfile").read_text()
+
+    assert "ARG INTERNAL_API_URL" in dockerfile
+    assert "ARG NEXT_PUBLIC_API_URL" in dockerfile
+    assert "ENV INTERNAL_API_URL=${INTERNAL_API_URL}" in dockerfile
+    assert "ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}" in dockerfile
+    assert 'RUN npm run build' in dockerfile
+    assert 'CMD ["npm", "run", "start"]' in dockerfile
+    assert "next dev" not in dockerfile

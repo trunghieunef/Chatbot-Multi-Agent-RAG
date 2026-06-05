@@ -35,7 +35,15 @@ Edit `.env` and set strong production values:
 - `AGENT_INTERNAL_KEY`
 - `GEMINI_API_KEY`
 
+Do this before running `docker compose config` or `docker compose up`. The base Compose file requires `.env`, and the agent healthcheck rejects placeholder or development internal keys.
+
 Keep `CHATBOT_AGENT_SERVICE_ENABLED=false` for the first boot so the backend can be smoke-tested before routing chat requests to the internal agent service.
+
+Validate the resolved Compose configuration after replacing placeholders:
+
+```bash
+docker compose config
+```
 
 ## Start Services
 
