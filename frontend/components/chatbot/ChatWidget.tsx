@@ -3,14 +3,19 @@
 import { useState, useRef, useEffect } from "react";
 import { BarChart3, FileText, Home, MapPin, MessageCircle, Scale, Send, Bot, TrendingUp, User, Sparkles, X } from "lucide-react";
 import { sendChatMessage } from "@/lib/api";
-import type { ChatMessageResponse, ChatSource } from "@/lib/types";
+import type { ChatMessageResponse, ChatSource, MemoryHint } from "@/lib/types";
 
 interface Message {
   role: "user" | "assistant";
   content: string;
   agent_used?: string | null;
+  agents_used?: string[] | null;
   sources?: ChatSource[] | null;
   suggested_actions?: string[] | null;
+  trace_summary?: ChatMessageResponse["trace_summary"];
+  memory_hints?: ChatMessageResponse["memory_hints"];
+  feedback_id?: string | null;
+  request_id?: string | null;
 }
 
 export default function ChatWidget() {
@@ -59,8 +64,13 @@ export default function ChatWidget() {
           role: "assistant",
           content: res.content,
           agent_used: res.agent_used,
+          agents_used: res.agents_used,
           sources: res.sources,
           suggested_actions: res.suggested_actions,
+          trace_summary: res.trace_summary,
+          memory_hints: res.memory_hints,
+          feedback_id: res.feedback_id,
+          request_id: res.request_id,
         },
       ]);
     } catch {
@@ -86,12 +96,46 @@ export default function ChatWidget() {
     placeholder: "AI",
   };
 
-  const getAgentLabels = (agentUsed?: string | null) =>
-    (agentUsed || "")
-      .split(",")
+  const ignoredAgents = new Set(["none", "bootstrap", "placeholder"]);
+
+  const getAgentLabels = (msg: Message) => {
+    const agents = msg.agents_used?.length
+      ? msg.agents_used
+      : (msg.agent_used || "").split(",");
+    return agents
       .map((agent) => agent.trim())
-      .filter((agent) => agent && agent !== "none" && agent !== "placeholder")
+      .filter((agent) => agent && !ignoredAgents.has(agent))
       .map((agent) => agentLabels[agent] || agent);
+  };
+
+  const formatMemoryValue = (hint: MemoryHint) => {
+    const rawValue = hint.value !== undefined ? hint.value : hint.value_json;
+    const value =
+      rawValue &&
+      typeof rawValue === "object" &&
+      !Array.isArray(rawValue) &&
+      "value" in rawValue
+        ? (rawValue as { value?: unknown }).value
+        : rawValue;
+
+    if (value === null || value === undefined || value === "") return "chua ro";
+    if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+      return String(value);
+    }
+    if (Array.isArray(value)) {
+      return value.map((item) => String(item)).join(", ");
+    }
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+  };
+
+  const getTraceWarnings = (trace: Message["trace_summary"]) =>
+    Array.isArray(trace?.warnings)
+      ? trace.warnings.filter((warning): warning is string => Boolean(warning))
+      : [];
 
   const formatCitation = (source: ChatSource) => {
     const citation = source.citation;
@@ -169,9 +213,9 @@ export default function ChatWidget() {
                         : "bg-muted text-card-foreground rounded-tl-none"
                     }`}
                   >
-                    {getAgentLabels(msg.agent_used).length > 0 && (
+                    {getAgentLabels(msg).length > 0 && (
                       <div className="mb-1 flex flex-wrap gap-1">
-                        {getAgentLabels(msg.agent_used).map((label) => (
+                        {getAgentLabels(msg).map((label) => (
                           <span key={label} className="inline-block rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
                             {label}
                           </span>
@@ -179,6 +223,54 @@ export default function ChatWidget() {
                       </div>
                     )}
                     <p className="whitespace-pre-wrap">{msg.content}</p>
+                    {msg.trace_summary && (
+                      <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-border/70 bg-card/60 px-2 py-1 text-[11px] leading-snug text-muted-foreground">
+                        {msg.trace_summary.intent && (
+                          <span className="max-w-full truncate">
+                            Intent: {String(msg.trace_summary.intent)}
+                          </span>
+                        )}
+                        {typeof msg.trace_summary.source_count === "number" && (
+                          <span className="shrink-0">
+                            {msg.trace_summary.source_count} nguon
+                          </span>
+                        )}
+                        {typeof msg.trace_summary.latency_ms === "number" && (
+                          <span className="shrink-0">
+                            {Math.round(msg.trace_summary.latency_ms)}ms
+                          </span>
+                        )}
+                        {getTraceWarnings(msg.trace_summary).length > 0 && (
+                          <span className="max-w-full truncate text-warning">
+                            Canh bao: {getTraceWarnings(msg.trace_summary).slice(0, 2).join(", ")}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    {msg.memory_hints && msg.memory_hints.length > 0 && (
+                      <div className="mt-2 space-y-1">
+                        {msg.memory_hints.slice(0, 2).map((hint, hintIndex) => (
+                          <div
+                            key={`${hint.id ?? hint.key}-${hintIndex}`}
+                            className="rounded-md border border-primary/20 bg-primary/5 px-2 py-1 text-[11px] leading-snug"
+                          >
+                            <div className="flex min-w-0 items-center justify-between gap-2">
+                              <span className="truncate font-medium text-primary">
+                                {hint.action}: {hint.key}
+                              </span>
+                              {typeof hint.confidence === "number" && (
+                                <span className="shrink-0 text-muted-foreground">
+                                  {Math.round(hint.confidence * 100)}%
+                                </span>
+                              )}
+                            </div>
+                            <p className="mt-0.5 line-clamp-2 break-words text-muted-foreground">
+                              {formatMemoryValue(hint)}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                     {msg.sources && msg.sources.length > 0 && (
                       <div className="mt-2 space-y-1.5 border-t border-border/70 pt-2">
                         {msg.sources.slice(0, 3).map((source, sourceIndex) => {

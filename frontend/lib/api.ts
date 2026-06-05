@@ -1,18 +1,21 @@
 /* ─── API Client for FastAPI Backend ─── */
 
 import type {
-  ListingCard,
-  ListingDetail,
-  PaginatedResponse,
-  MarketStats,
-  LocationCount,
-  PriceByDistrict,
-  PropertyTypeCount,
-  CityCount,
-  DistrictCount,
+  AdminPipelineReadinessItem,
+  AdminTraceListItem,
+  ChatFeedbackRequest,
   ChatMessageRequest,
   ChatMessageResponse,
+  CityCount,
+  DistrictCount,
+  ListingCard,
+  ListingDetail,
   ListingFilters,
+  LocationCount,
+  MarketStats,
+  PaginatedResponse,
+  PriceByDistrict,
+  PropertyTypeCount,
   TokenResponse,
 } from "./types";
 
@@ -28,6 +31,12 @@ async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
     throw new Error(`API ${res.status}: ${text}`);
   }
   return res.json();
+}
+
+function authHeaders(): HeadersInit {
+  if (typeof window === "undefined") return {};
+  const token = localStorage.getItem("token");
+  return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
 function buildQuery(params: Record<string, unknown>): string {
@@ -111,8 +120,46 @@ export async function sendChatMessage(
 ): Promise<ChatMessageResponse> {
   return fetchJSON(`${BASE}/chat`, {
     method: "POST",
+    headers: authHeaders(),
     body: JSON.stringify(body),
   });
+}
+
+/* Chat feedback */
+
+export async function sendChatFeedback(
+  body: ChatFeedbackRequest
+): Promise<{ id: number }> {
+  return fetchJSON(`${BASE}/chat/feedback`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify(body),
+  });
+}
+
+/* Admin */
+
+export async function getAdminChatTraces(): Promise<AdminTraceListItem[]> {
+  return fetchJSON(`${BASE}/admin/chat-traces`, {
+    headers: authHeaders(),
+  });
+}
+
+export async function getAdminPipelineReadiness(): Promise<{
+  items: AdminPipelineReadinessItem[];
+}> {
+  const data = await fetchJSON<
+    AdminPipelineReadinessItem[] | { items?: AdminPipelineReadinessItem[] }
+  >(`${BASE}/admin/pipeline-readiness`, {
+    headers: authHeaders(),
+  });
+  let items: AdminPipelineReadinessItem[] = [];
+  if (Array.isArray(data)) {
+    items = data;
+  } else if (Array.isArray(data.items)) {
+    items = data.items;
+  }
+  return { items };
 }
 
 /* ─── Auth ─── */

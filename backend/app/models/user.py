@@ -24,6 +24,7 @@ class User(Base):
     # Permissions
     is_active = Column(Boolean, default=True)
     is_superuser = Column(Boolean, default=False)
+    is_admin = Column(Boolean, default=False, nullable=False)
 
     # Timestamps
     created_at = Column(DateTime, default=func.now())

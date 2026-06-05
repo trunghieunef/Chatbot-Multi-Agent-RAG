@@ -1,0 +1,265 @@
+from __future__ import annotations
+
+from typing import Any
+
+
+def _readiness_status(readiness: dict[str, Any], key: str) -> str:
+    value = readiness.get(key, {})
+    if isinstance(value, dict):
+        return str(value.get("status", "unknown"))
+    return "unknown"
+
+
+def _record_location(record: dict[str, Any]) -> str | None:
+    parts = [
+        record.get("district"),
+        record.get("city"),
+        record.get("province"),
+        record.get("location"),
+    ]
+    values = [str(part) for part in parts if part]
+    return ", ".join(dict.fromkeys(values)) or None
+
+
+def _source_from_record(record: dict[str, Any], source_type: str) -> dict[str, Any]:
+    metadata = {}
+    price_text = record.get("price_text") or record.get("price_range")
+    area_text = record.get("area_text") or record.get("area_range")
+    if price_text is not None:
+        metadata["price_text"] = price_text
+    if area_text is not None:
+        metadata["area_text"] = area_text
+    if record.get("category") is not None:
+        metadata["category"] = record.get("category")
+
+    matched_chunk = record.get("matched_chunk") or {}
+    rerank_score = (
+        matched_chunk.get("rerank_score") if isinstance(matched_chunk, dict) else None
+    )
+    return {
+        "type": source_type,
+        "id": record.get("id"),
+        "product_id": record.get("product_id"),
+        "title": record.get("title") or record.get("name"),
+        "url": record.get("url"),
+        "location": _record_location(record),
+        "citation": record.get("citation"),
+        "score": rerank_score,
+        "metadata": metadata,
+    }
+
+
+def _describe_record(record: dict[str, Any]) -> str:
+    details = [str(record.get("title") or "Nguon khong co tieu de")]
+    location = _record_location(record)
+    if location:
+        details.append(location)
+    if record.get("price_text"):
+        details.append(str(record["price_text"]))
+    if record.get("area_text"):
+        details.append(str(record["area_text"]))
+    return " - ".join(details)
+
+
+def _agent_result(
+    *,
+    agent_name: str,
+    content: str,
+    sources: list[dict[str, Any]] | None = None,
+    confidence: float,
+    warnings: list[str] | None = None,
+) -> dict[str, Any]:
+    return {
+        "agent_name": agent_name,
+        "content": content,
+        "sources": sources or [],
+        "confidence": confidence,
+        "warnings": warnings or [],
+    }
+
+
+async def run_property_agent(
+    *,
+    query: str,
+    evidence: list[dict[str, Any]],
+    preferences: dict[str, Any],
+    readiness: dict[str, Any],
+) -> dict[str, Any]:
+    if not evidence:
+        return _agent_result(
+            agent_name="property_search",
+            content=(
+                "Chua co bang chung listing phu hop de khang dinh bat dong san cu the. "
+                "Toi chi co the goi y bo sung tieu chi tim kiem truoc khi so sanh."
+            ),
+            confidence=0.35,
+            warnings=["no_listing_evidence"],
+        )
+
+    lines = [_describe_record(record) for record in evidence]
+    content = (
+        "Cac listing phu hop voi yeu cau:\n"
+        + "\n".join(f"- {line}" for line in lines)
+        + "\nThong tin duoc rut ra tu nguon listing kem theo; can kiem tra lai tinh trang va gia truoc khi giao dich."
+    )
+    return _agent_result(
+        agent_name="property_search",
+        content=content,
+        sources=[_source_from_record(record, "listing") for record in evidence],
+        confidence=0.8,
+    )
+
+
+async def run_project_agent(
+    *,
+    query: str,
+    evidence: list[dict[str, Any]],
+    preferences: dict[str, Any],
+    readiness: dict[str, Any],
+) -> dict[str, Any]:
+    if not evidence:
+        source_ready = _readiness_status(readiness, "projects") == "ready"
+        warning = (
+            "no_project_evidence" if source_ready else "project_source_not_ready"
+        )
+        content = (
+            "Chua co bang chung du an de danh gia du an cu the. "
+            "Toi se khong dua ra thong tin chi tiet neu chua co nguon kem theo."
+            if source_ready
+            else "Nguon du an chua san sang, nen toi chua co du bang chung de danh gia du an cu the."
+        )
+        return _agent_result(
+            agent_name="project_agent",
+            content=content,
+            confidence=0.3,
+            warnings=[warning],
+        )
+
+    content = "Thong tin du an lien quan:\n" + "\n".join(
+        f"- {_describe_record(record)}" for record in evidence
+    )
+    return _agent_result(
+        agent_name="project_agent",
+        content=content,
+        sources=[_source_from_record(record, "project") for record in evidence],
+        confidence=0.75 if evidence else 0.4,
+    )
+
+
+async def run_market_agent(
+    *,
+    query: str,
+    evidence: list[dict[str, Any]],
+    preferences: dict[str, Any],
+    readiness: dict[str, Any],
+) -> dict[str, Any]:
+    content = "Phan tich thi truong hien chi la snapshot tai thoi diem truy van, khong phai chuoi thoi gian day du."
+    if evidence:
+        content += "\nCac diem du lieu lien quan:\n" + "\n".join(
+            f"- {_describe_record(record)}" for record in evidence
+        )
+    return _agent_result(
+        agent_name="market_analysis",
+        content=content,
+        sources=[_source_from_record(record, "market_snapshot") for record in evidence],
+        confidence=0.65 if evidence else 0.45,
+        warnings=["market_snapshot_not_time_series"],
+    )
+
+
+async def run_news_agent(
+    *,
+    query: str,
+    evidence: list[dict[str, Any]],
+    preferences: dict[str, Any],
+    readiness: dict[str, Any],
+) -> dict[str, Any]:
+    if not evidence:
+        return _agent_result(
+            agent_name="news_agent",
+            content="Chua co bang chung tin tuc de tom tat cap nhat lien quan.",
+            confidence=0.35,
+            warnings=["no_news_evidence"],
+        )
+
+    content = "Tin tuc lien quan:\n" + "\n".join(
+        f"- {_describe_record(record)}" for record in evidence
+    )
+    return _agent_result(
+        agent_name="news_agent",
+        content=content,
+        sources=[_source_from_record(record, "news_article") for record in evidence],
+        confidence=0.75,
+    )
+
+
+async def run_legal_agent(
+    *,
+    query: str,
+    evidence: list[dict[str, Any]],
+    preferences: dict[str, Any],
+    readiness: dict[str, Any],
+) -> dict[str, Any]:
+    if not evidence:
+        source_ready = _readiness_status(readiness, "legal") == "ready"
+        warning = (
+            "no_legal_evidence" if source_ready else "legal_kb_not_ready"
+        )
+        content = (
+            "Chua co bang chung phap ly de tra loi cu the. "
+            "Vui long doi chieu van ban hien hanh hoac hoi chuyen gia phap ly truoc khi thuc hien."
+            if source_ready
+            else (
+                "Kho tri thuc phap ly chua san sang, nen cau tra loi chi mang tinh tham khao. "
+                "Vui long doi chieu van ban hien hanh hoac hoi chuyen gia phap ly truoc khi thuc hien."
+            )
+        )
+        return _agent_result(
+            agent_name="legal_advisor",
+            content=content,
+            confidence=0.3,
+            warnings=[warning],
+        )
+
+    content = (
+        "Thong tin phap ly tham khao:\n"
+        + "\n".join(f"- {_describe_record(record)}" for record in evidence)
+        + "\nNoi dung nay chi de tham khao, khong thay the tu van phap ly chuyen nghiep."
+    )
+    return _agent_result(
+        agent_name="legal_advisor",
+        content=content,
+        sources=[_source_from_record(record, "legal_article") for record in evidence],
+        confidence=0.75 if evidence else 0.4,
+    )
+
+
+async def run_investment_agent(
+    *,
+    query: str,
+    evidence: list[dict[str, Any]],
+    preferences: dict[str, Any],
+    readiness: dict[str, Any],
+) -> dict[str, Any]:
+    risk_preference = preferences.get("risk_preferences", {})
+    if isinstance(risk_preference, dict):
+        risk_value = risk_preference.get("value", "chua ro")
+    else:
+        risk_value = risk_preference or "chua ro"
+
+    content = (
+        f"Khau vi rui ro hien ghi nhan: {risk_value}. "
+        "Nhan dinh dau tu nay khong phai loi khuyen tai chinh; can tu tham dinh dong tien, phap ly va kha nang vay."
+    )
+    if evidence:
+        content += "\nBang chung lien quan:\n" + "\n".join(
+            f"- {_describe_record(record)}" for record in evidence
+        )
+
+    return _agent_result(
+        agent_name="investment_advisor",
+        content=content,
+        sources=[_source_from_record(record, "investment_evidence") for record in evidence],
+        confidence=0.65 if evidence else 0.45,
+        warnings=["not_financial_advice"],
+    )

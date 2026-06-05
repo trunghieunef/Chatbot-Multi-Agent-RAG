@@ -1,11 +1,13 @@
 import type { NextConfig } from "next";
 
+const internalApiUrl = process.env.INTERNAL_API_URL || "http://localhost:8000";
+
 const nextConfig: NextConfig = {
   async rewrites() {
     return [
       {
         source: "/api/v1/:path*",
-        destination: "http://localhost:8000/api/v1/:path*",
+        destination: `${internalApiUrl}/api/v1/:path*`,
       },
     ];
   },

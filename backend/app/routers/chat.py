@@ -5,28 +5,61 @@ REST endpoint for chatbot interaction. WebSocket support will be added in Phase 
 """
 
 import uuid
+from inspect import isawaitable
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import get_settings
 from app.database import get_db
-from app.models.chat import ChatSession, ChatMessage
+from app.models.agent_observability import AgentTrace
+from app.models.chat import ChatMessage, ChatSession
+from app.models.preference import ChatFeedback, MemoryProposal
 from app.models.user import User
 from app.routers.auth import get_optional_user
 from app.routers.metrics import CHAT_REQUESTS
 from app.schemas.chat import (
+    ChatFeedbackRequest,
+    ChatFeedbackResponse,
+    ChatHistoryResponse,
     ChatMessageRequest,
     ChatMessageResponse,
     ChatSessionResponse,
-    ChatHistoryResponse,
+)
+from app.services.agent_service.client import (
+    AgentServiceError,
+    get_agent_service_client,
+)
+from app.services.agent_service.contracts import (
+    AgentChatRequest,
+    AgentChatResponse,
+    TraceSummary,
 )
 from app.services.chatbot import run_chat_pipeline
+from app.services.chatbot.context import (
+    build_conversation_context,
+    load_user_preferences,
+    split_agents,
+)
+from app.services.chatbot.memory import (
+    decide_memory_status,
+    mark_memory_proposal_resolved,
+    upsert_user_preference,
+)
 
 router = APIRouter(prefix="/chat", tags=["Chat"])
 
 
-async def _run_chatbot_pipeline(message: str, db: AsyncSession, session_id: uuid.UUID) -> dict:
+def is_agent_service_enabled() -> bool:
+    return get_settings().CHATBOT_AGENT_SERVICE_ENABLED
+
+
+async def _run_chatbot_pipeline(
+    message: str,
+    db: AsyncSession,
+    session_id: uuid.UUID,
+) -> dict:
     """Run production multi-agent chat."""
     try:
         return await run_chat_pipeline(message, db, session_id=str(session_id))
@@ -46,6 +79,203 @@ async def _run_chatbot_pipeline(message: str, db: AsyncSession, session_id: uuid
         }
 
 
+def _legacy_response_to_agent_shape(
+    request_id: str,
+    result: dict,
+) -> AgentChatResponse:
+    agents_used = split_agents(result.get("agent_used")) or ["unknown"]
+    sources = [
+        source
+        for source in result.get("sources", [])
+        if isinstance(source, dict) and source.get("type")
+    ]
+    return AgentChatResponse(
+        request_id=request_id,
+        final_response=result.get("final_response") or "Toi chua tao duoc cau tra loi phu hop.",
+        agents_used=agents_used,
+        sources=sources,
+        suggested_actions=result.get("suggested_actions", []),
+        trace_summary=TraceSummary(
+            intent="legacy",
+            agents=agents_used,
+            source_count=len(result.get("sources", [])),
+            latency_ms=0,
+            warnings=["legacy_pipeline"],
+        ),
+        full_trace={"mode": "legacy", "raw_sources": result.get("sources", [])},
+    )
+
+
+async def _resolve(value):
+    if isawaitable(value):
+        return await value
+    return value
+
+
+async def _run_agent_service_pipeline(
+    message: str,
+    db: AsyncSession,
+    session: ChatSession,
+    user: User | None,
+    request_id: str,
+) -> AgentChatResponse:
+    if not is_agent_service_enabled():
+        legacy_result = await _run_chatbot_pipeline(message, db, session.id)
+        return _legacy_response_to_agent_shape(request_id, legacy_result)
+
+    settings = get_settings()
+    user_id = user.id if user else None
+    request = AgentChatRequest(
+        request_id=request_id,
+        message=message,
+        session_id=str(session.id),
+        user_id=user_id,
+        is_authenticated=user is not None,
+        conversation_context=await _resolve(build_conversation_context(db, session.id)),
+        user_preferences=await _resolve(load_user_preferences(db, user_id)),
+        requested_trace_level=settings.CHATBOT_TRACE_LEVEL,
+    )
+    try:
+        return await get_agent_service_client().chat(request)
+    except AgentServiceError as exc:
+        return AgentChatResponse(
+            request_id=request_id,
+            final_response=(
+                "Agent Service chua san sang. Vui long thu lai sau hoac dung pipeline du phong."
+            ),
+            agents_used=["agent_service_error"],
+            suggested_actions=[
+                "Thu lai sau",
+                "Kiem tra backend logs",
+            ],
+            trace_summary=TraceSummary(
+                intent="agent_service_error",
+                agents=["agent_service_error"],
+                latency_ms=0,
+                warnings=[str(exc)],
+            ),
+            full_trace={"mode": "agent_service_error"},
+            readiness={},
+        )
+
+
+def _source_dicts(response: AgentChatResponse) -> list[dict]:
+    if response.full_trace.get("mode") == "legacy":
+        return response.full_trace.get("raw_sources", [])
+    return [source.model_dump(mode="json") for source in response.sources]
+
+
+def _trace_summary_dict(response: AgentChatResponse) -> dict:
+    return response.trace_summary.model_dump(mode="json")
+
+
+def persist_agent_observability(
+    db: AsyncSession,
+    session: ChatSession,
+    user: User | None,
+    response: AgentChatResponse,
+) -> None:
+    db.add(
+        AgentTrace(
+            request_id=response.request_id,
+            session_id=session.id,
+            user_id=user.id if user else None,
+            intent=response.trace_summary.intent,
+            agents_used=response.agents_used,
+            trace_summary_json=_trace_summary_dict(response),
+            full_trace_json=response.full_trace,
+            readiness_json=response.readiness,
+            latency_ms=response.trace_summary.latency_ms,
+            status="success",
+        )
+    )
+
+
+def _memory_proposal_hint(record: MemoryProposal) -> dict:
+    return {
+        "id": record.id,
+        "request_id": record.request_id,
+        "action": record.action,
+        "key": record.key,
+        "value_json": record.value_json,
+        "confidence": record.confidence,
+        "evidence": record.evidence,
+        "requires_user_confirmation": record.requires_user_confirmation,
+        "status": record.status,
+    }
+
+
+async def handle_memory_proposals(
+    db: AsyncSession,
+    session: ChatSession,
+    user: User | None,
+    response: AgentChatResponse,
+) -> list[dict]:
+    if user is None:
+        return []
+
+    hints = []
+    for proposal in response.memory_proposals:
+        status = decide_memory_status(proposal)
+        record = MemoryProposal(
+            user_id=user.id,
+            session_id=session.id,
+            request_id=response.request_id,
+            action=proposal.action,
+            key=proposal.key,
+            value_json={"value": proposal.value},
+            confidence=proposal.confidence,
+            evidence=proposal.evidence,
+            requires_user_confirmation=proposal.requires_user_confirmation,
+            status=status,
+        )
+        db.add(record)
+        if status == "pending":
+            await db.flush()
+            hints.append(_memory_proposal_hint(record))
+        if status == "auto_applied":
+            mark_memory_proposal_resolved(record, status="auto_applied")
+            await upsert_user_preference(
+                db,
+                user_id=user.id,
+                key=proposal.key,
+                value_json={"value": proposal.value},
+                confidence=proposal.confidence,
+                source="agent_proposal",
+            )
+    return hints
+
+
+@router.post("/feedback", response_model=ChatFeedbackResponse)
+async def submit_feedback(
+    body: ChatFeedbackRequest,
+    user: User | None = Depends(get_optional_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Store feedback for a chat response."""
+    result = await db.execute(
+        select(ChatSession).where(ChatSession.id == body.session_id)
+    )
+    session = result.scalar_one_or_none()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.user_id is not None and (user is None or session.user_id != user.id):
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    feedback = ChatFeedback(
+        user_id=user.id if user else None,
+        session_id=body.session_id,
+        request_id=body.request_id,
+        rating=body.rating,
+        issue_type=body.issue_type,
+        comment=body.comment,
+        metadata_json=body.metadata_json or {},
+    )
+    db.add(feedback)
+    await db.flush()
+    return ChatFeedbackResponse(id=feedback.id)
+
+
 @router.post("", response_model=ChatMessageResponse)
 async def send_message(
     body: ChatMessageRequest,
@@ -58,6 +288,8 @@ async def send_message(
     If session_id is not provided, a new session is created.
     The RAG multi-agent pipeline will process the message (Phase 3).
     """
+    request_id = str(uuid.uuid4())
+
     # Get or create session
     if body.session_id:
         result = await db.execute(
@@ -66,13 +298,23 @@ async def send_message(
         session = result.scalar_one_or_none()
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
+        if session.user_id is not None and (user is None or session.user_id != user.id):
+            raise HTTPException(status_code=404, detail="Session not found")
     else:
         session = ChatSession(
             user_id=user.id if user else None,
-            title=body.message[:80],  # auto-title from first message
+            title=body.message[:80],
         )
         db.add(session)
         await db.flush()
+
+    agent_response = await _run_agent_service_pipeline(
+        body.message,
+        db,
+        session,
+        user,
+        request_id,
+    )
 
     # Save user message
     user_msg = ChatMessage(
@@ -81,21 +323,14 @@ async def send_message(
         content=body.message,
     )
     db.add(user_msg)
-
-    try:
-        rag_result = await _run_chatbot_pipeline(body.message, db, session.id)
-        response_text = rag_result["final_response"]
-        agent_used = rag_result["agent_used"]
-        sources = rag_result.get("sources", [])
-        suggested_actions = rag_result.get("suggested_actions", [])
-    except RuntimeError as exc:
-        response_text = (
-            "Chatbot RAG chưa sẵn sàng do cấu hình backend còn thiếu. "
-            f"Chi tiết: {exc}"
-        )
-        agent_used = "multi_agent_error"
-        sources = []
-        suggested_actions = ["Kiem tra backend logs", "Chay script ingest du lieu", "Thu lai sau"]
+    response_text = agent_response.final_response
+    agents_used = agent_response.agents_used
+    agent_used = ", ".join(agents_used) if agents_used else "unknown"
+    sources = _source_dicts(agent_response)
+    suggested_actions = agent_response.suggested_actions
+    trace_summary = _trace_summary_dict(agent_response)
+    persist_agent_observability(db, session, user, agent_response)
+    memory_hints = await handle_memory_proposals(db, session, user, agent_response)
 
     # Save assistant response
     CHAT_REQUESTS.labels(agent=agent_used or "unknown").inc()
@@ -104,7 +339,14 @@ async def send_message(
         role="assistant",
         content=response_text,
         agent_used=agent_used,
-        metadata_json={"sources": sources, "suggested_actions": suggested_actions},
+        metadata_json={
+            "request_id": request_id,
+            "sources": sources,
+            "suggested_actions": suggested_actions,
+            "trace_summary": trace_summary,
+            "agents_used": agents_used,
+            "memory_hints": memory_hints,
+        },
     )
     db.add(assistant_msg)
     await db.flush()
@@ -114,8 +356,12 @@ async def send_message(
         role="assistant",
         content=response_text,
         agent_used=agent_used,
+        agents_used=agents_used,
         sources=sources,
         suggested_actions=suggested_actions,
+        trace_summary=trace_summary,
+        memory_hints=memory_hints,
+        request_id=request_id,
         created_at=assistant_msg.created_at,
     )
 
@@ -185,7 +431,15 @@ async def get_session_history(
                 role=m.role,
                 content=m.content,
                 agent_used=m.agent_used,
-                sources=m.metadata_json.get("sources", []) if m.metadata_json else [],
+                agents_used=(
+                    (m.metadata_json or {}).get("agents_used")
+                    or split_agents(m.agent_used)
+                ),
+                sources=(m.metadata_json or {}).get("sources", []),
+                suggested_actions=(m.metadata_json or {}).get("suggested_actions", []),
+                trace_summary=(m.metadata_json or {}).get("trace_summary"),
+                memory_hints=(m.metadata_json or {}).get("memory_hints"),
+                request_id=(m.metadata_json or {}).get("request_id"),
                 created_at=m.created_at,
             )
             for m in messages

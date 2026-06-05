@@ -6,7 +6,26 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from app.config import get_settings
 from app.database import Base
-from app.models import Article, ChatMessage, ChatSession, Chunk, Listing, Project, User
+from app.models import (
+    AgentLLMCall,
+    AgentRetrievalEvent,
+    AgentTrace,
+    AgentTraceStep,
+    Article,
+    ChatFeedback,
+    ChatMessage,
+    ChatSession,
+    Chunk,
+    EvalRun,
+    EvalScore,
+    Listing,
+    MemoryProposal,
+    PipelineRun,
+    Project,
+    SourceReadiness,
+    User,
+    UserPreference,
+)
 
 config = context.config
 if config.config_file_name is not None:
