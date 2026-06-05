@@ -55,6 +55,6 @@ data/knowledge/ingested/*
 # ─── Agent ────────────────────────────────────────────────────
 .agent/
 
-.batdongsancom-crawler
+batdongsancom-crawler/
 
-.report
+report/
