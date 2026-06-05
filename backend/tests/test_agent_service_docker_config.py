@@ -19,6 +19,13 @@ def test_backend_waits_for_internal_agent_service():
     assert "CHATBOT_AGENT_SERVICE_ENABLED: ${CHATBOT_AGENT_SERVICE_ENABLED:-false}" in compose
 
 
+def test_agent_healthcheck_uses_runtime_secret_expansion():
+    compose = Path("docker-compose.yml").read_text()
+
+    assert "X-Internal-Agent-Key: $$AGENT_INTERNAL_KEY" in compose
+    assert "X-Internal-Agent-Key: ${AGENT_INTERNAL_KEY}" not in compose
+
+
 def test_compose_uses_production_commands_and_images():
     compose = Path("docker-compose.yml").read_text()
 

@@ -74,7 +74,7 @@ services:
     volumes:
       - ./data:/app/data
     healthcheck:
-      test: ["CMD-SHELL", "curl -f -H \"X-Internal-Agent-Key: ${AGENT_INTERNAL_KEY}\" http://localhost:8100/internal/agent/health"]
+      test: ["CMD-SHELL", "curl -f -H \"X-Internal-Agent-Key: $$AGENT_INTERNAL_KEY\" http://localhost:8100/internal/agent/health"]
       interval: 10s
       timeout: 5s
       retries: 12

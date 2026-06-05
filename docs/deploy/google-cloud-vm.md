@@ -37,7 +37,13 @@ Edit `.env` and set strong production values:
 
 Do this before running `docker compose config` or `docker compose up`. The base Compose file requires `.env`, and the agent healthcheck rejects placeholder or development internal keys.
 
-Keep `CHATBOT_AGENT_SERVICE_ENABLED=false` for the first boot so the backend can be smoke-tested before routing chat requests to the internal agent service.
+Generate `AGENT_INTERNAL_KEY` with a shell-safe format such as hex or base64url to avoid shell and environment parsing surprises:
+
+```bash
+openssl rand -hex 32
+```
+
+Keep `CHATBOT_AGENT_SERVICE_ENABLED=false` for the first boot so chat routing remains on the legacy or fallback path while the internal agent service is being smoke-tested. The backend still waits for `agent-service` to become healthy because Compose starts it as part of the deploy stack.
 
 Validate the resolved Compose configuration after replacing placeholders:
 
