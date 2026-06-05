@@ -1,5 +1,4 @@
 services:
-  # ─── PostgreSQL + pgvector ───────────────────────────────────
   postgres:
     image: pgvector/pgvector:pg16
     container_name: realestate_postgres
@@ -17,7 +16,6 @@ services:
       timeout: 5s
       retries: 5
 
-  # ─── Redis ───────────────────────────────────────────────────
   redis:
     image: redis:7-alpine
     container_name: realestate_redis
@@ -31,7 +29,6 @@ services:
       timeout: 5s
       retries: 5
 
-  # ─── Backend API ─────────────────────────────────────────────
   backend:
     build:
       context: ./backend
@@ -44,16 +41,54 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    env_file: .env
+      agent-service:
+        condition: service_healthy
+    env_file:
+      - path: .env
+        required: false
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-admin}:${POSTGRES_PASSWORD:-realestate_secret_2026}@postgres:5432/${POSTGRES_DB:-realestate}
       REDIS_URL: redis://redis:6379/0
+      AGENT_SERVICE_URL: http://agent-service:8100
+      AGENT_INTERNAL_KEY: ${AGENT_INTERNAL_KEY:-dev-agent-internal-key}
+      CHATBOT_AGENT_SERVICE_ENABLED: ${CHATBOT_AGENT_SERVICE_ENABLED:-false}
     volumes:
       - ./backend:/app
       - ./data:/app/data
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
-  # ─── Frontend ────────────────────────────────────────────────
+  agent-service:
+    build:
+      context: .
+      dockerfile: agent_service/Dockerfile
+    container_name: realestate_agent_service
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-admin}:${POSTGRES_PASSWORD:-realestate_secret_2026}@postgres:5432/${POSTGRES_DB:-realestate}
+      REDIS_URL: redis://redis:6379/0
+      AGENT_INTERNAL_KEY: ${AGENT_INTERNAL_KEY:-dev-agent-internal-key}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.0-flash}
+      GEMINI_JUDGE_MODEL: ${GEMINI_JUDGE_MODEL:-gemini-2.0-flash}
+    volumes:
+      - ./agent_service:/app/agent_service
+      - ./backend:/app/backend
+      - ./data:/app/data
+    command: uvicorn agent_service.main:app --host 0.0.0.0 --port 8100 --reload
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f -H \"X-Internal-Agent-Key: ${AGENT_INTERNAL_KEY:-dev-agent-internal-key}\" http://localhost:8100/internal/agent/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
   frontend:
     build:
       context: ./frontend
@@ -64,7 +99,8 @@ services:
     depends_on:
       - backend
     environment:
-      NEXT_PUBLIC_API_URL: http://backend:8000/api/v1
+      NEXT_PUBLIC_API_URL: /api/v1
+      INTERNAL_API_URL: http://backend:8000
     volumes:
       - ./frontend:/app
       - /app/node_modules
