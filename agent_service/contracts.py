@@ -1,20 +1,90 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
 
 class AgentSource(BaseModel):
     type: str
-    id: int | None = None
+    domain: str | None = None
+    id: str | int | None = None
     product_id: str | None = None
     title: str | None = None
     url: str | None = None
-    location: str | None = None
-    citation: dict[str, Any] | None = None
+    snippet: str | None = None
+    location: dict[str, Any] | str | None = None
+    citation: dict[str, Any] | str | None = None
     score: float | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class StructuredWarning(BaseModel):
+    code: str
+    domain: str | None = None
+    message: str
+    retryable: bool = False
+    details: dict[str, Any] = Field(default_factory=dict)
+
+
+class MatchedChunk(BaseModel):
+    id: str | None = None
+    chunk_type: str | None = None
+    text: str | None = None
+    vector_distance: float | None = None
+    semantic_score: float | None = None
+    rerank_score: float | None = None
+    final_score: float | None = None
+
+
+class Evidence(BaseModel):
+    evidence_id: str
+    retrieval_task_id: str
+    domain: Literal["property", "project", "news", "legal", "market"]
+    source_type: Literal["listing", "project", "article", "market_metric"]
+    source_identity: str
+    record: dict[str, Any] = Field(default_factory=dict)
+    facts: dict[str, Any] = Field(default_factory=dict)
+    source: AgentSource
+    matched_chunks: list[MatchedChunk] = Field(default_factory=list)
+    retrieved_for: list[str] = Field(default_factory=list)
+    assigned_to: list[str] = Field(default_factory=list)
+    warnings: list[StructuredWarning] = Field(default_factory=list)
+
+
+class RetrievalTask(BaseModel):
+    task_id: str
+    domain: Literal["property", "project", "news", "legal", "market"]
+    tool: str
+    query: str
+    filters: dict[str, Any] = Field(default_factory=dict)
+    retrieved_for: list[str] = Field(default_factory=list)
+    depends_on: list[str] = Field(default_factory=list)
+    dependency_mode: Literal["required", "optional_context", "none"] = "none"
+    top_k: int = 20
+    rerank_top_k: int | None = 5
+    timeout_ms: int | None = None
+
+
+class RetrievalResult(BaseModel):
+    task_id: str
+    status: Literal["completed", "empty", "failed", "skipped"]
+    evidence_ids: list[str] = Field(default_factory=list)
+    duration_ms: int = 0
+    warnings: list[StructuredWarning] = Field(default_factory=list)
+    skip_reason: str | None = None
+    error: dict[str, Any] | None = None
+
+
+class SpecialistResult(BaseModel):
+    agent_name: str
+    status: Literal["completed", "partial", "no_evidence", "failed", "skipped"]
+    content: str
+    evidence_ids_used: list[str] = Field(default_factory=list)
+    confidence: float | str | None = None
+    warnings: list[StructuredWarning] = Field(default_factory=list)
+    missing_evidence: list[str] = Field(default_factory=list)
+    sources: list[AgentSource] = Field(default_factory=list)
 
 
 class ConversationContextItem(BaseModel):
@@ -41,7 +111,7 @@ class TraceSummary(BaseModel):
     agents: list[str] = Field(default_factory=list)
     source_count: int = 0
     latency_ms: float = 0.0
-    warnings: list[str] = Field(default_factory=list)
+    warnings: list[str | StructuredWarning] = Field(default_factory=list)
 
 
 class MemoryProposal(BaseModel):
