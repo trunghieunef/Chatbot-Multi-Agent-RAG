@@ -1,6 +1,6 @@
 import pytest
 
-from agent_service.contracts import AgentChatRequest, AgentSource, StructuredWarning
+from agent_service.contracts import AgentChatRequest, AgentSource, Evidence, StructuredWarning
 from agent_service.graph import nodes
 from agent_service.graph.nodes import _strip_accents
 from agent_service.graph.workflow import run_agent_graph
@@ -264,3 +264,51 @@ async def test_retrieval_planner_node_uses_single_node_with_testable_functions(m
     assert called == {"build": "req-planner-node", "execute": 0}
     assert result["evidence_for_agent"] == {"property_search": []}
     assert result["trace_steps"][-1]["step_name"] == "retrieval_planner"
+
+
+@pytest.mark.asyncio
+async def test_specialist_agents_node_resolves_assigned_evidence(monkeypatch):
+    seen = {}
+
+    async def fake_property_agent(**kwargs):
+        seen["evidence"] = kwargs["evidence"]
+        return {
+            "agent_name": "property_search",
+            "status": "completed",
+            "content": "ok",
+            "evidence_ids_used": ["ev_property_1"],
+            "warnings": [],
+            "sources": [],
+        }
+
+    monkeypatch.setattr(nodes, "run_property_agent", fake_property_agent)
+    evidence = Evidence(
+        evidence_id="ev_property_1",
+        retrieval_task_id="search_property_1",
+        domain="property",
+        source_type="listing",
+        source_identity="listing:p-1",
+        record={},
+        facts={"title": "Can ho Quan 7"},
+        source=AgentSource(type="listing", domain="property", id="listing:p-1"),
+        assigned_to=["property_search"],
+    )
+    state = {
+        "request": AgentChatRequest(
+            request_id="req-specialist-evidence",
+            message="Tim can ho Quan 7",
+            session_id="session-1",
+        ),
+        "agents_to_run": ["property_search"],
+        "evidence_by_id": {"ev_property_1": evidence},
+        "evidence_for_agent": {"property_search": ["ev_property_1"]},
+        "readiness": {},
+        "trace_steps": [],
+    }
+
+    result = await nodes.specialist_agents_node(state)
+
+    assert seen["evidence"][0]["evidence_id"] == "ev_property_1"
+    assert result["agent_results"]["property_search"]["evidence_ids_used"] == [
+        "ev_property_1"
+    ]

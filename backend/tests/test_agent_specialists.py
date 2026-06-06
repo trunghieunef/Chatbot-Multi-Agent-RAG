@@ -11,9 +11,39 @@ from agent_service.agents.specialists import (
     run_project_agent,
     run_property_agent,
 )
-from agent_service.contracts import AgentChatRequest
+from agent_service.contracts import AgentChatRequest, AgentSource, Evidence, MatchedChunk
 from agent_service.graph.nodes import synthesizer_node
 from agent_service.llm.gemini import GeminiClient
+
+
+def _listing_evidence(evidence_id="ev_listing_1"):
+    return Evidence(
+        evidence_id=evidence_id,
+        retrieval_task_id="search_property_1",
+        domain="property",
+        source_type="listing",
+        source_identity="listing:p-1",
+        record={},
+        facts={
+            "title": "Can ho Quan 7",
+            "price_text": "4.8 ty",
+            "area_text": "75 m2",
+            "location": {"district": "Quan 7", "city": "Ho Chi Minh"},
+            "legal_status_claimed": "So hong",
+        },
+        source=AgentSource(type="listing", domain="property", id="listing:p-1"),
+        matched_chunks=[
+            MatchedChunk(text="Can ho Quan 7 gia 4.8 ty", final_score=0.91)
+        ],
+        retrieved_for=["property_search"],
+        assigned_to=["property_search", "investment_advisor"],
+    ).model_dump(mode="python")
+
+
+def _warning_code(warning):
+    if hasattr(warning, "code"):
+        return warning.code
+    return warning.get("code")
 
 
 @pytest.mark.asyncio
@@ -101,7 +131,67 @@ async def test_property_agent_requires_evidence_for_listing_claims():
     assert result["agent_name"] == "property_search"
     assert "Can ho Quan 7" in result["content"]
     assert result["sources"][0]["type"] == "listing"
-    assert result["confidence"] >= 0.7
+    assert result["confidence"] == "high"
+
+
+@pytest.mark.asyncio
+async def test_property_agent_reports_no_evidence_without_fake_listing():
+    result = await run_property_agent(
+        query="Tim can ho Quan 7",
+        evidence=[],
+        preferences={},
+        readiness={"listings": {"status": "ready"}},
+    )
+
+    assert result["status"] == "no_evidence"
+    assert result["evidence_ids_used"] == []
+    assert "Can ho Quan 7 - 4.8 ty" not in result["content"]
+
+
+@pytest.mark.asyncio
+async def test_property_agent_uses_evidence_ids_from_assigned_evidence():
+    result = await run_property_agent(
+        query="Tim can ho Quan 7",
+        evidence=[_listing_evidence()],
+        preferences={},
+        readiness={"listings": {"status": "ready"}},
+    )
+
+    assert result["status"] == "completed"
+    assert result["evidence_ids_used"] == ["ev_listing_1"]
+    assert "Can ho Quan 7" in result["content"]
+
+
+@pytest.mark.asyncio
+async def test_legal_agent_does_not_use_listing_legal_claim_as_legal_proof():
+    result = await run_legal_agent(
+        query="phap ly on khong",
+        evidence=[_listing_evidence()],
+        preferences={},
+        readiness={"legal": {"status": "ready"}},
+    )
+
+    assert result["status"] == "no_evidence"
+    assert result["evidence_ids_used"] == []
+    assert "du dieu kien phap ly" not in result["content"].lower()
+
+
+@pytest.mark.asyncio
+async def test_investment_agent_warns_when_market_metric_missing():
+    result = await run_investment_agent(
+        query="dau tu can ho nay",
+        evidence=[_listing_evidence()],
+        preferences={},
+        readiness={"listings": {"status": "ready"}},
+    )
+
+    assert result["status"] == "partial"
+    assert result["evidence_ids_used"] == ["ev_listing_1"]
+    assert any(
+        _warning_code(warning) == "investment_market_data_missing"
+        for warning in result["warnings"]
+    )
+    assert "ROI" not in result["content"]
 
 
 @pytest.mark.asyncio

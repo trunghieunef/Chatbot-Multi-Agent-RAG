@@ -261,7 +261,8 @@ async def retrieval_planner_node(state: AgentGraphState) -> AgentGraphState:
 async def specialist_agents_node(state: AgentGraphState) -> AgentGraphState:
     start_time = time.perf_counter()
     request = state["request"]
-    evidence = state.get("evidence", {})
+    evidence_by_id = state.get("evidence_by_id", {})
+    evidence_for_agent = state.get("evidence_for_agent", {})
     runners = {
         "property_search": run_property_agent,
         "project_agent": run_project_agent,
@@ -275,9 +276,14 @@ async def specialist_agents_node(state: AgentGraphState) -> AgentGraphState:
         runner = runners.get(agent)
         if runner is None:
             continue
+        assigned_evidence = [
+            evidence_by_id[evidence_id].model_dump(mode="python")
+            for evidence_id in evidence_for_agent.get(agent, [])
+            if evidence_id in evidence_by_id
+        ]
         agent_results[agent] = await runner(
             query=request.message,
-            evidence=evidence.get(agent, []),
+            evidence=assigned_evidence,
             preferences=request.user_preferences,
             readiness=state.get("readiness", {}),
         )
