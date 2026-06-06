@@ -516,3 +516,113 @@ async def test_specialist_agents_node_resolves_assigned_evidence(monkeypatch):
     assert result["agent_results"]["property_search"]["evidence_ids_used"] == [
         "ev_property_1"
     ]
+
+
+@pytest.mark.asyncio
+async def test_mixed_property_legal_investment_query_uses_shared_evidence(monkeypatch):
+    calls = []
+
+    async def fake_run_hybrid_tool(**kwargs):
+        calls.append(kwargs["tool_name"])
+        if kwargs["parent_type"] == "listing":
+            return [
+                {
+                    "id": 1,
+                    "product_id": "p-q7",
+                    "title": "Can ho 2PN Quan 7",
+                    "price": 4.8,
+                    "price_text": "4.8 ty",
+                    "area": 75,
+                    "area_text": "75 m2",
+                    "district": "Quan 7",
+                    "city": "Ho Chi Minh",
+                    "legal_status": "So hong",
+                    "url": "https://example.test/listing/p-q7",
+                    "matched_chunk": {
+                        "id": 10,
+                        "chunk_type": "overview",
+                        "text": "Can ho 2PN Quan 7 duoi 5 ty",
+                        "distance": 0.2,
+                        "rerank_score": 0.93,
+                    },
+                }
+            ]
+        if kwargs["parent_type"] == "article":
+            assert kwargs["filters"] == {"category": "legal"}
+            return [
+                {
+                    "id": 7,
+                    "title": "Dieu kien chuyen nhuong can ho",
+                    "category": "legal",
+                    "url": "legal://transfer",
+                    "citation": {"doc_slug": "luat-nha-o", "dieu_number": "32"},
+                    "matched_chunk": {
+                        "id": 70,
+                        "chunk_type": "legal_section",
+                        "text": "Quy dinh ve dieu kien chuyen nhuong.",
+                        "distance": 0.25,
+                        "rerank_score": 0.88,
+                    },
+                }
+            ]
+        return []
+
+    async def fake_readiness_snapshot():
+        return {
+            "listings": {"status": "ready", "parent_count": 1, "chunk_count": 1},
+            "legal": {"status": "ready", "parent_count": 1, "chunk_count": 1},
+            "projects": {"status": "not_ready", "parent_count": 0, "chunk_count": 0},
+            "news": {"status": "not_ready", "parent_count": 0, "chunk_count": 0},
+        }
+
+    monkeypatch.setattr(
+        "agent_service.graph.retrieval_planner._run_hybrid_tool",
+        fake_run_hybrid_tool,
+    )
+    monkeypatch.setattr(
+        nodes,
+        "build_readiness_snapshot",
+        fake_readiness_snapshot,
+    )
+
+    request = AgentChatRequest(
+        request_id="req-mixed-acceptance",
+        message=(
+            "Tim can ho Quan 7 duoi 5 ty, phap ly on va co tiem nang dau tu khong?"
+        ),
+        session_id="session-1",
+    )
+
+    response = await run_agent_graph(request)
+
+    assert set(response.agents_used) >= {
+        "property_search",
+        "legal_advisor",
+        "investment_advisor",
+    }
+    assert calls.count("search_listings") == 1
+    assert calls.count("search_articles") == 1
+    trace = response.full_trace
+    property_ids = trace["evidence_for_agent"]["property_search"]
+    investment_ids = trace["evidence_for_agent"]["investment_advisor"]
+    assert property_ids[0] in investment_ids
+    warning_codes = [
+        warning.code
+        if hasattr(warning, "code")
+        else warning["code"]
+        if isinstance(warning, dict)
+        else warning
+        for warning in response.trace_summary.warnings
+    ]
+    assert "investment_market_data_missing" in warning_codes
+    assert "du dieu kien phap ly" not in response.final_response.lower()
+    source_ids = [source.id for source in response.sources]
+    used_ids = set()
+    for result in trace["agent_results"].values():
+        used_ids.update(result.get("evidence_ids_used", []))
+    source_identities = {
+        trace["evidence"][evidence_id]["source_identity"]
+        for evidence_id in used_ids
+        if evidence_id in trace["evidence"]
+    }
+    assert set(source_ids).issubset(source_identities)
