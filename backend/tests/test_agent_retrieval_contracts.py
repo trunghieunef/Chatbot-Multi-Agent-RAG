@@ -113,3 +113,18 @@ def test_retrieval_task_result_and_specialist_result_shapes():
     assert result.status == "skipped"
     assert result.warnings[0].code == "source_not_ready"
     assert specialist.status == "no_evidence"
+
+
+def test_specialist_result_accepts_current_specialist_output_shape():
+    specialist = SpecialistResult.model_validate(
+        {
+            "agent_name": "property_search",
+            "content": "No listing evidence yet.",
+            "warnings": ["no_listing_evidence"],
+            "sources": [],
+        }
+    )
+
+    assert specialist.status == "completed"
+    assert specialist.evidence_ids_used == []
+    assert specialist.warnings == ["no_listing_evidence"]

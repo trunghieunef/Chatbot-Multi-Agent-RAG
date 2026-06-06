@@ -78,11 +78,13 @@ class RetrievalResult(BaseModel):
 
 class SpecialistResult(BaseModel):
     agent_name: str
-    status: Literal["completed", "partial", "no_evidence", "failed", "skipped"]
+    status: Literal["completed", "partial", "no_evidence", "failed", "skipped"] = (
+        "completed"
+    )
     content: str
     evidence_ids_used: list[str] = Field(default_factory=list)
     confidence: float | str | None = None
-    warnings: list[StructuredWarning] = Field(default_factory=list)
+    warnings: list[str | StructuredWarning] = Field(default_factory=list)
     missing_evidence: list[str] = Field(default_factory=list)
     sources: list[AgentSource] = Field(default_factory=list)
 
