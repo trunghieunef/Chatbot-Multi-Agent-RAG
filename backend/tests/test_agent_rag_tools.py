@@ -82,6 +82,32 @@ async def test_run_hybrid_tool_passes_custom_limits(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_search_listings_accepts_task_limits(monkeypatch):
+    called = {}
+
+    async def fake_run_hybrid_tool(**kwargs):
+        called["top_k"] = kwargs["top_k"]
+        called["rerank_to"] = kwargs["rerank_to"]
+        return []
+
+    monkeypatch.setattr(
+        "agent_service.tools.retrieval._run_hybrid_tool",
+        fake_run_hybrid_tool,
+    )
+    trace = RetrievalTrace(request_id="req-limits")
+
+    await search_listings(
+        "Tim nha",
+        {"district": "Quan 7"},
+        trace,
+        top_k=9,
+        rerank_to=4,
+    )
+
+    assert called == {"top_k": 9, "rerank_to": 4}
+
+
+@pytest.mark.asyncio
 async def test_count_source_returns_not_ready_for_unsupported_source():
     result = await count_source("unsupported")
 

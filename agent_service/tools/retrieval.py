@@ -83,6 +83,9 @@ async def search_listings(
     query: str,
     filters: dict[str, Any] | None,
     trace: RetrievalTrace,
+    *,
+    top_k: int = 20,
+    rerank_to: int = 5,
 ) -> list[dict[str, Any]]:
     return await _run_hybrid_tool(
         query=query,
@@ -90,6 +93,8 @@ async def search_listings(
         trace=trace,
         tool_name="search_listings",
         parent_type="listing",
+        top_k=top_k,
+        rerank_to=rerank_to,
     )
 
 
@@ -97,6 +102,9 @@ async def search_projects(
     query: str,
     filters: dict[str, Any] | None,
     trace: RetrievalTrace,
+    *,
+    top_k: int = 20,
+    rerank_to: int = 5,
 ) -> list[dict[str, Any]]:
     return await _run_hybrid_tool(
         query=query,
@@ -104,6 +112,8 @@ async def search_projects(
         trace=trace,
         tool_name="search_projects",
         parent_type="project",
+        top_k=top_k,
+        rerank_to=rerank_to,
     )
 
 
@@ -111,6 +121,9 @@ async def search_articles(
     query: str,
     filters: dict[str, Any] | None,
     trace: RetrievalTrace,
+    *,
+    top_k: int = 20,
+    rerank_to: int = 5,
 ) -> list[dict[str, Any]]:
     return await _run_hybrid_tool(
         query=query,
@@ -118,4 +131,6 @@ async def search_articles(
         trace=trace,
         tool_name="search_articles",
         parent_type="article",
+        top_k=top_k,
+        rerank_to=rerank_to,
     )

@@ -1,11 +1,20 @@
 from __future__ import annotations
 
 import re
+import time
 import unicodedata
 from typing import Any
 
-from agent_service.contracts import RetrievalTask
+from agent_service.contracts import (
+    AgentSource,
+    Evidence,
+    MatchedChunk,
+    RetrievalResult,
+    RetrievalTask,
+    StructuredWarning,
+)
 from agent_service.graph.state import AgentGraphState
+from agent_service.tools.retrieval import RetrievalTrace, _run_hybrid_tool
 
 
 DOMAIN_SOURCE = {
@@ -191,3 +200,325 @@ def build_retrieval_plan(state: AgentGraphState) -> list[RetrievalTask]:
         )
 
     return plan
+
+
+def structured_warning(
+    *,
+    code: str,
+    domain: str | None,
+    message: str,
+    retryable: bool = False,
+    details: dict[str, Any] | None = None,
+) -> StructuredWarning:
+    return StructuredWarning(
+        code=code,
+        domain=domain,
+        message=message,
+        retryable=retryable,
+        details=details or {},
+    )
+
+
+def _stable_source_identity(
+    domain: str,
+    source_type: str,
+    record: dict[str, Any],
+) -> str:
+    if source_type == "listing":
+        key = record.get("product_id") or record.get("id")
+    elif source_type == "project":
+        key = record.get("slug") or record.get("url") or record.get("id")
+    elif source_type == "article":
+        key = record.get("url") or record.get("id")
+    else:
+        key = record.get("source_identity") or record.get("id") or domain
+    return f"{source_type}:{key}"
+
+
+def _location_fact(record: dict[str, Any]) -> dict[str, Any] | None:
+    location = {
+        "ward": record.get("ward"),
+        "district": record.get("district"),
+        "city": record.get("city"),
+        "address": record.get("address") or record.get("location"),
+    }
+    clean = {key: value for key, value in location.items() if value}
+    return clean or None
+
+
+def _score_from_chunk(raw_chunk: dict[str, Any]) -> tuple[float | None, float | None]:
+    rerank_score = raw_chunk.get("rerank_score")
+    if rerank_score is not None:
+        score = float(rerank_score)
+        return score, score
+    return None, None
+
+
+def _matched_chunks_from_record(record: dict[str, Any]) -> list[MatchedChunk]:
+    raw_chunks = record.get("matched_chunks")
+    if not raw_chunks and record.get("matched_chunk"):
+        raw_chunks = [record["matched_chunk"]]
+
+    chunks: list[MatchedChunk] = []
+    for index, raw_chunk in enumerate(raw_chunks or []):
+        if not isinstance(raw_chunk, dict):
+            continue
+        rerank_score, final_score = _score_from_chunk(raw_chunk)
+        chunks.append(
+            MatchedChunk(
+                id=str(raw_chunk.get("id") or f"chunk:{index}"),
+                chunk_type=raw_chunk.get("chunk_type"),
+                text=raw_chunk.get("text"),
+                vector_distance=(
+                    float(raw_chunk["distance"])
+                    if raw_chunk.get("distance") is not None
+                    else None
+                ),
+                semantic_score=None,
+                rerank_score=rerank_score,
+                final_score=final_score,
+            )
+        )
+    return chunks
+
+
+def _source_from_normalized(
+    *,
+    domain: str,
+    source_type: str,
+    source_identity: str,
+    record: dict[str, Any],
+    chunks: list[MatchedChunk],
+) -> AgentSource:
+    title = record.get("title") or record.get("name")
+    snippet = next((chunk.text for chunk in chunks if chunk.text), None)
+    score = next(
+        (chunk.final_score for chunk in chunks if chunk.final_score is not None),
+        None,
+    )
+    return AgentSource(
+        type=source_type,
+        domain=domain,
+        id=source_identity,
+        product_id=record.get("product_id"),
+        title=title,
+        url=record.get("url"),
+        snippet=snippet,
+        location=_location_fact(record),
+        citation=record.get("citation"),
+        score=score,
+        metadata={
+            key: value
+            for key, value in {
+                "source_identity": source_identity,
+                "price_text": record.get("price_text") or record.get("price_range"),
+                "area_text": record.get("area_text") or record.get("area_range"),
+                "category": record.get("category"),
+            }.items()
+            if value is not None
+        },
+    )
+
+
+def _facts_from_record(
+    domain: str,
+    source_type: str,
+    record: dict[str, Any],
+) -> dict[str, Any]:
+    facts = {
+        "title": record.get("title") or record.get("name"),
+        "price": record.get("price"),
+        "price_text": record.get("price_text") or record.get("price_range"),
+        "area": record.get("area"),
+        "area_text": record.get("area_text") or record.get("area_range"),
+        "price_per_m2": record.get("price_per_m2"),
+        "location": _location_fact(record),
+        "category": record.get("category"),
+        "legal_status_claimed": record.get("legal_status"),
+    }
+    return {key: value for key, value in facts.items() if value is not None}
+
+
+def normalize_record_to_evidence(
+    *,
+    record: dict[str, Any],
+    task: RetrievalTask,
+    evidence_index: int,
+    assigned_to: list[str],
+) -> Evidence:
+    source_type = {
+        "property": "listing",
+        "project": "project",
+        "news": "article",
+        "legal": "article",
+        "market": "market_metric",
+    }[task.domain]
+    source_identity = _stable_source_identity(task.domain, source_type, record)
+    chunks = _matched_chunks_from_record(record)
+    source = _source_from_normalized(
+        domain=task.domain,
+        source_type=source_type,
+        source_identity=source_identity,
+        record=record,
+        chunks=chunks,
+    )
+    return Evidence(
+        evidence_id=f"ev_{task.task_id}_{evidence_index}",
+        retrieval_task_id=task.task_id,
+        domain=task.domain,
+        source_type=source_type,
+        source_identity=source_identity,
+        record=record,
+        facts=_facts_from_record(task.domain, source_type, record),
+        source=source,
+        matched_chunks=chunks,
+        retrieved_for=task.retrieved_for,
+        assigned_to=assigned_to,
+        warnings=[],
+    )
+
+
+def _assigned_agents_for_task(
+    task: RetrievalTask,
+    agents_to_run: list[str],
+) -> list[str]:
+    assigned = list(task.retrieved_for)
+    if task.domain == "property" and "investment_advisor" in agents_to_run:
+        assigned.append("investment_advisor")
+    if task.domain in {"project", "news", "market"} and "investment_advisor" in agents_to_run:
+        assigned.append("investment_advisor")
+    return list(dict.fromkeys(assigned))
+
+
+def _parent_type_for_task(task: RetrievalTask) -> str:
+    return {
+        "property": "listing",
+        "project": "project",
+        "news": "article",
+        "legal": "article",
+    }[task.domain]
+
+
+async def execute_retrieval_plan(
+    plan: list[RetrievalTask],
+    state: AgentGraphState,
+) -> dict[str, Any]:
+    started_all = time.perf_counter()
+    request = state["request"]
+    agents_to_run = list(state.get("agents_to_run", []))
+    evidence_by_id: dict[str, Evidence] = {}
+    evidence_for_agent: dict[str, list[str]] = {agent: [] for agent in agents_to_run}
+    retrieval_results: dict[str, RetrievalResult] = {}
+    warnings: list[StructuredWarning] = []
+    trace_events: list[dict[str, Any]] = [
+        {
+            "event": "retrieval_plan_created",
+            "task_count": len(plan),
+            "task_ids": [task.task_id for task in plan],
+        }
+    ]
+
+    for task in plan:
+        task_started = time.perf_counter()
+        trace_events.append({"event": "retrieval_task_started", "task_id": task.task_id})
+        try:
+            if task.domain == "market":
+                records: list[dict[str, Any]] = []
+            else:
+                trace = RetrievalTrace(request_id=request.request_id)
+                records = await _run_hybrid_tool(
+                    query=task.query,
+                    filters=task.filters,
+                    trace=trace,
+                    tool_name=task.tool,
+                    parent_type=_parent_type_for_task(task),
+                    top_k=task.top_k,
+                    rerank_to=task.rerank_top_k or task.top_k,
+                )
+        except Exception as exc:
+            warning = structured_warning(
+                code="retrieval_error",
+                domain=task.domain,
+                message=f"Retrieval task {task.task_id} failed.",
+                retryable=True,
+                details={"error": str(exc)},
+            )
+            warnings.append(warning)
+            retrieval_results[task.task_id] = RetrievalResult(
+                task_id=task.task_id,
+                status="failed",
+                evidence_ids=[],
+                duration_ms=round((time.perf_counter() - task_started) * 1000),
+                warnings=[warning],
+                error={"type": exc.__class__.__name__, "message": str(exc)},
+            )
+            trace_events.append(
+                {"event": "retrieval_task_failed", "task_id": task.task_id}
+            )
+            continue
+
+        if not records:
+            warning = structured_warning(
+                code="no_evidence",
+                domain=task.domain,
+                message=f"No evidence found for {task.domain}.",
+                retryable=False,
+                details={"task_id": task.task_id},
+            )
+            warnings.append(warning)
+            retrieval_results[task.task_id] = RetrievalResult(
+                task_id=task.task_id,
+                status="empty",
+                evidence_ids=[],
+                duration_ms=round((time.perf_counter() - task_started) * 1000),
+                warnings=[warning],
+            )
+            trace_events.append({"event": "retrieval_task_empty", "task_id": task.task_id})
+            continue
+
+        assigned_to = _assigned_agents_for_task(task, agents_to_run)
+        evidence_ids: list[str] = []
+        for index, record in enumerate(records, start=1):
+            evidence = normalize_record_to_evidence(
+                record=record,
+                task=task,
+                evidence_index=index,
+                assigned_to=assigned_to,
+            )
+            evidence_by_id[evidence.evidence_id] = evidence
+            evidence_ids.append(evidence.evidence_id)
+            for agent in assigned_to:
+                evidence_for_agent.setdefault(agent, []).append(evidence.evidence_id)
+
+        retrieval_results[task.task_id] = RetrievalResult(
+            task_id=task.task_id,
+            status="completed",
+            evidence_ids=evidence_ids,
+            duration_ms=round((time.perf_counter() - task_started) * 1000),
+            warnings=[],
+        )
+        trace_events.append(
+            {
+                "event": "retrieval_task_completed",
+                "task_id": task.task_id,
+                "evidence_ids": evidence_ids,
+            }
+        )
+        trace_events.append(
+            {
+                "event": "evidence_assigned",
+                "task_id": task.task_id,
+                "assigned_to": assigned_to,
+                "evidence_ids": evidence_ids,
+            }
+        )
+
+    return {
+        "retrieval_plan": plan,
+        "retrieval_results": retrieval_results,
+        "evidence_by_id": evidence_by_id,
+        "evidence_for_agent": evidence_for_agent,
+        "retrieval_events": trace_events,
+        "warnings": [*state.get("warnings", []), *warnings],
+        "retrieval_duration_ms": round((time.perf_counter() - started_all) * 1000),
+    }
