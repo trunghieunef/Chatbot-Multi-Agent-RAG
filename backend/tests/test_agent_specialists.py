@@ -267,7 +267,7 @@ async def test_investment_agent_includes_financial_disclaimer():
     assert "khong phai loi khuyen tai chinh" in result["content"].lower()
 
 
-def test_synthesizer_node_deduplicates_warnings_and_sources():
+def test_synthesizer_node_deduplicates_warnings_and_ignores_unvalidated_sources():
     state = {
         "request": AgentChatRequest(
             request_id="req-1",
@@ -329,23 +329,4 @@ def test_synthesizer_node_deduplicates_warnings_and_sources():
         "listing_warning",
         "project_warning",
     ]
-    assert [
-        source.model_dump(mode="json", exclude_none=True) for source in result["sources"]
-    ] == [
-        {
-            "type": "listing",
-            "id": 1,
-            "product_id": "p-1",
-            "title": "Can ho A",
-            "url": "https://example.test/1",
-            "metadata": {},
-        },
-        {
-            "type": "project",
-            "id": 2,
-            "product_id": "p-2",
-            "title": "Du an B",
-            "url": "https://example.test/2",
-            "metadata": {},
-        },
-    ]
+    assert result["sources"] == []

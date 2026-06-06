@@ -1,6 +1,12 @@
 import pytest
 
-from agent_service.contracts import AgentChatRequest, AgentSource, Evidence, StructuredWarning
+from agent_service.contracts import (
+    AgentChatRequest,
+    AgentSource,
+    Evidence,
+    MatchedChunk,
+    StructuredWarning,
+)
 from agent_service.graph import nodes
 from agent_service.graph.nodes import _strip_accents
 from agent_service.graph.workflow import run_agent_graph
@@ -163,6 +169,124 @@ def test_safety_validator_accepts_intentional_no_source_warnings(agent, warning)
     ]
     assert warning.code in codes
     assert "final_response_missing_sources" not in codes
+
+
+def test_synthesizer_exposes_only_valid_used_evidence():
+    valid_source = AgentSource(
+        type="listing",
+        domain="property",
+        id="listing:p-1",
+        title="Can ho A",
+        metadata={"source_identity": "listing:p-1"},
+    )
+    unused_source = AgentSource(
+        type="listing",
+        domain="property",
+        id="listing:p-2",
+        title="Can ho B",
+        metadata={"source_identity": "listing:p-2"},
+    )
+    evidence_by_id = {
+        "ev_valid": Evidence(
+            evidence_id="ev_valid",
+            retrieval_task_id="search_property_1",
+            domain="property",
+            source_type="listing",
+            source_identity="listing:p-1",
+            record={},
+            facts={"title": "Can ho A"},
+            source=valid_source,
+            matched_chunks=[MatchedChunk(text="chunk A")],
+            retrieved_for=["property_search"],
+            assigned_to=["property_search"],
+        ),
+        "ev_unused": Evidence(
+            evidence_id="ev_unused",
+            retrieval_task_id="search_property_1",
+            domain="property",
+            source_type="listing",
+            source_identity="listing:p-2",
+            record={},
+            facts={"title": "Can ho B"},
+            source=unused_source,
+            retrieved_for=["property_search"],
+            assigned_to=["property_search"],
+        ),
+    }
+    state = {
+        "request": AgentChatRequest(
+            request_id="req-synth-valid",
+            message="Tim can ho",
+            session_id="session-1",
+        ),
+        "agents_to_run": ["property_search"],
+        "evidence_by_id": evidence_by_id,
+        "evidence_for_agent": {"property_search": ["ev_valid", "ev_unused"]},
+        "agent_results": {
+            "property_search": {
+                "content": "Can ho A phu hop.",
+                "evidence_ids_used": ["ev_valid", "ev_missing"],
+                "warnings": [],
+                "sources": [],
+            }
+        },
+        "trace_steps": [],
+        "warnings": [],
+    }
+
+    result = nodes.synthesizer_node(state)
+
+    assert [source.id for source in result["sources"]] == ["listing:p-1"]
+    warning_codes = [
+        warning.code if hasattr(warning, "code") else warning.get("code")
+        for warning in result["warnings"]
+    ]
+    assert "invalid_evidence_reference" in warning_codes
+    assert result["trace_steps"][-1]["output"]["used_evidence_ids"] == ["ev_valid"]
+
+
+def test_synthesizer_rejects_unassigned_evidence_id():
+    source = AgentSource(type="article", domain="legal", id="article:1")
+    evidence = Evidence(
+        evidence_id="ev_legal",
+        retrieval_task_id="search_legal_1",
+        domain="legal",
+        source_type="article",
+        source_identity="article:1",
+        record={},
+        facts={},
+        source=source,
+        assigned_to=["legal_advisor"],
+    )
+    state = {
+        "request": AgentChatRequest(
+            request_id="req-synth-unassigned",
+            message="Tim can ho",
+            session_id="session-1",
+        ),
+        "agents_to_run": ["property_search"],
+        "evidence_by_id": {"ev_legal": evidence},
+        "evidence_for_agent": {"property_search": []},
+        "agent_results": {
+            "property_search": {
+                "content": "Bad citation.",
+                "evidence_ids_used": ["ev_legal"],
+                "warnings": [],
+                "sources": [],
+            }
+        },
+        "trace_steps": [],
+        "warnings": [],
+    }
+
+    result = nodes.synthesizer_node(state)
+
+    assert result["sources"] == []
+    assert any(
+        (warning.code if hasattr(warning, "code") else warning.get("code"))
+        == "invalid_evidence_reference"
+        for warning in result["warnings"]
+    )
 
 
 def test_synthesizer_dedupes_structured_warnings_without_losing_objects():

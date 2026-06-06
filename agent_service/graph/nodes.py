@@ -13,7 +13,12 @@ from agent_service.agents.specialists import (
     run_project_agent,
     run_property_agent,
 )
-from agent_service.contracts import AgentSource, MemoryProposal, StructuredWarning
+from agent_service.contracts import (
+    AgentSource,
+    Evidence,
+    MemoryProposal,
+    StructuredWarning,
+)
 from agent_service.graph.retrieval_planner import (
     build_retrieval_plan,
     execute_retrieval_plan,
@@ -180,6 +185,22 @@ def _dedupe_sources(sources: list[AgentSource]) -> list[AgentSource]:
     return unique
 
 
+def _warning(
+    code: str,
+    domain: str | None,
+    message: str,
+    *,
+    details: dict[str, Any] | None = None,
+) -> StructuredWarning:
+    return StructuredWarning(
+        code=code,
+        domain=domain,
+        message=message,
+        retryable=False,
+        details=details or {},
+    )
+
+
 def context_builder(state: AgentGraphState) -> AgentGraphState:
     start_time = time.perf_counter()
     request = state["request"]
@@ -301,11 +322,70 @@ async def specialist_agents_node(state: AgentGraphState) -> AgentGraphState:
     }
 
 
+def _is_evidence_assigned_to_agent(
+    *,
+    evidence_id: str,
+    agent: str,
+    evidence: Evidence,
+    evidence_for_agent: dict[str, list[str]],
+) -> bool:
+    return (
+        evidence_id in evidence_for_agent.get(agent, [])
+        or agent in evidence.assigned_to
+    )
+
+
+def _collect_valid_used_evidence(
+    *,
+    agent_results: dict[str, dict[str, Any]],
+    agents_to_run: list[str],
+    evidence_by_id: dict[str, Evidence],
+    evidence_for_agent: dict[str, list[str]],
+) -> tuple[list[Evidence], list[StructuredWarning], list[str]]:
+    valid: list[Evidence] = []
+    warnings: list[StructuredWarning] = []
+    used_ids: list[str] = []
+
+    for agent in agents_to_run:
+        result = agent_results.get(agent) or {}
+        for evidence_id in result.get("evidence_ids_used", []):
+            evidence = evidence_by_id.get(evidence_id)
+            if evidence is None:
+                warnings.append(
+                    _warning(
+                        "invalid_evidence_reference",
+                        None,
+                        "Specialist referenced an evidence ID that does not exist.",
+                        details={"agent": agent, "evidence_id": evidence_id},
+                    )
+                )
+                continue
+            if not _is_evidence_assigned_to_agent(
+                evidence_id=evidence_id,
+                agent=agent,
+                evidence=evidence,
+                evidence_for_agent=evidence_for_agent,
+            ):
+                warnings.append(
+                    _warning(
+                        "invalid_evidence_reference",
+                        evidence.domain,
+                        "Specialist referenced evidence that was not assigned to it.",
+                        details={"agent": agent, "evidence_id": evidence_id},
+                    )
+                )
+                continue
+            if evidence_id not in used_ids:
+                valid.append(evidence)
+                used_ids.append(evidence_id)
+
+    return valid, warnings, used_ids
+
+
 def synthesizer_node(state: AgentGraphState) -> AgentGraphState:
     start_time = time.perf_counter()
     agent_results = state.get("agent_results", {})
     parts: list[str] = []
-    sources: list[AgentSource] = []
     warnings = list(state.get("warnings", []))
 
     for agent in state.get("agents_to_run", []):
@@ -316,14 +396,23 @@ def synthesizer_node(state: AgentGraphState) -> AgentGraphState:
         if content:
             parts.append(content)
         warnings.extend(result.get("warnings", []))
-        for source in result.get("sources", []):
-            if isinstance(source, AgentSource):
-                sources.append(source)
-            else:
-                sources.append(AgentSource.model_validate(source))
+
+    evidence_by_id = state.get("evidence_by_id", {})
+    evidence_for_agent = state.get("evidence_for_agent", {})
+    used_evidence, evidence_warnings, used_evidence_ids = _collect_valid_used_evidence(
+        agent_results=agent_results,
+        agents_to_run=list(state.get("agents_to_run", [])),
+        evidence_by_id=evidence_by_id,
+        evidence_for_agent=evidence_for_agent,
+    )
+    warnings.extend(evidence_warnings)
+
+    sources_by_identity: dict[str, AgentSource] = {}
+    for evidence in used_evidence:
+        sources_by_identity.setdefault(evidence.source_identity, evidence.source)
+    sources = list(sources_by_identity.values())
 
     warnings = _dedupe_warnings(warnings)
-    sources = _dedupe_sources(sources)
     final_response = "\n\n".join(parts) or "Chua co du thong tin de tra loi yeu cau nay."
     suggested_actions = ["So sanh lua chon", "Hoi them ve phap ly", "Xem xu huong khu vuc"]
     return {
@@ -335,7 +424,11 @@ def synthesizer_node(state: AgentGraphState) -> AgentGraphState:
             state,
             "synthesizer",
             start_time,
-            {"answer_length": len(final_response), "source_count": len(sources)},
+            {
+                "answer_length": len(final_response),
+                "source_count": len(sources),
+                "used_evidence_ids": used_evidence_ids,
+            },
         ),
     }
 

@@ -71,6 +71,27 @@ async def run_agent_graph(request: AgentChatRequest) -> AgentChatResponse:
             "request_id": request.request_id,
             "steps": steps,
             "agent_results": result.get("agent_results", {}),
+            "retrieval_plan": [
+                task.model_dump(mode="json") if hasattr(task, "model_dump") else task
+                for task in result.get("retrieval_plan", [])
+            ],
+            "retrieval_results": {
+                key: (
+                    value.model_dump(mode="json")
+                    if hasattr(value, "model_dump")
+                    else value
+                )
+                for key, value in result.get("retrieval_results", {}).items()
+            },
+            "evidence": {
+                key: (
+                    value.model_dump(mode="json")
+                    if hasattr(value, "model_dump")
+                    else value
+                )
+                for key, value in result.get("evidence_by_id", {}).items()
+            },
+            "evidence_for_agent": result.get("evidence_for_agent", {}),
         },
         memory_proposals=result.get("memory_proposals", []),
         readiness=result.get("readiness", {}),
