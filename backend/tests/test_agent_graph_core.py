@@ -117,6 +117,54 @@ def test_safety_validator_accepts_no_listing_evidence_warning():
     assert codes == ["no_listing_evidence"]
 
 
+@pytest.mark.parametrize(
+    ("agent", "warning"),
+    [
+        (
+            "property_search",
+            StructuredWarning(
+                code="listing_source_not_ready",
+                domain="property",
+                message="Listing source is not ready.",
+            ),
+        ),
+        (
+            "legal_advisor",
+            StructuredWarning(
+                code="insufficient_legal_evidence",
+                domain="legal",
+                message="Legal evidence is missing.",
+            ),
+        ),
+    ],
+)
+def test_safety_validator_accepts_intentional_no_source_warnings(agent, warning):
+    validator = getattr(nodes, "safety_validator_node", None)
+    assert callable(validator)
+    state = {
+        "request": AgentChatRequest(
+            request_id="req-safety-no-source-warning",
+            message="Can kiem tra nguon",
+            session_id="session-1",
+        ),
+        "agents_to_run": [agent],
+        "final_response": "Chua co bang chung du de ket luan.",
+        "sources": [],
+        "suggested_actions": [],
+        "warnings": [warning],
+        "trace_steps": [],
+    }
+
+    result = validator(state)
+
+    codes = [
+        item.code if hasattr(item, "code") else item
+        for item in result["warnings"]
+    ]
+    assert warning.code in codes
+    assert "final_response_missing_sources" not in codes
+
+
 def test_synthesizer_dedupes_structured_warnings_without_losing_objects():
     synthesizer = getattr(nodes, "synthesizer_node", None)
     assert callable(synthesizer)

@@ -58,6 +58,8 @@ SOURCE_BACKED_AGENTS = {
 
 NO_SOURCE_WARNINGS = {
     "legal_kb_not_ready",
+    "insufficient_legal_evidence",
+    "listing_source_not_ready",
     "no_legal_evidence",
     "no_listing_evidence",
     "no_news_evidence",
