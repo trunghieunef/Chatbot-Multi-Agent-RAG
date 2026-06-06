@@ -45,6 +45,12 @@ def _extract_filters(query: str) -> dict[str, Any]:
     if "can ho" in normalized or "chung cu" in normalized:
         filters["property_type"] = "Can ho"
 
+    if any(
+        term in normalized
+        for term in ("ho chi minh", "tp hcm", "tphcm", "sai gon", "saigon")
+    ):
+        filters["city"] = "Ho Chi Minh"
+
     district_match = re.search(r"\b(?:quan|q)\s*(\d{1,2})\b", normalized)
     if district_match:
         filters["district"] = f"Quan {district_match.group(1)}"
@@ -121,6 +127,26 @@ def build_retrieval_plan(state: AgentGraphState) -> list[RetrievalTask]:
                 dependency_mode="none",
                 top_k=20,
                 rerank_top_k=5,
+            )
+        )
+
+    if (
+        "investment_advisor" in agents
+        and caps["market"]["market_aggregate_ready"]
+        and listing_filters.get("city")
+    ):
+        plan.append(
+            RetrievalTask(
+                task_id="market_lookup_1",
+                domain="market",
+                tool="lookup_market_metrics",
+                query=query,
+                filters=listing_filters,
+                retrieved_for=["investment_advisor"],
+                depends_on=[],
+                dependency_mode="none",
+                top_k=10,
+                rerank_top_k=None,
             )
         )
 
@@ -350,6 +376,58 @@ def normalize_record_to_evidence(
     evidence_index: int,
     assigned_to: list[str],
 ) -> Evidence:
+    if task.domain == "market":
+        source_identity = str(
+            record.get("source_identity") or f"market:{evidence_index}"
+        )
+        source = AgentSource(
+            type="market_metric",
+            domain="market",
+            id=source_identity,
+            title=str(record.get("metric") or "Market metric"),
+            url=None,
+            snippet=(
+                f"{record.get('metric')}: {record.get('value')} "
+                f"{record.get('unit')}"
+            ),
+            location=record.get("location"),
+            score=None,
+            metadata={
+                key: value
+                for key, value in {
+                    "source_identity": source_identity,
+                    "metric": record.get("metric"),
+                    "period": record.get("period"),
+                }.items()
+                if value is not None
+            },
+        )
+        return Evidence(
+            evidence_id=f"ev_{task.task_id}_{evidence_index}",
+            retrieval_task_id=task.task_id,
+            domain="market",
+            source_type="market_metric",
+            source_identity=source_identity,
+            record=record,
+            facts={
+                key: value
+                for key, value in {
+                    "metric": record.get("metric"),
+                    "value": record.get("value"),
+                    "unit": record.get("unit"),
+                    "location": record.get("location"),
+                    "property_type": record.get("property_type"),
+                    "period": record.get("period"),
+                }.items()
+                if value is not None
+            },
+            source=source,
+            matched_chunks=[],
+            retrieved_for=task.retrieved_for,
+            assigned_to=assigned_to,
+            warnings=[],
+        )
+
     source_type = {
         "property": "listing",
         "project": "project",
@@ -427,7 +505,33 @@ async def execute_retrieval_plan(
         trace_events.append({"event": "retrieval_task_started", "task_id": task.task_id})
         try:
             if task.domain == "market":
-                records: list[dict[str, Any]] = []
+                from agent_service.tools.market import lookup_market_metrics
+
+                records = await lookup_market_metrics(task.filters)
+                if not records:
+                    warning = structured_warning(
+                        code="investment_market_data_missing",
+                        domain="market",
+                        message="Market aggregate evidence is not available for this query.",
+                        retryable=False,
+                        details={"task_id": task.task_id, "filters": task.filters},
+                    )
+                    warnings.append(warning)
+                    retrieval_results[task.task_id] = RetrievalResult(
+                        task_id=task.task_id,
+                        status="skipped",
+                        evidence_ids=[],
+                        duration_ms=round((time.perf_counter() - task_started) * 1000),
+                        warnings=[warning],
+                        skip_reason="investment_market_data_missing",
+                    )
+                    trace_events.append(
+                        {
+                            "event": "retrieval_task_skipped",
+                            "task_id": task.task_id,
+                        }
+                    )
+                    continue
             else:
                 trace = RetrievalTrace(request_id=request.request_id)
                 records = await _run_hybrid_tool(

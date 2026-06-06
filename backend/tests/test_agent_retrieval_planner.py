@@ -86,6 +86,23 @@ def test_planner_adds_news_when_investment_query_mentions_market_movement():
     assert news_tasks[0].filters == {"exclude_category": "legal"}
 
 
+def test_planner_adds_market_task_only_when_city_is_explicit():
+    without_city = build_retrieval_plan(_state(
+        "Dau tu can ho Quan 7",
+        ["investment_advisor", "property_search"],
+    ))
+    with_city = build_retrieval_plan(_state(
+        "Dau tu can ho Quan 7 tai Ho Chi Minh",
+        ["investment_advisor", "property_search"],
+    ))
+
+    assert all(task.domain != "market" for task in without_city)
+    market_tasks = [task for task in with_city if task.domain == "market"]
+    assert len(market_tasks) == 1
+    assert market_tasks[0].filters["city"] == "Ho Chi Minh"
+    assert market_tasks[0].tool == "lookup_market_metrics"
+
+
 @pytest.mark.asyncio
 async def test_execute_plan_normalizes_listing_and_assigns_to_investment(monkeypatch):
     async def fake_run_tool(**kwargs):
@@ -261,3 +278,73 @@ async def test_execute_plan_tolerates_non_numeric_chunk_scores(monkeypatch):
     assert chunk.vector_distance is None
     assert chunk.rerank_score is None
     assert chunk.final_score is None
+
+
+@pytest.mark.asyncio
+async def test_market_task_skips_when_city_filter_missing():
+    state = _state(
+        "Tim can ho Quan 7 duoi 5 ty, co tiem nang dau tu khong?",
+        ["investment_advisor", "property_search"],
+    )
+    task = RetrievalTask(
+        task_id="market_lookup_1",
+        domain="market",
+        tool="lookup_market_metrics",
+        query=state["request"].message,
+        filters={"district": "Quan 7", "property_type": "Can ho"},
+        retrieved_for=["investment_advisor"],
+    )
+
+    update = await execute_retrieval_plan([task], state)
+
+    result = update["retrieval_results"]["market_lookup_1"]
+    assert result.status == "skipped"
+    assert result.skip_reason == "investment_market_data_missing"
+    assert result.warnings[0].code == "investment_market_data_missing"
+
+
+@pytest.mark.asyncio
+async def test_market_task_normalizes_market_metric_evidence(monkeypatch):
+    async def fake_lookup_market_metrics(filters):
+        assert filters["city"] == "Ho Chi Minh"
+        return [
+            {
+                "source_identity": "market:Quan 7:Can ho:avg_price_per_m2:current",
+                "metric": "avg_price_per_m2",
+                "value": 64,
+                "unit": "million VND/m2",
+                "location": {"city": "Ho Chi Minh", "district": "Quan 7"},
+                "property_type": "Can ho",
+                "period": "current_snapshot",
+            }
+        ]
+
+    monkeypatch.setattr(
+        "agent_service.tools.market.lookup_market_metrics",
+        fake_lookup_market_metrics,
+    )
+    state = _state("Dau tu can ho Quan 7", ["investment_advisor"])
+    task = RetrievalTask(
+        task_id="market_lookup_1",
+        domain="market",
+        tool="lookup_market_metrics",
+        query=state["request"].message,
+        filters={
+            "city": "Ho Chi Minh",
+            "district": "Quan 7",
+            "property_type": "Can ho",
+        },
+        retrieved_for=["investment_advisor"],
+    )
+
+    update = await execute_retrieval_plan([task], state)
+
+    result = update["retrieval_results"]["market_lookup_1"]
+    evidence_id = result.evidence_ids[0]
+    evidence = update["evidence_by_id"][evidence_id]
+    assert result.status == "completed"
+    assert evidence.source_type == "market_metric"
+    assert evidence.source_identity == "market:Quan 7:Can ho:avg_price_per_m2:current"
+    assert evidence.facts["metric"] == "avg_price_per_m2"
+    assert evidence.facts["value"] == 64
+    assert update["evidence_for_agent"]["investment_advisor"] == [evidence_id]
