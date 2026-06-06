@@ -6,7 +6,7 @@ import {
   getSourceKind,
   getSourceTitle,
   getMarketSourceSummary,
-} from "./chatSourceDisplay";
+} from "./chatSourceDisplay.ts";
 import type { ChatSource } from "./types";
 
 test("classifies grounded legal article sources by domain", () => {
