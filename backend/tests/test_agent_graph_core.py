@@ -85,6 +85,38 @@ def test_safety_validator_flags_missing_sources_without_changing_answer_payload(
     assert result["trace_steps"][-1]["output"]["warning_count"] == 2
 
 
+def test_safety_validator_accepts_no_listing_evidence_warning():
+    validator = getattr(nodes, "safety_validator_node", None)
+    assert callable(validator)
+    state = {
+        "request": AgentChatRequest(
+            request_id="req-safety-listing-warning",
+            message="Tim can ho Quan 7",
+            session_id="session-1",
+        ),
+        "agents_to_run": ["property_search"],
+        "final_response": "Chua co bang chung listing phu hop.",
+        "sources": [],
+        "suggested_actions": [],
+        "warnings": [
+            StructuredWarning(
+                code="no_listing_evidence",
+                domain="property",
+                message="No listing evidence was found.",
+            )
+        ],
+        "trace_steps": [],
+    }
+
+    result = validator(state)
+
+    codes = [
+        warning.code if hasattr(warning, "code") else warning
+        for warning in result["warnings"]
+    ]
+    assert codes == ["no_listing_evidence"]
+
+
 def test_synthesizer_dedupes_structured_warnings_without_losing_objects():
     synthesizer = getattr(nodes, "synthesizer_node", None)
     assert callable(synthesizer)

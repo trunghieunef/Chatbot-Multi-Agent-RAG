@@ -149,6 +149,20 @@ async def test_property_agent_reports_no_evidence_without_fake_listing():
 
 
 @pytest.mark.asyncio
+async def test_property_agent_warns_when_listing_source_not_ready():
+    result = await run_property_agent(
+        query="Tim can ho Quan 7",
+        evidence=[],
+        preferences={},
+        readiness={"listings": {"status": "not_ready"}},
+    )
+
+    assert result["status"] == "no_evidence"
+    assert "chua san sang" in result["content"].lower()
+    assert _warning_code(result["warnings"][0]) == "listing_source_not_ready"
+
+
+@pytest.mark.asyncio
 async def test_property_agent_uses_evidence_ids_from_assigned_evidence():
     result = await run_property_agent(
         query="Tim can ho Quan 7",

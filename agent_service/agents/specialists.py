@@ -185,16 +185,28 @@ async def run_property_agent(
         item for item in evidence if _evidence_domain(item) == "property"
     ]
     if not property_evidence:
+        source_ready = _readiness_status(readiness, "listings") == "ready"
+        content = (
+            "Chua co bang chung listing phu hop de khang dinh bat dong san cu the. "
+            "Toi chi co the goi y bo sung tieu chi tim kiem truoc khi so sanh."
+            if source_ready
+            else "Nguon listing chua san sang, nen toi chua co bang chung listing de khang dinh bat dong san cu the."
+        )
         return _agent_result(
             agent_name="property_search",
             status="no_evidence",
-            content=(
-                "Chua co bang chung listing phu hop de khang dinh bat dong san cu the. "
-                "Toi chi co the goi y bo sung tieu chi tim kiem truoc khi so sanh."
-            ),
+            content=content,
             confidence="low",
             warnings=[
-                _warning("no_evidence", "property", "No listing evidence was found.")
+                _warning(
+                    "no_listing_evidence"
+                    if source_ready
+                    else "listing_source_not_ready",
+                    "property",
+                    "No listing evidence was found."
+                    if source_ready
+                    else "Listing source is not ready.",
+                )
             ],
             missing_evidence=["property"],
         )
