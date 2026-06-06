@@ -42,7 +42,7 @@ def test_embedding_cache_namespace_includes_bge_model_and_dimension():
 def test_article_filter_supports_excluding_legal_category():
     clauses, params = build_article_filter_clauses({"exclude_category": "legal"})
 
-    assert "category != :exclude_category" in clauses
+    assert "(category IS NULL OR category != :exclude_category)" in clauses
     assert params == {"exclude_category": "legal"}
 
 

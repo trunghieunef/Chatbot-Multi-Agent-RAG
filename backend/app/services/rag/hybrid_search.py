@@ -103,7 +103,7 @@ def build_article_filter_clauses(filters: dict[str, Any]) -> tuple[list[str], di
         clauses.append("category = :category")
         params["category"] = filters["category"]
     if filters.get("exclude_category"):
-        clauses.append("category != :exclude_category")
+        clauses.append("(category IS NULL OR category != :exclude_category)")
         params["exclude_category"] = filters["exclude_category"]
     return clauses or ["1=1"], params
 
