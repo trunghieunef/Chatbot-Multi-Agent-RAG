@@ -97,11 +97,13 @@ export interface ChatMessageRequest {
 }
 
 export interface ChatSource {
-  type?: "listing" | "legal_article" | "market_aggregate" | "district_comparison" | "investment_aggregate" | string;
-  id?: number;
+  type?: "listing" | "project" | "article" | "market_metric" | "legal_article" | "market_aggregate" | "district_comparison" | "investment_aggregate" | string;
+  domain?: "property" | "project" | "news" | "legal" | "market" | string | null;
+  id?: number | string;
   product_id?: string | null;
   title?: string | null;
-  location?: string | null;
+  location?: string | Record<string, unknown> | null;
+  snippet?: string | null;
   price_text?: string | null;
   area_text?: string | null;
   published_at?: string | null;
@@ -110,16 +112,25 @@ export interface ChatSource {
   url?: string | null;
   citation?: {
     doc_slug?: string;
-    dieu_number?: number;
-    khoan_number?: number;
-  } | null;
+    dieu_number?: number | string;
+    khoan_number?: number | string;
+  } | string | Record<string, unknown> | null;
   count?: number;
   filters?: Record<string, unknown>;
   items?: Array<Record<string, unknown>>;
   sale?: Record<string, unknown>;
   rent?: Record<string, unknown>;
   rental_yield_percent?: number | null;
-  score?: number;
+  score?: number | null;
+  metadata?: Record<string, unknown>;
+}
+
+export interface StructuredWarning {
+  code: string;
+  domain?: string | null;
+  message: string;
+  retryable?: boolean;
+  details?: Record<string, unknown>;
 }
 
 export interface TraceSummary {
@@ -127,7 +138,7 @@ export interface TraceSummary {
   agents: string[];
   source_count: number;
   latency_ms: number;
-  warnings: string[];
+  warnings: Array<string | StructuredWarning>;
   [key: string]: unknown;
 }
 

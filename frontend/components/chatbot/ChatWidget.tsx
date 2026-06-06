@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { BarChart3, FileText, Home, MapPin, MessageCircle, Scale, Send, Bot, TrendingUp, User, Sparkles, X } from "lucide-react";
 import { sendChatMessage } from "@/lib/api";
-import type { ChatMessageResponse, ChatSource, MemoryHint } from "@/lib/types";
+import type { ChatMessageResponse, ChatSource, MemoryHint, StructuredWarning } from "@/lib/types";
 
 interface Message {
   role: "user" | "assistant";
@@ -132,14 +132,32 @@ export default function ChatWidget() {
     }
   };
 
+  const isStructuredWarning = (warning: unknown): warning is StructuredWarning =>
+    Boolean(
+      warning &&
+        typeof warning === "object" &&
+        "code" in warning &&
+        "message" in warning
+    );
+
   const getTraceWarnings = (trace: Message["trace_summary"]) =>
     Array.isArray(trace?.warnings)
-      ? trace.warnings.filter((warning): warning is string => Boolean(warning))
+      ? trace.warnings
+          .map((warning) => {
+            if (typeof warning === "string") return warning;
+            if (isStructuredWarning(warning)) return warning.message || warning.code;
+            return null;
+          })
+          .filter((warning): warning is string => Boolean(warning))
       : [];
 
   const formatCitation = (source: ChatSource) => {
     const citation = source.citation;
     if (!citation) return source.source || source.title || "Nguồn pháp lý";
+    if (typeof citation === "string") return citation;
+    if (!("doc_slug" in citation || "dieu_number" in citation || "khoan_number" in citation)) {
+      return source.source || source.title || "Nguồn pháp lý";
+    }
     const parts = [
       citation.doc_slug,
       citation.dieu_number ? `Điều ${citation.dieu_number}` : null,
@@ -313,7 +331,13 @@ export default function ChatWidget() {
                                 <>
                                   <div className="mt-1 flex items-center gap-1 text-muted-foreground">
                                     <MapPin size={11} className="shrink-0" />
-                                    <span className="truncate">{source.location || "Chưa rõ vị trí"}</span>
+                                    <span className="truncate">
+                                      {source.location
+                                        ? typeof source.location === "string"
+                                          ? source.location
+                                          : JSON.stringify(source.location)
+                                        : "Chưa rõ vị trí"}
+                                    </span>
                                   </div>
                                   <div className="mt-1 text-muted-foreground">
                                     {[source.price_text, source.area_text].filter(Boolean).join(" · ")}

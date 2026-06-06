@@ -120,6 +120,50 @@ def test_feature_flag_enabled_calls_internal_agent_service(monkeypatch):
     assert fake_client.request.user_preferences == {"city": "HCMC"}
 
 
+def test_agent_response_accepts_extended_source_shape():
+    response = AgentChatResponse(
+        request_id="req-source-shape",
+        final_response="Answer",
+        agents_used=["property_search"],
+        sources=[
+            {
+                "type": "listing",
+                "domain": "property",
+                "id": "listing:p-1",
+                "product_id": "p-1",
+                "title": "Can ho A",
+                "url": None,
+                "snippet": "Can ho A Quan 7",
+                "location": {"district": "Quan 7"},
+                "citation": None,
+                "score": 0.91,
+                "metadata": {"source_identity": "listing:p-1"},
+            }
+        ],
+        trace_summary=TraceSummary(
+            intent="property_search",
+            agents=["property_search"],
+            source_count=1,
+            latency_ms=1,
+            warnings=[
+                {
+                    "code": "investment_market_data_missing",
+                    "domain": "market",
+                    "message": "Market aggregate evidence is not available.",
+                    "retryable": False,
+                    "details": {},
+                }
+            ],
+        ),
+    )
+
+    assert response.sources[0].id == "listing:p-1"
+    assert response.sources[0].domain == "property"
+    assert response.trace_summary.warnings[0].code == (
+        "investment_market_data_missing"
+    )
+
+
 def test_feature_flag_disabled_falls_back_to_existing_backend_pipeline(monkeypatch):
     called = {}
 
