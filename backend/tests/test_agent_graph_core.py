@@ -1,6 +1,6 @@
 import pytest
 
-from agent_service.contracts import AgentChatRequest, AgentSource
+from agent_service.contracts import AgentChatRequest, AgentSource, StructuredWarning
 from agent_service.graph import nodes
 from agent_service.graph.nodes import _strip_accents
 from agent_service.graph.workflow import run_agent_graph
@@ -83,6 +83,65 @@ def test_safety_validator_flags_missing_sources_without_changing_answer_payload(
     ]
     assert result["trace_steps"][-1]["step_name"] == "safety_validator"
     assert result["trace_steps"][-1]["output"]["warning_count"] == 2
+
+
+def test_synthesizer_dedupes_structured_warnings_without_losing_objects():
+    synthesizer = getattr(nodes, "synthesizer_node", None)
+    assert callable(synthesizer)
+    warning = StructuredWarning(
+        code="source_not_ready",
+        domain="legal",
+        message="Legal source is not ready.",
+    )
+    state = {
+        "request": AgentChatRequest(
+            request_id="req-synth-structured-warning",
+            message="Can kiem tra gi truoc khi dat coc?",
+            session_id="session-1",
+        ),
+        "agents_to_run": ["legal_advisor"],
+        "agent_results": {
+            "legal_advisor": {
+                "content": "Chua co can cu phap ly de ket luan.",
+                "warnings": [warning],
+                "sources": [],
+            }
+        },
+        "warnings": [warning],
+        "trace_steps": [],
+    }
+
+    result = synthesizer(state)
+
+    assert result["warnings"] == [warning]
+
+
+def test_safety_validator_preserves_structured_warnings_when_adding_warnings():
+    validator = getattr(nodes, "safety_validator_node", None)
+    assert callable(validator)
+    existing_warning = StructuredWarning(
+        code="source_not_ready",
+        domain="property",
+        message="Property source is not ready.",
+    )
+    state = {
+        "request": AgentChatRequest(
+            request_id="req-safety-structured-warning",
+            message="Tim can ho Quan 7 duoi 5 ty",
+            session_id="session-1",
+        ),
+        "agents_to_run": ["property_search"],
+        "final_response": "Can ho A phu hop voi ngan sach va khu vuc Quan 7.",
+        "sources": [],
+        "suggested_actions": [],
+        "warnings": [existing_warning],
+        "trace_steps": [],
+    }
+
+    result = validator(state)
+
+    assert result["warnings"][0] == existing_warning
+    assert result["warnings"][1] == "final_response_missing_sources"
 
 
 def test_safety_validator_flags_legal_answer_without_disclaimer():

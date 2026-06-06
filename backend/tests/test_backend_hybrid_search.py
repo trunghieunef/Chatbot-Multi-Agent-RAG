@@ -1,6 +1,7 @@
 import pytest
 
 from app.services.rag import hybrid_search as hs
+from app.services.rag.hybrid_search import build_article_filter_clauses
 
 
 class StubCache:
@@ -36,6 +37,20 @@ def test_embedding_cache_namespace_includes_bge_model_and_dimension():
     namespace = hs.embedding_cache_namespace(embedder)
 
     assert namespace == "bge_m3:BAAI/bge-m3:1024"
+
+
+def test_article_filter_supports_excluding_legal_category():
+    clauses, params = build_article_filter_clauses({"exclude_category": "legal"})
+
+    assert "(category IS NULL OR category != :exclude_category)" in clauses
+    assert params == {"exclude_category": "legal"}
+
+
+def test_article_filter_keeps_exact_category_for_legal_retrieval():
+    clauses, params = build_article_filter_clauses({"category": "legal"})
+
+    assert "category = :category" in clauses
+    assert params == {"category": "legal"}
 
 
 @pytest.mark.asyncio

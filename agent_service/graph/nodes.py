@@ -13,7 +13,7 @@ from agent_service.agents.specialists import (
     run_project_agent,
     run_property_agent,
 )
-from agent_service.contracts import AgentSource, MemoryProposal
+from agent_service.contracts import AgentSource, MemoryProposal, StructuredWarning
 from agent_service.graph.state import AgentGraphState
 from agent_service.tools.readiness import build_readiness_snapshot
 
@@ -108,13 +108,46 @@ def _append_trace(
     return trace_steps
 
 
-def _dedupe_warnings(warnings: list[str]) -> list[str]:
-    seen: set[str] = set()
-    unique: list[str] = []
+def _warning_key(warning: Any) -> tuple[Any, ...]:
+    if isinstance(warning, StructuredWarning):
+        return (
+            "structured",
+            warning.code,
+            warning.domain,
+            warning.message,
+            warning.retryable,
+            repr(sorted(warning.details.items())),
+        )
+    if isinstance(warning, dict):
+        return (
+            "dict",
+            warning.get("code"),
+            warning.get("domain"),
+            warning.get("message"),
+            warning.get("retryable"),
+            repr(sorted(warning.get("details", {}).items()))
+            if isinstance(warning.get("details"), dict)
+            else repr(warning.get("details")),
+        )
+    return ("string", str(warning))
+
+
+def _warning_text(warning: Any) -> str:
+    if isinstance(warning, StructuredWarning):
+        return warning.code
+    if isinstance(warning, dict):
+        return str(warning.get("code") or warning.get("message") or warning)
+    return str(warning)
+
+
+def _dedupe_warnings(warnings: list[Any]) -> list[Any]:
+    seen: set[tuple[Any, ...]] = set()
+    unique: list[Any] = []
     for warning in warnings:
-        if warning in seen:
+        key = _warning_key(warning)
+        if key in seen:
             continue
-        seen.add(warning)
+        seen.add(key)
         unique.append(warning)
     return unique
 
@@ -297,11 +330,8 @@ def safety_validator_node(state: AgentGraphState) -> AgentGraphState:
     sources = list(state.get("sources") or [])
     suggested_actions = list(state.get("suggested_actions") or [])
     agents_to_run = list(state.get("agents_to_run") or [])
-    warnings = [
-        str(warning)
-        for warning in state.get("warnings") or []
-        if warning
-    ]
+    warnings = [warning for warning in state.get("warnings") or [] if warning]
+    warning_texts = [_warning_text(warning) for warning in warnings]
     normalized_response = _strip_accents(final_response)
     added_warnings: list[str] = []
 
@@ -309,7 +339,7 @@ def safety_validator_node(state: AgentGraphState) -> AgentGraphState:
         final_response
         and not sources
         and any(agent in SOURCE_BACKED_AGENTS for agent in agents_to_run)
-        and not any(warning in NO_SOURCE_WARNINGS for warning in warnings)
+        and not any(warning in NO_SOURCE_WARNINGS for warning in warning_texts)
     ):
         added_warnings.append("final_response_missing_sources")
 
