@@ -221,3 +221,46 @@ async def test_agent_graph_does_not_route_property_from_keyword_substring():
     assert "property_search" not in response.agents_used
     assert response.agents_used == ["market_analysis", "news_agent"]
     assert response.trace_summary.intent == "mixed"
+
+
+@pytest.mark.asyncio
+async def test_retrieval_planner_node_uses_single_node_with_testable_functions(monkeypatch):
+    request = AgentChatRequest(
+        request_id="req-planner-node",
+        message="Tim can ho Quan 7",
+        session_id="session-1",
+    )
+    state = {
+        "request": request,
+        "agents_to_run": ["property_search"],
+        "readiness": {
+            "listings": {"status": "ready", "parent_count": 1, "chunk_count": 1},
+        },
+        "trace_steps": [],
+        "warnings": [],
+    }
+    called = {}
+
+    def fake_build(input_state):
+        called["build"] = input_state["request"].request_id
+        return []
+
+    async def fake_execute(plan, input_state):
+        called["execute"] = len(plan)
+        return {
+            "retrieval_plan": [],
+            "retrieval_results": {},
+            "evidence_by_id": {},
+            "evidence_for_agent": {"property_search": []},
+            "retrieval_events": [],
+            "warnings": [],
+        }
+
+    monkeypatch.setattr(nodes, "build_retrieval_plan", fake_build)
+    monkeypatch.setattr(nodes, "execute_retrieval_plan", fake_execute)
+
+    result = await nodes.retrieval_planner_node(state)
+
+    assert called == {"build": "req-planner-node", "execute": 0}
+    assert result["evidence_for_agent"] == {"property_search": []}
+    assert result["trace_steps"][-1]["step_name"] == "retrieval_planner"

@@ -14,6 +14,10 @@ from agent_service.agents.specialists import (
     run_property_agent,
 )
 from agent_service.contracts import AgentSource, MemoryProposal, StructuredWarning
+from agent_service.graph.retrieval_planner import (
+    build_retrieval_plan,
+    execute_retrieval_plan,
+)
 from agent_service.graph.state import AgentGraphState
 from agent_service.tools.readiness import build_readiness_snapshot
 
@@ -235,17 +239,21 @@ def router_node(state: AgentGraphState) -> AgentGraphState:
     }
 
 
-def retrieval_planner_node(state: AgentGraphState) -> AgentGraphState:
+async def retrieval_planner_node(state: AgentGraphState) -> AgentGraphState:
     start_time = time.perf_counter()
-    evidence = {agent: [] for agent in state.get("agents_to_run", [])}
+    plan = build_retrieval_plan(state)
+    update = await execute_retrieval_plan(plan, state)
     return {
-        "evidence": evidence,
-        "sources": [],
+        **update,
         "trace_steps": _append_trace(
-            state,
+            {**state, **update},
             "retrieval_planner",
             start_time,
-            {"planned_agents": list(evidence)},
+            {
+                "planned_tasks": [task.task_id for task in plan],
+                "evidence_count": len(update.get("evidence_by_id", {})),
+                "retrieval_events": update.get("retrieval_events", []),
+            },
         ),
     }
 
