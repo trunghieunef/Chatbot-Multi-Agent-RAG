@@ -66,7 +66,7 @@ async def _run_hybrid_tool(
             status="error",
             error_message=str(exc),
         )
-        return []
+        raise
 
     trace.add_event(
         tool_name=tool_name,

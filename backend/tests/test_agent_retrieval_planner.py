@@ -194,3 +194,31 @@ async def test_execute_plan_failure_is_isolated(monkeypatch):
     result = update["retrieval_results"]["search_legal_1"]
     assert result.status == "failed"
     assert result.warnings[0].code == "retrieval_error"
+
+
+@pytest.mark.asyncio
+async def test_execute_plan_marks_hybrid_search_exception_as_failed(monkeypatch):
+    async def exploding_hybrid_search(**kwargs):
+        raise RuntimeError("database unavailable")
+
+    monkeypatch.setattr(
+        "agent_service.tools.retrieval.hybrid_search",
+        exploding_hybrid_search,
+    )
+    state = _state("Tim can ho Quan 7", ["property_search"])
+    plan = [
+        RetrievalTask(
+            task_id="search_property_1",
+            domain="property",
+            tool="search_listings",
+            query=state["request"].message,
+            filters={},
+            retrieved_for=["property_search"],
+        )
+    ]
+
+    update = await execute_retrieval_plan(plan, state)
+
+    result = update["retrieval_results"]["search_property_1"]
+    assert result.status == "failed"
+    assert result.error["message"] == "database unavailable"
