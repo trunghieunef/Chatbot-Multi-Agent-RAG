@@ -617,6 +617,8 @@ async def test_mixed_property_legal_investment_query_uses_shared_evidence(monkey
     assert "investment_market_data_missing" in warning_codes
     assert "du dieu kien phap ly" not in response.final_response.lower()
     source_ids = [source.id for source in response.sources]
+    assert "listing:p-q7" in source_ids
+    assert "article:legal://transfer" in source_ids
     used_ids = set()
     for result in trace["agent_results"].values():
         used_ids.update(result.get("evidence_ids_used", []))

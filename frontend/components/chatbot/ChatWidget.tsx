@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { BarChart3, FileText, Home, MapPin, MessageCircle, Scale, Send, Bot, TrendingUp, User, Sparkles, X } from "lucide-react";
 import { sendChatMessage } from "@/lib/api";
+import { getListingSourceDetails, getMarketSourceSummary, getSourceKind, getSourceTitle } from "@/lib/chatSourceDisplay";
 import type { ChatMessageResponse, ChatSource, MemoryHint, StructuredWarning } from "@/lib/types";
 
 interface Message {
@@ -293,23 +294,17 @@ export default function ChatWidget() {
                       <div className="mt-2 space-y-1.5 border-t border-border/70 pt-2">
                         {msg.sources.slice(0, 3).map((source, sourceIndex) => {
                           const key = `${source.type || "source"}-${source.product_id || source.id || sourceIndex}`;
-                          const isLegal = source.type === "legal_article";
-                          const isMarket = source.type?.includes("aggregate") || source.type === "district_comparison";
+                          const sourceKind = getSourceKind(source);
+                          const isLegal = sourceKind === "legal";
+                          const isMarket = sourceKind === "market";
                           const Icon = isLegal ? Scale : isMarket ? BarChart3 : Home;
+                          const listingDetails = getListingSourceDetails(source);
 
                           return (
                             <div key={key} className="rounded-md bg-card/70 p-2 text-[11px] leading-snug">
                               <div className="flex items-start gap-1.5 font-medium">
                                 <Icon size={12} className="mt-0.5 shrink-0" />
-                                <span className="line-clamp-2">
-                                  {isLegal
-                                    ? source.title || source.source || "Nguồn pháp lý"
-                                    : isMarket
-                                      ? source.type === "investment_aggregate"
-                                        ? "Tổng hợp đầu tư"
-                                        : "Thống kê thị trường"
-                                      : source.title || "Tin bất động sản"}
-                                </span>
+                                <span className="line-clamp-2">{getSourceTitle(source)}</span>
                               </div>
                               {isLegal ? (
                                 <div className="mt-1 flex items-center gap-1 text-muted-foreground">
@@ -320,11 +315,7 @@ export default function ChatWidget() {
                                 <div className="mt-1 flex items-center gap-1 text-muted-foreground">
                                   <TrendingUp size={11} className="shrink-0" />
                                   <span className="truncate">
-                                    {source.rental_yield_percent
-                                      ? `Rental yield ${source.rental_yield_percent}%/năm`
-                                      : source.count !== undefined
-                                        ? `${source.count} tin dữ liệu`
-                                        : "Dữ liệu tổng hợp"}
+                                    {getMarketSourceSummary(source)}
                                   </span>
                                 </div>
                               ) : (
@@ -340,7 +331,7 @@ export default function ChatWidget() {
                                     </span>
                                   </div>
                                   <div className="mt-1 text-muted-foreground">
-                                    {[source.price_text, source.area_text].filter(Boolean).join(" · ")}
+                                    {listingDetails.join(" · ")}
                                   </div>
                                 </>
                               )}
