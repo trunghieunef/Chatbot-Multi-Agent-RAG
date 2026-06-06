@@ -222,3 +222,42 @@ async def test_execute_plan_marks_hybrid_search_exception_as_failed(monkeypatch)
     result = update["retrieval_results"]["search_property_1"]
     assert result.status == "failed"
     assert result.error["message"] == "database unavailable"
+
+
+@pytest.mark.asyncio
+async def test_execute_plan_tolerates_non_numeric_chunk_scores(monkeypatch):
+    async def fake_run_tool(**kwargs):
+        return [
+            {
+                "id": 101,
+                "product_id": "p-101",
+                "title": "Can ho Quan 7",
+                "matched_chunk": {
+                    "id": 777,
+                    "text": "Can ho Quan 7",
+                    "distance": "bad",
+                    "rerank_score": "n/a",
+                },
+            }
+        ]
+
+    monkeypatch.setattr(retrieval_planner, "_run_hybrid_tool", fake_run_tool)
+    state = _state("Tim can ho Quan 7", ["property_search"])
+    plan = [
+        RetrievalTask(
+            task_id="search_property_1",
+            domain="property",
+            tool="search_listings",
+            query=state["request"].message,
+            filters={},
+            retrieved_for=["property_search"],
+        )
+    ]
+
+    update = await execute_retrieval_plan(plan, state)
+
+    evidence_id = update["retrieval_results"]["search_property_1"].evidence_ids[0]
+    chunk = update["evidence_by_id"][evidence_id].matched_chunks[0]
+    assert chunk.vector_distance is None
+    assert chunk.rerank_score is None
+    assert chunk.final_score is None

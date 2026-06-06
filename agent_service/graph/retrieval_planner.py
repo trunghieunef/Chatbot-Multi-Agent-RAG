@@ -247,11 +247,19 @@ def _location_fact(record: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def _score_from_chunk(raw_chunk: dict[str, Any]) -> tuple[float | None, float | None]:
-    rerank_score = raw_chunk.get("rerank_score")
+    rerank_score = _optional_float(raw_chunk.get("rerank_score"))
     if rerank_score is not None:
-        score = float(rerank_score)
-        return score, score
+        return rerank_score, rerank_score
     return None, None
+
+
+def _optional_float(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _matched_chunks_from_record(record: dict[str, Any]) -> list[MatchedChunk]:
@@ -269,11 +277,7 @@ def _matched_chunks_from_record(record: dict[str, Any]) -> list[MatchedChunk]:
                 id=str(raw_chunk.get("id") or f"chunk:{index}"),
                 chunk_type=raw_chunk.get("chunk_type"),
                 text=raw_chunk.get("text"),
-                vector_distance=(
-                    float(raw_chunk["distance"])
-                    if raw_chunk.get("distance") is not None
-                    else None
-                ),
+                vector_distance=_optional_float(raw_chunk.get("distance")),
                 semantic_score=None,
                 rerank_score=rerank_score,
                 final_score=final_score,
