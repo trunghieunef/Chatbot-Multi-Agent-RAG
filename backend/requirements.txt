@@ -21,19 +21,7 @@ email-validator>=2.2.0
 redis>=5.2.0
 
 # RAG & AI
-google-genai>=1.0.0
-sentence-transformers>=3.0.0
-datasets>=2.21.0
-pyarrow>=15.0.0
 httpx>=0.28.0
-
-# Legal KB (M4)
-pymupdf>=1.24.0
-beautifulsoup4>=4.14.0
 
 # Observability (M5)
 prometheus-client>=0.21
-
-# Test/Dev
-aiosqlite>=0.20.0
-pytest-asyncio>=0.24

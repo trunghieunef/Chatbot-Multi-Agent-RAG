@@ -92,3 +92,79 @@ def test_project_detail_page_preserves_input_slug():
     )
 
     assert record["slug"] == "url-slug"
+
+
+def test_project_detail_extracts_live_detail_sections():
+    html = """
+    <html>
+      <body>
+        <div class="project-main-container">
+          <h1 class="re__project-name">Khu nhà ở thương mại Vạn Xuân</h1>
+          <div class="re__project-address">
+            Phường Xuân Đỉnh, Quận Bắc Từ Liêm, Hà Nội.
+            <a>Xem bản đồ</a>
+          </div>
+          <div class="re__project-album">
+            <img src="https://file4.batdongsan.com.vn/project-1.jpg" alt="Khu nhà ở thương mại Vạn Xuân">
+            <img data-src="https://file4.batdongsan.com.vn/project-2.jpg">
+          </div>
+          <div class="re__prj-tag-info re__project-open">Đang mở bán</div>
+        </div>
+        <div class="re__project-main-left">
+          <div class="re__project-main-number">
+            <table>
+              <tbody class="re__project-attr">
+                <tr>
+                  <td class="re__attr-item-label"><h4>Số căn</h4></td>
+                  <td class="re__attr-item-value">37 căn</td>
+                </tr>
+              </tbody>
+              <tbody class="re__project-attr">
+                <tr>
+                  <td class="re__attr-item-label"><h4>Diện tích</h4></td>
+                  <td class="re__attr-item-value">3.198,8 m²</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="js__prj-detail-content re__detail-content re__project-editor">
+            <p>Dự án gồm 37 căn biệt thự được thiết kế hiện đại.</p>
+            <h3>Mặt Bằng - Thiết Kế</h3>
+            <p>Loại hình sản phẩm: Biệt thự</p>
+            <p>Pháp lý: Sổ đỏ sở hữu lâu dài</p>
+          </div>
+          <div class="re__project-toogle-box">
+            <div class="re__project-box-item">
+              <span>Số căn</span><span>37 căn</span>
+            </div>
+            <div class="re__project-box-item">
+              <span>Quy mô</span><span>37 căn biệt thự</span>
+            </div>
+            <div class="re__prj-facilities">
+              <div class="re__toogle-detail">
+                <span>Bãi đỗ xe</span><span>Đường chạy bộ</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </body>
+    </html>
+    """
+
+    record = crawl_details.parse_project_detail(
+        html,
+        url="https://batdongsan.com.vn/du-an-biet-thu-lien-ke-bac-tu-liem/khu-nha-o-thuong-mai-van-xuan-pj6342",
+    )
+
+    assert record["name"] == "Khu nhà ở thương mại Vạn Xuân"
+    assert record["status"] == "Đang mở bán"
+    assert record["total_units"] == "37"
+    assert record["area_range"] == "3.198,8 m²"
+    assert record["scale"] == "37 căn biệt thự"
+    assert record["project_type"] == "Biệt thự"
+    assert record["legal"] == "Sổ đỏ sở hữu lâu dài"
+    assert record["amenities"] == '["Bãi đỗ xe", "Đường chạy bộ"]'
+    assert record["image_urls"] == (
+        '["https://file4.batdongsan.com.vn/project-1.jpg", '
+        '"https://file4.batdongsan.com.vn/project-2.jpg"]'
+    )

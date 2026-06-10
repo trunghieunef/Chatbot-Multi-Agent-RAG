@@ -37,7 +37,7 @@ def test_agent_service_settings_defaults(monkeypatch):
     assert settings.AGENT_SERVICE_URL == "http://localhost:8100"
     assert settings.AGENT_INTERNAL_KEY == "dev-agent-internal-key"
     assert settings.AGENT_SERVICE_TIMEOUT_SECONDS == 45.0
-    assert settings.CHATBOT_AGENT_SERVICE_ENABLED is False
+    assert settings.CHATBOT_AGENT_SERVICE_ENABLED is True
     assert settings.CHATBOT_LLM_JUDGE_ENABLED is False
     assert settings.CHATBOT_MEMORY_ENABLED is True
     assert settings.CHATBOT_ADMIN_ENABLED is True

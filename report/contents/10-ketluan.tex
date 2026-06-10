@@ -10,82 +10,26 @@
 Sau quá trình nghiên cứu và triển khai, đồ án đã đạt được các kết quả chính sau:
 
 \begin{enumerate}
-    \item \textbf{Xây dựng thành công nền tảng web bất động sản hoàn chỉnh} với frontend Next.js và backend FastAPI, bao gồm các chức năng: duyệt danh sách nhà đất bán/cho thuê, lọc đa tiêu chí, xem chi tiết bất động sản kèm bản đồ, dashboard thống kê thị trường và hệ thống xác thực người dùng qua JWT.
+    \item \textbf{Xây dựng thành công nền tảng web bất động sản hoàn chỉnh} với frontend Next.js 16 + React 19 và backend FastAPI, bao gồm các chức năng: duyệt danh sách nhà đất bán/cho thuê, lọc đa tiêu chí, sắp xếp, xem chi tiết bất động sản, dashboard thống kê thị trường, hệ thống xác thực người dùng qua JWT, và bảng điều khiển quản trị (admin dashboard).
 
-    \item \textbf{Phát triển chatbot đa tác tử (Multi-Agent) hoạt động ổn định} với 5 agent chuyên biệt (Router, Property Search, Market Analysis, Legal Advisor, Investment Advisor). Chatbot có khả năng hiểu ý định người dùng bằng tiếng Việt, điều phối đến agent phù hợp, truy xuất dữ liệu qua hybrid search (SQL + pgvector kNN + Cohere rerank) và sinh phản hồi có trích dẫn nguồn rõ ràng.
+    \item \textbf{Phát triển chatbot đa tác tử (Multi-Agent) hoạt động ổn định} với 4 agent chuyên biệt (Property Search, Market Analysis, Legal Advisor, Investment Advisor) và router phân loại ý định. Chatbot có khả năng hiểu ý định người dùng bằng tiếng Việt qua cả keyword-based routing và Gemini-based routing, điều phối đến agent phù hợp, truy xuất dữ liệu qua hybrid search (SQL + pgvector kNN + Cohere rerank + Redis cache) và sinh phản hồi có trích dẫn nguồn rõ ràng.
 
-    \item \textbf{Xây dựng pipeline thu thập và xử lý dữ liệu tự động} từ batdongsan.com.vn, bao gồm: crawl dữ liệu bằng Playwright, làm sạch và chuẩn hóa (parse giá, diện tích, phân loại), làm giàu (geocoding tọa độ, trích xuất intent tags), chunking ngữ nghĩa, tạo embedding BGE-M3 (1024 chiều) và nạp vào PostgreSQL + pgvector. Pipeline được lập lịch tự động qua Apache Airflow.
+    \item \textbf{Triển khai kiến trúc chatbot hai lớp} với pipeline nội bộ (backend/app/services/chatbot/) xử lý nhanh cho người dùng cuối và Agent Service (agent\_service/) chạy LangGraph StateGraph riêng biệt cho multi-step reasoning nâng cao. Hệ thống tích hợp cơ chế memory và preferences để ghi nhớ ngữ cảnh người dùng.
 
-    \item \textbf{Triển khai hệ thống tìm kiếm lai hiệu quả} kết hợp giữa SQL filtering cho dữ liệu có cấu trúc và pgvector kNN cho tìm kiếm ngữ nghĩa, với reranking qua Cohere để cải thiện độ chính xác.
+    \item \textbf{Xây dựng pipeline thu thập và xử lý dữ liệu tự động} từ batdongsan.com.vn, bao gồm: crawl dữ liệu bằng Playwright với stealth mode cho cả tin bán, tin cho thuê, dự án và tin tức; làm sạch và chuẩn hóa; làm giàu (geocoding qua Nominatim/Goong, trích xuất intent tags); chunking ngữ nghĩa; tạo embedding BGE-M3 (1024 chiều); và nạp vào PostgreSQL + pgvector qua các ingestor module. Pipeline được lập lịch tự động qua Apache Airflow với 4 DAGs.
 
-    \item \textbf{Thiết kế kiến trúc có khả năng mở rộng} với Docker Compose, tách biệt các service (frontend, backend, database, cache), hỗ trợ triển khai dễ dàng trên nhiều môi trường.
+    \item \textbf{Triển khai hệ thống tìm kiếm lai hiệu quả} kết hợp giữa SQL filtering cho dữ liệu có cấu trúc và pgvector kNN với HNSW index cho tìm kiếm ngữ nghĩa, có reranking qua Cohere và caching qua Redis để cải thiện độ chính xác và tốc độ.
+
+    \item \textbf{Thiết kế kiến trúc microservices có khả năng mở rộng} với Docker Compose, tách biệt 5 service (frontend, backend, agent service, database, cache), hỗ trợ triển khai dễ dàng trên nhiều môi trường.
+
+    \item \textbf{Xây dựng hệ thống observability toàn diện} với agent tracing (AgentTrace, AgentTraceStep, AgentLLMCall, AgentRetrievalEvent), chat feedback, memory proposals, source readiness monitoring và Prometheus metrics endpoint.
+
+    \item \textbf{Bộ test phong phú} với hơn 60 file test bao phủ toàn bộ các module: chatbot pipeline, agent service, hybrid search, RAG, data pipeline, legal KB, crawler, memory/preferences và admin.
 \end{enumerate}
 
 \section*{Hạn chế}
 \addcontentsline{toc}{section}{Hạn chế}
 
 Bên cạnh những kết quả đạt được, đồ án vẫn còn một số hạn chế:
-
-\begin{itemize}
-    \item \textbf{Dữ liệu giới hạn:} Hiện tại mới chỉ crawl dữ liệu từ batdongsan.com.vn. Việc tích hợp thêm các nguồn khác (alonhadat.com.vn, chotot.com) sẽ làm phong phú thêm kho dữ liệu.
-
-    \item \textbf{Agent pháp lý còn đơn giản:} Legal Advisor Agent hiện tại chỉ cung cấp checklist cơ bản, chưa tích hợp đầy đủ knowledge base pháp lý chuyên sâu.
-
-    \item \textbf{Chưa có real-time:} Hệ thống hiện sử dụng REST API thay vì WebSocket, do đó chatbot chưa hỗ trợ streaming response.
-
-    \item \textbf{Chất lượng embedding:} Mặc dù BGE-M3 hoạt động tốt với tiếng Việt, vẫn còn không gian để cải thiện với các mô hình embedding chuyên biệt cho tiếng Việt hoặc fine-tuned models.
-
-    \item \textbf{Thiếu bộ test toàn diện:} Hệ thống chưa có test coverage đầy đủ cho tất cả các module, đặc biệt là frontend.
-
-    \item \textbf{Crawler chưa hoàn thiện:} Crawler cho mục projects và news đang ở dạng scaffold, selector chưa được triển khai đầy đủ.
-\end{itemize}
-
-\section*{Hướng phát triển}
-\addcontentsline{toc}{section}{Hướng phát triển}
-
-Từ những kết quả đạt được và hạn chế hiện tại, đồ án có thể được phát triển mở rộng theo các hướng sau:
-
-\begin{enumerate}
-    \item \textbf{Tích hợp thêm nguồn dữ liệu:} Mở rộng crawler sang các nền tảng bất động sản khác tại Việt Nam, tăng độ phủ và chất lượng dữ liệu.
-
-    \item \textbf{Nâng cấp chatbot:}
-    \begin{itemize}
-        \item Hỗ trợ streaming response qua WebSocket hoặc Server-Sent Events (SSE).
-        \item Tích hợp knowledge base pháp lý đầy đủ cho Legal Advisor Agent.
-        \item Bổ sung agent mới (ví dụ: Interior Design Advisor, Mortgage Calculator).
-        \item Hỗ trợ multi-turn conversation có ngữ cảnh.
-    \end{itemize}
-
-    \item \textbf{Cải thiện chất lượng tìm kiếm:}
-    \begin{itemize}
-        \item Fine-tune embedding model cho domain bất động sản tiếng Việt.
-        \item Thử nghiệm các mô hình embedding mới (E5, GTE, text-embedding-004).
-        \item Tích hợp tìm kiếm đa phương thức (multimodal search) với ảnh bất động sản.
-    \end{itemize}
-
-    \item \textbf{Mở rộng chức năng người dùng:}
-    \begin{itemize}
-        \item Lưu tin yêu thích và lịch sử xem.
-        \item So sánh bất động sản.
-        \item Thông báo khi có tin mới phù hợp với tiêu chí đã lưu.
-        \item Đánh giá và nhận xét bất động sản.
-    \end{itemize}
-
-    \item \textbf{Triển khai production:}
-    \begin{itemize}
-        \item CI/CD pipeline với GitHub Actions.
-        \item Monitoring và alerting với Grafana + Prometheus.
-        \item Load balancing và auto-scaling.
-        \item Backup và disaster recovery cho database.
-    \end{itemize}
-
-    \item \textbf{Tối ưu hiệu năng:}
-    \begin{itemize}
-        \item Query optimization và index tuning cho PostgreSQL.
-        \item Caching strategy toàn diện hơn với Redis.
-        \item Batch processing cho embedding pipeline.
-        \item CDN cho static assets.
-    \end{itemize}
-\end{enumerate}
 
 \newpage

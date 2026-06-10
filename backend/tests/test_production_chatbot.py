@@ -26,6 +26,56 @@ def test_route_query_selects_multiple_agents_and_extracts_filters(monkeypatch):
     assert decision.search_filters["max_price"] == 5
 
 
+def test_route_query_honors_rule_intent_extractor_when_gemini_key_exists(monkeypatch):
+    import sys
+    import types
+
+    import app.services.chatbot.router as router
+
+    called = {"gemini": False}
+
+    google_module = types.ModuleType("google")
+    genai_module = types.ModuleType("google.genai")
+    genai_types_module = types.ModuleType("google.genai.types")
+
+    class FakeResponse:
+        text = '{"intent":"property_search","target_agents":["property_search"],"search_filters":{}}'
+
+    class FakeModels:
+        def generate_content(self, *_, **__):
+            return FakeResponse()
+
+    class FakeClient:
+        def __init__(self, *_, **__):
+            called["gemini"] = True
+            self.models = FakeModels()
+
+    class FakeGenerateContentConfig:
+        def __init__(self, *_, **__):
+            pass
+
+    genai_module.Client = FakeClient
+    genai_module.types = genai_types_module
+    genai_types_module.GenerateContentConfig = FakeGenerateContentConfig
+    google_module.genai = genai_module
+
+    monkeypatch.setitem(sys.modules, "google", google_module)
+    monkeypatch.setitem(sys.modules, "google.genai", genai_module)
+    monkeypatch.setitem(sys.modules, "google.genai.types", genai_types_module)
+    monkeypatch.setattr(
+        router,
+        "get_settings",
+        lambda: SimpleNamespace(GEMINI_API_KEY="test-key", INTENT_EXTRACTOR="rule"),
+    )
+
+    decision = route_query("Mua can ho Quan 7 duoi 5 ty")
+
+    assert called["gemini"] is False
+    assert decision.intent == "property_search"
+    assert decision.search_filters["district"] == "Quan 7"
+    assert decision.search_filters["max_price"] == 5
+
+
 def test_route_query_selects_legal_agent_for_legal_question(monkeypatch):
     import app.services.chatbot.router as router
 

@@ -1,15 +1,17 @@
 # RealEstate Chatbot v2
 
-Nền tảng tìm kiếm, phân tích và tư vấn bất động sản Việt Nam, gồm web frontend, FastAPI backend, PostgreSQL + pgvector, Redis cache, pipeline crawl/index dữ liệu và chatbot multi-agent RAG.
+Nền tảng tìm kiếm, phân tích và tư vấn bất động sản Việt Nam, gồm web frontend Next.js, FastAPI backend, PostgreSQL + pgvector, Redis cache, pipeline crawl/index dữ liệu, và chatbot multi-agent RAG chạy trên LangGraph.
 
 Dự án này không chỉ hiển thị tin đăng bất động sản. Codebase đang hướng tới một hệ thống end-to-end:
 
 - Crawl tin bán, tin thuê, dự án và tin tức từ batdongsan.com.vn.
 - Làm sạch, làm giàu, upsert dữ liệu vào PostgreSQL.
 - Tạo semantic chunks, embedding bằng BGE-M3 và lưu vào pgvector.
-- Truy vấn hybrid: SQL filter -> vector search -> rerank.
+- Truy vấn hybrid: SQL filter → vector search → rerank.
 - Phục vụ UI Next.js, API FastAPI, dashboard thị trường và chatbot tư vấn.
+- Agent service riêng biệt chạy LangGraph multi-agent workflow, gọi nội bộ qua HTTP.
 - Lên lịch pipeline bằng Airflow và xuất metric Prometheus.
+- Admin dashboard để giám sát pipeline runs, agent trace, và system health.
 
 ## Mục Lục
 
@@ -38,9 +40,11 @@ flowchart TD
 
     API --> Postgres["PostgreSQL 16 + pgvector"]
     API --> Redis["Redis cache"]
-    API --> Chat["Multi-agent chatbot"]
+    API --> AgentSvc["Agent Service<br/>LangGraph multi-agent<br/>localhost:8100"]
 
-    Chat --> Router["Intent router"]
+    AgentSvc --> Gemini["Google Gemini<br/>LLM + Judge"]
+
+    AgentSvc --> Router["Intent Router"]
     Router --> Property["Property Search Agent"]
     Router --> Market["Market Analysis Agent"]
     Router --> Legal["Legal Advisor Agent"]
@@ -69,7 +73,8 @@ Luồng dữ liệu chính:
 2. Ingestor chuyển row CSV thành parent rows có cấu trúc trong `listings`, `projects`, `articles`.
 3. Ingestor tạo semantic chunks và embedding 1024 chiều trong bảng `chunks`.
 4. UI đọc dữ liệu có cấu trúc từ API.
-5. Chatbot đọc cả dữ liệu có cấu trúc và vector chunks qua hybrid retrieval.
+5. Chatbot gọi Agent Service (LangGraph workflow) để route intent, lập kế hoạch retrieval, chạy specialist agents, và tổng hợp câu trả lời.
+6. Agent Service truy vấn hybrid retrieval qua backend API để lấy dữ liệu có cấu trúc và vector chunks.
 
 Một quyết định quan trọng trong codebase là "publish trước, index sau": dữ liệu được upsert vào parent tables trước để UI/API nhìn thấy ngay, sau đó mới embed/index cho chatbot. Nếu embedding hoặc rerank lỗi, web vẫn có thể hiển thị dữ liệu đã crawl.
 
@@ -77,20 +82,30 @@ Một quyết định quan trọng trong codebase là "publish trước, index s
 
 ```text
 RealEstate_Chatbot_v2/
+├── agent_service/            # Internal LangGraph multi-agent RAG service
+│   ├── main.py               # FastAPI app: /internal/agent/chat, /health, /evaluate
+│   ├── config.py             # Agent service settings
+│   ├── contracts.py          # Pydantic contracts: AgentChatRequest/Response, Evidence, RetrievalTask
+│   ├── security.py           # Internal API key auth (X-Internal-Agent-Key header)
+│   ├── agents/               # Specialist agent implementations
+│   ├── graph/                # LangGraph StateGraph: router → planner → specialists → synthesizer
+│   ├── llm/                  # Gemini LLM wrapper
+│   ├── tools/                # Retrieval and market tools
+│   └── evaluation/           # LLM-as-judge evaluation
 ├── backend/                  # FastAPI v2, SQLAlchemy models, routers, migrations, tests
 │   ├── app/
 │   │   ├── main.py            # Entrypoint API v2: app.main:app
 │   │   ├── config.py          # Pydantic settings từ env/.env
 │   │   ├── database.py        # Async SQLAlchemy engine/session
-│   │   ├── models/            # User, Listing, Project, Article, Chunk, Chat, PipelineRun
-│   │   ├── routers/           # auth, listings, market, chat, metrics
-│   │   └── services/          # RAG, chatbot, listing scope
+│   │   ├── models/            # User, Listing, Project, Article, Chunk, Chat, PipelineRun, Preference, AgentObservability, SourceReadiness
+│   │   ├── routers/           # admin, auth, chat, listings, market, metrics, preferences
+│   │   └── services/          # agent_service client, chatbot orchestrator, RAG hybrid search
 │   ├── alembic/               # Alembic migrations
-│   └── tests/                 # Pytest suite
-├── frontend/                 # Next.js 16 + React 19 + Tailwind CSS
-│   ├── app/                   # App Router pages
-│   ├── components/            # Layout, listing cards/grid, filters, chatbot widget
-│   └── lib/                   # API client and shared TypeScript types
+│   └── tests/                 # Pytest suite with fixtures
+├── frontend/                 # Next.js 16 + React 19 + Tailwind CSS 4
+│   ├── app/                   # App Router pages (/, /nha-dat-ban, /thi-truong, /dang-nhap, /admin, ...)
+│   ├── components/            # Layout, listing cards/grid, filters, chatbot widget, admin dashboard
+│   └── lib/                   # API client (api.ts), TypeScript types (types.ts), utilities (utils.ts)
 ├── crawler/                  # Refactored Playwright crawlers
 │   ├── core/                  # Parser and CSV helpers
 │   ├── sale/                  # Tin bán
@@ -101,15 +116,24 @@ RealEstate_Chatbot_v2/
 │   ├── ingestors/             # listings, projects, news, legal KB ingestors
 │   └── legal/                 # PDF/HTML legal parser and chunker
 ├── airflow/                  # Airflow DAGs, plugins, Docker setup
-├── chatbot/                  # Legacy/standalone multi-agent scaffold
+├── chatbot/                  # Legacy standalone multi-agent scaffold (reference only)
+├── batdongsancom-crawler/    # Legacy crawler utilities (clean, heatmap)
 ├── data/                     # CSV samples and knowledge-base input folders
 ├── docs/                     # Architecture and implementation plans
-├── infra/                    # Grafana dashboard
-├── docker-compose.yml        # App stack: postgres, redis, backend, frontend
+├── infra/                    # Grafana dashboard config
+├── notebooks/                # Jupyter EDA notebooks
+├── report/                   # LaTeX project report
+├── docker-compose.yml        # Full stack: postgres, redis, backend, agent-service, frontend
 └── requirements.txt          # Root Python dependencies for pipeline/dev
 ```
 
-Lưu ý: `backend/main.py` là app demo/legacy đọc CSV và serve frontend tĩnh qua `/api/*`. Entrypoint chính của hệ thống v2 là `backend/app/main.py` với lệnh `uvicorn app.main:app`.
+Lưu ý:
+
+- `backend/main.py` là app demo/legacy đọc CSV và serve frontend tĩnh qua `/api/*`. **Không dùng cho development mới.**
+- Entrypoint chính của hệ thống v2 là `backend/app/main.py` với lệnh `uvicorn app.main:app`.
+- `agent_service/` là service riêng chạy LangGraph multi-agent workflow, backend gọi qua HTTP nội bộ khi `CHATBOT_AGENT_SERVICE_ENABLED=true`.
+- `chatbot/` là bản scaffold cũ, chỉ để tham khảo. Logic production nằm trong `agent_service/` và `backend/app/services/chatbot/`.
+- `batdongsancom-crawler/` là crawler cũ, đã được refactor sang `crawler/`. Chỉ giữ lại để tham khảo.
 
 ## Công Nghệ Chính
 
@@ -125,11 +149,12 @@ Backend:
 
 AI/RAG:
 
+- LangGraph (agent-service workflow: router → retrieval planner → specialists → synthesizer)
 - `sentence-transformers`
 - BGE-M3: `BAAI/bge-m3`
 - pgvector HNSW index
 - Cohere rerank API, optional
-- Google Gemini API, optional cho routing/intent extraction
+- Google Gemini API (LLM cho agent service, routing, và judge evaluation)
 
 Frontend:
 
@@ -173,6 +198,10 @@ GEMINI_API_KEY=
 COHERE_API_KEY=
 HF_EMBEDDING_MODEL=BAAI/bge-m3
 EMBEDDING_DIM=1024
+
+AGENT_INTERNAL_KEY=change-me-internal-agent-key
+AGENT_SERVICE_URL=http://agent-service:8100
+CHATBOT_AGENT_SERVICE_ENABLED=false
 ```
 
 Chạy toàn bộ app:
@@ -186,13 +215,15 @@ Các URL chính:
 - Frontend: http://localhost:3000
 - Backend health: http://localhost:8000/api/v1/health
 - Backend docs: http://localhost:8000/docs
+- Agent Service health: http://localhost:8100/internal/agent/health (cần `X-Internal-Agent-Key` header)
 - Prometheus metrics: http://localhost:8000/metrics
 
 Trong Docker Compose:
 
 - `postgres` dùng image `pgvector/pgvector:pg16`.
 - `redis` dùng `redis:7-alpine`.
-- `backend` chạy `alembic upgrade head` rồi `uvicorn app.main:app --reload`.
+- `agent-service` chạy LangGraph workflow, expose port 8100 (internal only), health check qua `/internal/agent/health`.
+- `backend` chạy `alembic upgrade head` rồi `uvicorn app.main:app --reload`. Gọi agent-service qua `AGENT_SERVICE_URL` khi bật.
 - `frontend` chạy Next dev server, proxy `/api/v1/*` về backend service qua `INTERNAL_API_URL`.
 
 ## Chạy Local Để Phát Triển
@@ -231,14 +262,29 @@ cd ..
 
 `backend/app/main.py` cũng gọi `init_db()` khi startup để tạo bảng trong môi trường dev, nhưng production/dev nghiêm túc nên dùng Alembic để schema nhất quán.
 
-### 4. Chạy backend
+### 4. (Optional) Chạy agent service
+
+Nếu cần test chatbot đầy đủ với LangGraph workflow:
+
+```powershell
+pip install -r requirements.txt
+$env:PYTHONPATH="$PWD;$PWD\backend"
+$env:AGENT_ALLOW_DEV_INTERNAL_KEY="true"
+uvicorn agent_service.main:app --reload --host 0.0.0.0 --port 8100
+```
+
+Cháº¡y lá»‡nh trÃªn tá»« root repo Ä‘á»ƒ `agent_service/` import Ä‘Æ°á»£c package `backend/app`. `AGENT_ALLOW_DEV_INTERNAL_KEY=true` chá»‰ dÃ¹ng local vá»›i key máº·c Ä‘á»‹nh `dev-agent-internal-key`; production pháº£i set `AGENT_INTERNAL_KEY` khÃ¡c giÃ¡ trá»‹ máº·c Ä‘á»‹nh.
+
+Set `CHATBOT_AGENT_SERVICE_ENABLED=true` và `AGENT_SERVICE_URL=http://localhost:8100` trong `.env` của backend để kết nối.
+
+### 5. Chạy backend
 
 ```powershell
 cd backend
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-### 5. Chạy frontend
+### 6. Chạy frontend
 
 ```powershell
 cd frontend
@@ -270,9 +316,10 @@ Các settings chính nằm trong `backend/app/config.py`.
 | `JWT_SECRET_KEY` | demo secret | Secret ký JWT, cần đổi khi deploy |
 | `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` | `1440` | Thời gian sống access token |
 | `CORS_ORIGINS` | localhost frontend | Danh sách origin cách nhau bằng dấu phẩy |
-| `GEMINI_API_KEY` | rỗng | Bật Gemini routing/intent khi có key |
-| `GEMINI_MODEL` | `gemini-2.0-flash` | Model Gemini cho chatbot router |
+| `GEMINI_API_KEY` | rỗng | Bật Gemini LLM cho agent service và routing |
+| `GEMINI_MODEL` | `gemini-2.0-flash` | Model Gemini cho chatbot |
 | `GEMINI_INTENT_MODEL` | `gemini-2.0-flash` | Model Gemini cho intent tags |
+| `GEMINI_JUDGE_MODEL` | `gemini-2.0-flash` | Model Gemini cho LLM judge evaluation |
 | `EMBEDDING_PROVIDER` | `bge_m3` | Provider embedding hiện tại |
 | `HF_EMBEDDING_MODEL` | `BAAI/bge-m3` | SentenceTransformer model |
 | `EMBEDDING_DIM` | `1024` | Phải khớp `chunks.embedding vector(1024)` |
@@ -282,6 +329,16 @@ Các settings chính nằm trong `backend/app/config.py`.
 | `RERANK_PROVIDER` | `cohere` | Provider rerank |
 | `RERANK_MODEL` | `rerank-multilingual-v3.0` | Model rerank |
 | `RERANK_TOP_N` | `5` | Số kết quả sau rerank |
+| `AGENT_SERVICE_URL` | `http://localhost:8100` | URL của internal agent service |
+| `AGENT_INTERNAL_KEY` | `dev-agent-internal-key` | Key xác thực giữa backend và agent service |
+| `AGENT_SERVICE_TIMEOUT_SECONDS` | `45.0` | Timeout gọi agent service |
+| `CHATBOT_AGENT_SERVICE_ENABLED` | `false` | Bật agent service (thay vì chatbot inline) |
+| `CHATBOT_LLM_JUDGE_ENABLED` | `false` | Bật LLM judge evaluation sau mỗi response |
+| `CHATBOT_MEMORY_ENABLED` | `true` | Bật user memory/preferences |
+| `CHATBOT_ADMIN_ENABLED` | `true` | Bật admin dashboard endpoints |
+| `CHATBOT_TRACE_LEVEL` | `full` | Mức độ trace log (`full`, `summary`, `off`) |
+| `ANON_CHAT_DAILY_LIMIT` | `20` | Giới hạn chat/ngày cho anonymous user |
+| `AUTH_CHAT_DAILY_LIMIT` | `200` | Giới hạn chat/ngày cho authenticated user |
 | `GEOCODER_PROVIDER` | `nominatim` | `nominatim` hoặc `goong` |
 | `GEOCODER_USER_AGENT` | demo UA | Bắt buộc tử tế khi dùng Nominatim |
 | `GEOCODER_RATE_LIMIT_SECONDS` | `1.0` | Rate limit geocoding |
@@ -387,6 +444,33 @@ Response gồm:
 - `suggested_actions`
 - `created_at`
 
+Khi `CHATBOT_AGENT_SERVICE_ENABLED=true`, backend gọi agent-service qua HTTP nội bộ thay vì chạy pipeline inline. Response từ agent-service có thêm `trace_summary` và `full_trace` để debug.
+
+### Preferences & Memory
+
+| Method | Path | Mô tả |
+|---|---|---|
+| `GET` | `/api/v1/preferences` | Lấy tất cả preferences của user |
+| `PUT` | `/api/v1/preferences` | Cập nhật preferences |
+| `DELETE` | `/api/v1/preferences/{key}` | Xóa một preference |
+| `GET` | `/api/v1/memory/context` | Lấy memory context cho user |
+| `POST` | `/api/v1/memory/context` | Cập nhật memory context |
+
+### Admin
+
+| Method | Path | Mô tả |
+|---|---|---|
+| `GET` | `/api/v1/admin/pipeline-runs` | Danh sách pipeline runs |
+| `GET` | `/api/v1/admin/agent-traces` | Agent execution traces |
+| `GET` | `/api/v1/admin/system-health` | Tổng quan health hệ thống |
+
+### Metrics
+
+| Method | Path | Mô tả |
+|---|---|---|
+| `GET` | `/metrics` | Prometheus exposition format |
+| `GET` | `/api/v1/metrics/pipeline` | Pipeline run metrics |
+
 ## Frontend
 
 Frontend nằm trong `frontend/` và dùng Next.js App Router.
@@ -399,9 +483,11 @@ Các route chính:
 | `/nha-dat-ban` | `frontend/app/nha-dat-ban/page.tsx` | Listing sale với filters/sort/pagination |
 | `/nha-dat-cho-thue` | `frontend/app/nha-dat-cho-thue/page.tsx` | Listing rent |
 | `/nha-dat-ban/[id]` | `frontend/app/nha-dat-ban/[id]/page.tsx` | Chi tiết listing |
+| `/nha-dat-cho-thue/[id]` | `frontend/app/nha-dat-cho-thue/[id]/page.tsx` | Chi tiết listing thuê |
 | `/thi-truong` | `frontend/app/thi-truong/page.tsx` | Dashboard market charts |
 | `/dang-nhap` | `frontend/app/dang-nhap/page.tsx` | Login |
 | `/dang-ky` | `frontend/app/dang-ky/page.tsx` | Register |
+| `/admin` | `frontend/app/admin/page.tsx` | Admin dashboard (pipeline runs, traces, health) |
 
 API client tập trung ở `frontend/lib/api.ts`, TypeScript contracts ở `frontend/lib/types.ts`.
 
@@ -413,20 +499,38 @@ Các component chính:
 - `components/listing/ListingGrid.tsx`
 - `components/search/FilterPanel.tsx`
 - `components/chatbot/ChatWidget.tsx`
+- `components/admin/AdminDashboard.tsx`
 
 ## Chatbot Multi-Agent RAG
 
-Pipeline production nằm ở `backend/app/services/chatbot/`.
+Hệ thống chatbot có hai chế độ hoạt động:
 
-Luồng xử lý:
+### Chế độ Agent Service (khuyến nghị cho production)
+
+Khi `CHATBOT_AGENT_SERVICE_ENABLED=true`, backend gọi `agent_service/` — một FastAPI service riêng chạy LangGraph StateGraph workflow:
+
+1. **context_builder**: Xây dựng context từ chat history và user preferences.
+2. **readiness_checker**: Kiểm tra các data source sẵn sàng.
+3. **router**: Phân tích intent người dùng, chọn specialist agents cần chạy.
+4. **retrieval_planner**: Lập kế hoạch retrieval tasks cho từng agent.
+5. **specialist_agents**: Chạy song song các agent chuyên biệt:
+   - `property_search` — tìm kiếm BĐS theo tiêu chí
+   - `market_analysis` — phân tích thị trường, giá cả, xu hướng
+   - `legal_advisor` — tư vấn pháp lý, trích dẫn văn bản luật
+   - `investment_advisor` — phân tích đầu tư, ROI, so sánh dự án
+6. **synthesizer**: Tổng hợp kết quả từ các agent thành câu trả lời cuối cùng.
+7. **safety_validator**: Kiểm tra an toàn nội dung trước khi trả về.
+8. **memory_proposals**: Đề xuất cập nhật user memory/preferences.
+
+Agent service giao tiếp với backend qua HTTP nội bộ (port 8100), xác thực bằng `X-Internal-Agent-Key` header.
+
+### Chế độ Inline (fallback)
+
+Khi `CHATBOT_AGENT_SERVICE_ENABLED=false`, backend chạy pipeline inline trong `backend/app/services/chatbot/`:
 
 1. `routers/chat.py` nhận message và tạo/tìm `ChatSession`.
 2. `run_chat_pipeline()` trong `orchestrator.py` gọi `route_query()`.
-3. Router chọn một hoặc nhiều agent:
-   - `property_search`
-   - `market_analysis`
-   - `legal_advisor`
-   - `investment_advisor`
+3. Router chọn agent(s) phù hợp.
 4. Các agent chạy song song bằng `asyncio.gather`.
 5. Orchestrator gom kết quả, sources và suggested actions.
 6. User/assistant messages được lưu vào DB.
@@ -434,9 +538,9 @@ Luồng xử lý:
 Routing:
 
 - Nếu không có `GEMINI_API_KEY`, router dùng keyword rules tiếng Việt không dấu.
-- Nếu có `GEMINI_API_KEY`, router thử Gemini JSON classification; lỗi thì fallback keyword rules.
+- Nếu có `GEMINI_API_KEY`, router dùng Gemini JSON classification; lỗi thì fallback keyword rules.
 
-Retrieval:
+### Hybrid Retrieval
 
 - `backend/app/services/rag/hybrid_search.py`
 - Stage 1: SQL filter lấy candidate parent IDs.
@@ -450,6 +554,10 @@ Redis cache:
 - Cache query embeddings trong namespace `embed:q`.
 - Cache rerank result trong namespace `rerank`.
 - Nếu Redis lỗi, retrieval vẫn fallback không cache.
+
+### LLM Judge Evaluation
+
+Khi `CHATBOT_LLM_JUDGE_ENABLED=true`, mỗi response được đánh giá bởi Gemini Judge model qua endpoint `/internal/agent/evaluate`. Kết quả đánh giá gồm: relevance, factual accuracy, completeness, safety, và citation quality.
 
 ## Pipeline Dữ Liệu
 
@@ -620,6 +728,9 @@ Các bảng nghiệp vụ chính:
 | `chat_sessions` | Chat sessions |
 | `chat_messages` | Chat messages |
 | `pipeline_runs` | Summary run của Airflow/pipeline |
+| `preferences` | User preferences & memory key-value store |
+| `agent_observability` | Agent execution traces và evaluation results |
+| `source_readiness` | Trạng thái sẵn sàng của các data source |
 
 Chạy migration:
 
@@ -644,51 +755,71 @@ Lưu ý quan trọng:
 
 ## Testing
 
-Backend tests:
+### Backend tests
 
 ```powershell
+# Run all backend tests
 pytest backend\tests
+
+# Run with coverage
+pytest backend\tests --cov=backend\app --cov=agent_service
+
+# Run a specific test file
+pytest backend\tests\test_chat_router_pipeline.py -v
+
+# Run tests by keyword
+pytest backend\tests -k "agent_service" -v
 ```
 
-Chạy một test cụ thể:
+### Python syntax & import check
 
 ```powershell
-pytest backend\tests\test_chat_router_pipeline.py -v
+python -m compileall backend\app agent_service data_pipeline
 ```
 
-Frontend lint:
+### Frontend lint & build
 
 ```powershell
 cd frontend
 npm run lint
-```
-
-Frontend build:
-
-```powershell
-cd frontend
 npm run build
 ```
 
-Một số nhóm test đáng chú ý:
+### Nhóm test chính
 
-- Crawler parsers: `test_listing_detail_parser.py`, `test_project_crawler_parsers.py`, `test_news_crawler_parsers.py`
-- Data pipeline: `test_clean.py`, `test_chunk.py`, `test_embed.py`, `test_listings_ingestor.py`
-- RAG: `test_hybrid_search.py`, `test_hybrid_search_caching.py`, `test_backend_hybrid_search.py`
-- Chatbot: `test_chat_router_pipeline.py`, `test_production_chatbot.py`
-- Airflow/pipeline: `test_dag_structure.py`, `test_pipeline_runner.py`, `test_run_metrics.py`
-- Frontend/API contract: `test_frontend_data_performance.py`, `test_frontend_docker_config.py`
+| Nhóm | File tiêu biểu |
+|---|---|
+| Agent Service core | `test_agent_graph_core.py`, `test_agent_service_client.py`, `test_agent_service_foundation.py` |
+| Agent specialists | `test_agent_specialists.py` |
+| Agent retrieval | `test_agent_retrieval_contracts.py`, `test_agent_retrieval_planner.py` |
+| Agent RAG tools | `test_agent_rag_tools.py` |
+| Agent evaluation | `test_agent_evaluation.py` |
+| Agent Docker config | `test_agent_service_docker_config.py` |
+| Chatbot pipeline | `test_chat_router_pipeline.py`, `test_chat_agent_service_integration.py`, `test_production_chatbot.py` |
+| RAG / Hybrid search | `test_hybrid_search.py`, `test_hybrid_search_caching.py`, `test_backend_hybrid_search.py` |
+| Crawler parsers | `test_listing_detail_parser.py`, `test_project_crawler_parsers.py`, `test_news_crawler_parsers.py` |
+| Data pipeline | `test_clean.py`, `test_chunk.py`, `test_embed.py`, `test_listings_ingestor.py` |
+| Legal KB | `test_legal_kb_ingestor.py`, `test_legal_chunker.py`, `test_legal_advisor_agent.py` |
+| Market/API | `test_market_stats.py`, `test_listings_route_order.py`, `test_metrics_endpoint.py` |
+| Admin/Observability | `test_admin_observability.py`, `test_pipeline_run_model.py` |
+| Memory/Preferences | `test_memory_preferences.py` |
+| Airflow/Pipeline config | `test_dag_structure.py`, `test_pipeline_runner.py`, `test_run_metrics.py`, `test_pipeline_config.py` |
+| Frontend contracts | `test_frontend_data_performance.py`, `test_frontend_docker_config.py` |
+| Infrastructure | `test_alerting.py`, `test_cache.py`, `test_conftest_paths.py`, `test_m2_config.py` |
+
+Test fixtures được tổ chức trong `backend/tests/fixtures/` và `backend/tests/conftest.py`.
 
 ## Quy Trình Phát Triển Gợi Ý
 
 1. Chạy `git status --short` trước khi sửa vì repo có thể đang có thay đổi dở.
-2. Chạy Postgres/Redis bằng Docker.
-3. Chạy backend local bằng `uvicorn app.main:app`.
-4. Chạy frontend local bằng `npm run dev`.
-5. Với thay đổi schema: thêm migration Alembic, chạy `alembic upgrade head`, chạy test liên quan.
-6. Với thay đổi pipeline: test trên CSV nhỏ bằng `--limit` hoặc batch nhỏ trước khi chạy crawler lớn.
-7. Với thay đổi RAG: re-ingest sample data nếu ảnh hưởng chunk/embedding.
-8. Với thay đổi frontend: kiểm tra các route chính và chạy `npm run lint`.
+2. Chạy Postgres/Redis bằng Docker: `docker compose up -d postgres redis`.
+3. (Optional) Chạy agent-service nếu cần test chatbot đầy đủ: `docker compose up -d agent-service` hoặc chạy local `uvicorn agent_service.main:app --port 8100`.
+4. Chạy backend local bằng `uvicorn app.main:app` từ thư mục `backend/`.
+5. Chạy frontend local bằng `npm run dev` từ thư mục `frontend/`.
+6. Với thay đổi schema: thêm migration Alembic, chạy `alembic upgrade head`, chạy test liên quan.
+7. Với thay đổi pipeline: test trên CSV nhỏ bằng `--limit` hoặc batch nhỏ trước khi chạy crawler lớn.
+8. Với thay đổi RAG/agent: test agent service riêng, re-ingest sample data nếu ảnh hưởng chunk/embedding.
+9. Với thay đổi frontend: kiểm tra các route chính và chạy `npm run lint`.
 
 ## Troubleshooting
 
@@ -729,6 +860,15 @@ SELECT parent_type, count(*) FROM chunks GROUP BY parent_type;
 4. Backend có đủ RAM để tải `BAAI/bge-m3`.
 5. Redis/Cohere lỗi không nên làm fail retrieval, nhưng logs sẽ có warning fallback.
 
+### Agent Service không phản hồi
+
+Kiểm tra:
+
+1. Agent service health: `curl -H "X-Internal-Agent-Key: $AGENT_INTERNAL_KEY" http://localhost:8100/internal/agent/health`
+2. `AGENT_SERVICE_URL` và `AGENT_INTERNAL_KEY` khớp giữa backend và agent service.
+3. `GEMINI_API_KEY` đã được set cho agent service (cần cho LLM calls).
+4. Nếu không muốn dùng agent service, set `CHATBOT_AGENT_SERVICE_ENABLED=false` để dùng chế độ inline.
+
 ### Frontend gọi API lỗi
 
 Kiểm tra:
@@ -766,8 +906,11 @@ Sau đó chạy Airflow compose trong thư mục `airflow/`.
 ## Tài Liệu Liên Quan
 
 - `docs/pipeline.md`: thiết kế pipeline crawl/index.
-- `docs/multiagent-workflow.md`: workflow multi-agent.
-- `docs/superpowers/plans/`: các implementation plans theo milestone.
-- `guide_chay_datapipeline.md`: hướng dẫn chạy data pipeline bằng tiếng Việt.
-- `frontend/README.md`: README mặc định của Next.js, hiện chưa phản ánh toàn bộ app.
+- `docs/multiagent-workflow.md`: workflow multi-agent (kiến trúc cũ, tham khảo).
+- `docs/implementation_plan.md`: kế hoạch triển khai tổng thể.
+- `docs/deploy/superpowers/plans/`: các implementation plans theo milestone.
+- `docs/guide_chay_datapipeline.md`: hướng dẫn chạy data pipeline bằng tiếng Việt.
+- `frontend/README.md`: README mặc định của Next.js.
+- `frontend/CLAUDE.md`: hướng dẫn frontend cho Claude.
+- `.claude/rules/`: project rules cho AI assistants (coding style, API endpoints, database schema, ...).
 

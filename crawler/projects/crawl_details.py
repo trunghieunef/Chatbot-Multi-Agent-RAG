@@ -17,9 +17,12 @@ import glob
 import json
 import os
 import random
+import re
 import threading
 import time
+import unicodedata
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from urllib.parse import urljoin
 
 from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright, Browser
@@ -44,10 +47,13 @@ DETAIL_FIELDS = [
     "total_units",
     "price_range",
     "area_range",
+    "scale",
     "status",
     "project_type",
+    "legal",
     "description",
     "amenities",  # JSON-encoded list
+    "image_urls",  # JSON-encoded list
     "url",
 ]
 
@@ -72,6 +78,35 @@ def _clean_text(value: str) -> str:
     return " ".join((value or "").split())
 
 
+def _label_key(value: str) -> str:
+    normalized = unicodedata.normalize("NFD", value or "")
+    without_marks = "".join(ch for ch in normalized if unicodedata.category(ch) != "Mn")
+    return without_marks.replace("đ", "d").replace("Đ", "d").lower().strip()
+
+
+def _lookup(mapping: dict[str, str], *labels: str) -> str:
+    for label in labels:
+        value = mapping.get(label.lower()) or mapping.get(_label_key(label))
+        if value:
+            return value
+    return ""
+
+
+def _extract_value_from_description(description: str, label: str) -> str:
+    match = re.search(
+        rf"{re.escape(label)}\s*:\s*(.*?)(?=\s+[A-ZÀ-ỸĐ][^:]{1,40}:\s|$)",
+        description,
+        flags=re.IGNORECASE,
+    )
+    if not match:
+        return ""
+    value = _clean_text(match.group(1))
+    for boundary in (" Pháp lý:", " Loại hình sản phẩm:", " Số lượng sản phẩm:", " Tổng diện tích sàn:"):
+        if boundary in value:
+            value = value.split(boundary, 1)[0]
+    return _clean_text(value)
+
+
 def _project_attr_map(soup: BeautifulSoup) -> dict[str, str]:
     attrs: dict[str, str] = {}
     for row in soup.select(".re__project-attr tr"):
@@ -79,6 +114,21 @@ def _project_attr_map(soup: BeautifulSoup) -> dict[str, str]:
         value = _clean_text(row.select_one(".re__attr-item-value").get_text(" ", strip=True)) if row.select_one(".re__attr-item-value") else ""
         if label and value:
             attrs[label.lower()] = value
+            attrs[_label_key(label)] = value
+    return attrs
+
+
+def _project_box_map(soup: BeautifulSoup) -> dict[str, str]:
+    attrs: dict[str, str] = {}
+    for item in soup.select(".re__project-box-item"):
+        parts = [
+            _clean_text(node.get_text(" ", strip=True))
+            for node in item.find_all(["span", "div"])
+            if node.get_text(strip=True)
+        ]
+        if len(parts) >= 2:
+            attrs[parts[0].lower()] = parts[1]
+            attrs[_label_key(parts[0])] = parts[1]
     return attrs
 
 
@@ -106,6 +156,14 @@ def _project_editor(soup: BeautifulSoup):
 
 
 def _project_amenities(soup: BeautifulSoup) -> list[str]:
+    facilities = [
+        _clean_text(item.get_text(" ", strip=True))
+        for item in soup.select(".re__prj-facilities .re__toogle-detail span")
+        if item.get_text(strip=True)
+    ]
+    if facilities:
+        return facilities
+
     legacy_items = [
         _clean_text(item.get_text(" ", strip=True))
         for item in soup.select(".amenities li, [data-testid='amenity']")
@@ -134,15 +192,43 @@ def _project_amenities(soup: BeautifulSoup) -> list[str]:
     return amenities
 
 
+def _project_images(soup: BeautifulSoup, *, base_url: str) -> list[str]:
+    urls: list[str] = []
+    for image in soup.select(".re__project-album img, .project-main-container img"):
+        src = image.get("data-src") or image.get("src") or ""
+        if not src or src.startswith("data:"):
+            continue
+        absolute = urljoin(base_url, src)
+        if absolute not in urls:
+            urls.append(absolute)
+    return urls
+
+
 def parse_project_detail(html: str, *, url: str) -> dict[str, str]:
     soup = BeautifulSoup(html, "html.parser")
     name = _text(soup, "h1.re__project-name") or _text(soup, "h1") or _text(soup, "[data-testid='project-title']")
     attr_map = _project_attr_map(soup)
     location = _project_address(soup)
+    location = _clean_text(location.replace("Xem bản đồ", ""))
     district, city = _location_parts(location)
     editor = _project_editor(soup)
     description = _clean_text(editor.get_text(" ", strip=True)) if editor else ""
     amenities = _project_amenities(soup)
+    box_map = _project_box_map(soup)
+    total_units = _lookup(attr_map, "Số căn") or _lookup(box_map, "Số căn") or _text(soup, ".total-units, [data-testid='total-units']")
+    total_units = re.sub(r"\D+", "", total_units)
+    area_range = _lookup(attr_map, "Diện tích") or _lookup(box_map, "Diện tích") or _text(soup, ".area-range, [data-testid='area-range']")
+    project_type = (
+        _lookup(attr_map, "Loại hình sản phẩm", "Kiểu biệt thự")
+        or _lookup(box_map, "Loại hình sản phẩm", "Kiểu biệt thự")
+        or _extract_value_from_description(description, "Loại hình sản phẩm")
+        or _text(soup, ".project-type, [data-testid='project-type']")
+    )
+    legal = (
+        _lookup(attr_map, "Pháp lý")
+        or _lookup(box_map, "Pháp lý")
+        or _extract_value_from_description(description, "Pháp lý")
+    )
     return {
         "slug": slugify(name) or url.rstrip("/").split("/")[-1],
         "name": name,
@@ -157,6 +243,14 @@ def parse_project_detail(html: str, *, url: str) -> dict[str, str]:
         "project_type": _text(soup, ".project-type, [data-testid='project-type']"),
         "description": description,
         "amenities": json.dumps(amenities, ensure_ascii=False),
+        "developer": _lookup(attr_map, "Chủ đầu tư", "Chá»§ Ä‘áº§u tÆ°") or _text(soup, ".developer, [data-testid='developer']"),
+        "total_units": total_units,
+        "area_range": area_range,
+        "scale": _lookup(box_map, "Quy mô") or _lookup(attr_map, "Quy mô"),
+        "status": _text(soup, ".project-main-container .re__prj-tag-info, .status, [data-testid='status']"),
+        "project_type": project_type,
+        "legal": legal,
+        "image_urls": json.dumps(_project_images(soup, base_url=url), ensure_ascii=False),
         "url": url,
     }
 

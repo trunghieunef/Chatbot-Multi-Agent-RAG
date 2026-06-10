@@ -8,13 +8,14 @@ import pendulum
 from airflow import DAG
 from airflow.models import Variable
 from airflow.operators.python import PythonOperator
-from airflow.providers.postgres.operators.postgres import PostgresOperator
 from airflow.utils.task_group import TaskGroup
 
 from plugins.alerting import slack_failure_callback
 from plugins.pipeline_runner import (
     REPO_ROOT,
+    run_cleanup_expired_listing_chunks,
     run_crawler,
+    run_deactivate_expired_listings,
     run_listings_ingestion,
 )
 from plugins.run_metrics import on_failure as record_failure
@@ -82,6 +83,14 @@ def _ingest(source: str, **_):
     return run_listings_ingestion(csv_path, batch_size=50)
 
 
+def _deactivate_expired_listings(**_):
+    return run_deactivate_expired_listings()
+
+
+def _cleanup_expired_listing_chunks(**_):
+    return run_cleanup_expired_listing_chunks(retention_days=60)
+
+
 with DAG(
     dag_id="daily_listings_dag",
     description=(
@@ -125,27 +134,17 @@ with DAG(
             crawl_urls >> crawl_details >> ingest >> mark_done
         source_groups.append(group)
 
-    mark_active = PostgresOperator(
+    mark_active = PythonOperator(
         task_id="mark_active",
-        postgres_conn_id="realestate_app",
-        sql="""
-            UPDATE listings
-               SET is_active = false,
-                   updated_at = NOW()
-             WHERE is_active = true
-               AND expiry_date IS NOT NULL
-               AND expiry_date <> ''
-               AND (
-                    -- expiry_date stored as 'DD/MM/YYYY'
-                    CASE WHEN expiry_date ~ '^\\d{2}/\\d{2}/\\d{4}$'
-                         THEN to_date(expiry_date, 'DD/MM/YYYY') < CURRENT_DATE
-                         WHEN expiry_date ~ '^\\d{4}-\\d{2}-\\d{2}$'
-                         THEN to_date(expiry_date, 'YYYY-MM-DD') < CURRENT_DATE
-                         ELSE false
-                    END
-               );
-        """,
+        python_callable=_deactivate_expired_listings,
+    )
+
+    cleanup_expired_listing_chunks = PythonOperator(
+        task_id="cleanup_expired_listing_chunks",
+        python_callable=_cleanup_expired_listing_chunks,
     )
 
     for group in source_groups:
         group >> mark_active
+
+    mark_active >> cleanup_expired_listing_chunks

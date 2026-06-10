@@ -14,96 +14,344 @@ Cấu trúc thư mục chính của dự án (rút gọn):
 
 \begin{lstlisting}[basicstyle=\ttfamily\footnotesize]
 RealEstate_Chatbot_v2/
-├── frontend/                  # Next.js 16 Application
-│   ├── app/                   # App Router pages
-│   ├── components/            # React components
-│   │   ├── layout/            # Header, Footer, ChatWidget
-│   │   ├── listing/           # ListingCard, ListingGrid
-│   │   ├── search/            # SearchBar, FilterPanel
-│   │   ├── chatbot/           # ChatMessage, ChatInput
-│   │   └── market/            # PriceChart, MarketStats
-│   └── lib/                   # api.ts, types.ts
-├── backend/                   # FastAPI Backend
+├── frontend/                    # Next.js 16 + React 19 + TypeScript
 │   ├── app/
-│   │   ├── models/            # ORM models (7 tables)
-│   │   ├── schemas/           # Pydantic contracts
-│   │   ├── routers/           # API endpoints (5 routers)
-│   │   └── services/          # Business logic + chatbot
-│   └── tests/                 # Backend test suite
-├── chatbot/                   # LangGraph sandbox
-│   ├── agents/                # 5 specialized agents
-│   └── tools/                 # hybrid_search, cache
-├── data_pipeline/             # ETL modules
-│   ├── clean.py               # Data cleaning
-│   ├── enrich.py              # Geocoding + intent tags
-│   ├── chunk.py               # Semantic chunking
-│   ├── embed.py               # BGE-M3 embedding
-│   └── load_db.py             # PostgreSQL upsert
-├── airflow/                   # Airflow DAGs
-│   └── dags/                  # 4 scheduled DAGs
-├── Crawl/                     # Playwright crawlers
-├── docker-compose.yml         # Infrastructure
-└── docs/                      # Project documentation
+│   │   ├── page.tsx             # Trang chủ
+│   │   ├── layout.tsx           # Root layout
+│   │   ├── nha-dat-ban/         # Danh sách & chi tiết BĐS bán
+│   │   │   ├── page.tsx
+│   │   │   └── [id]/            # Trang chi tiết (dynamic route)
+│   │   ├── nha-dat-cho-thue/    # Danh sách & chi tiết cho thuê
+│   │   ├── thi-truong/          # Dashboard thống kê thị trường
+│   │   ├── admin/               # Bảng điều khiển quản trị
+│   │   ├── dang-nhap/           # Đăng nhập
+│   │   └── dang-ky/             # Đăng ký
+│   ├── components/
+│   │   ├── layout/              # Header.tsx, Footer.tsx
+│   │   ├── listing/             # ListingCard.tsx, ListingGrid.tsx
+│   │   ├── search/              # FilterPanel.tsx
+│   │   ├── chatbot/             # ChatWidget.tsx
+│   │   └── admin/               # AdminDashboard.tsx
+│   ├── lib/
+│   │   ├── api.ts               # Typed API client (FastAPI)
+│   │   ├── types.ts             # TypeScript interfaces
+│   │   ├── utils.ts             # Format helpers
+│   │   └── chatSourceDisplay.ts # Chat source rendering
+│   └── public/                  # Static assets
+│
+├── backend/                     # Backend API (FastAPI + SQLAlchemy)
+│   ├── app/
+│   │   ├── main.py              # FastAPI app, CORS, router registration
+│   │   ├── config.py            # Settings (env vars, defaults)
+│   │   ├── database.py          # Async engine, session, Base
+│   │   ├── models/              # 14+ ORM models
+│   │   │   ├── listing.py       #   - listings (30+ fields)
+│   │   │   ├── chunk.py         #   - chunks (pgvector 1024d)
+│   │   │   ├── chat.py          #   - chat_sessions, chat_messages
+│   │   │   ├── user.py          #   - users
+│   │   │   ├── project.py       #   - projects
+│   │   │   ├── article.py       #   - articles
+│   │   │   ├── pipeline_run.py  #   - pipeline_runs
+│   │   │   ├── preference.py    #   - user_preferences,
+│   │   │   │                       memory_proposals,
+│   │   │   │                       chat_feedback
+│   │   │   ├── agent_observability.py  # agent_traces,
+│   │   │   │                       agent_trace_steps,
+│   │   │   │                       agent_llm_calls,
+│   │   │   │                       agent_retrieval_events
+│   │   │   └── source_readiness.py    # source_readiness
+│   │   ├── schemas/             # Pydantic v2 contracts
+│   │   │   ├── listing.py, chat.py, auth.py
+│   │   │   ├── common.py, admin.py, preferences.py
+│   │   ├── routers/             # 7 router modules
+│   │   │   ├── listings.py      #   - /api/v1/listings
+│   │   │   ├── market.py        #   - /api/v1/market
+│   │   │   ├── chat.py          #   - /api/v1/chat
+│   │   │   ├── auth.py          #   - /api/v1/auth
+│   │   │   ├── preferences.py   #   - /api/v1/preferences
+│   │   │   ├── admin.py         #   - /api/v1/admin
+│   │   │   └── metrics.py       #   - /metrics
+│   │   └── services/
+│   │       ├── chatbot/         # Pipeline multi-agent noi bo
+│   │       │   ├── router.py    #   Intent routing (keyword + Gemini)
+│   │       │   ├── orchestrator.py  # Agent coordination
+│   │       │   ├── context.py   #   Conversation context
+│   │       │   ├── memory.py    #   User memory & preferences
+│   │       │   ├── contracts.py #   RoutingDecision, AgentResult
+│   │       │   ├── analytics.py #   Pipeline analytics
+│   │       │   └── agents/      #   4 specialist agents
+│   │       │       ├── property.py, market.py
+│   │       │       ├── legal.py, investment.py
+│   │       ├── rag/             # RAG services
+│   │       │   ├── hybrid_search.py  # SQL + pgvector + rerank + cache
+│   │       │   ├── embeddings.py     # BGE-M3 embedder
+│   │       │   ├── simple_rag.py     # Filter extraction
+│   │       │   ├── cache.py          # Redis caching
+│   │       │   └── ingest.py         # Vector store ingestion
+│   │       └── agent_service/  # Agent Service client
+│   │           ├── client.py    # HTTP client + internal key auth
+│   │           └── contracts.py # Request/response schemas
+│   ├── tests/                   # 58 test files
+│   │   ├── conftest.py          # Shared fixtures
+│   │   ├── fixtures/            # Test data
+│   │   └── test_*.py            # Organized by module
+│   ├── alembic/                 # DB migrations
+│   ├── scripts/                 # Utility scripts
+│   ├── requirements.txt
+│   └── Dockerfile
+│
+├── agent_service/               # Internal LangGraph Agent Service
+│   ├── main.py                  # FastAPI app (port 8100)
+│   ├── config.py                # Agent-specific settings
+│   ├── security.py              # Internal key authentication
+│   ├── contracts.py             # AgentChatRequest/Response
+│   ├── graph/
+│   │   ├── workflow.py          # 8-node StateGraph
+│   │   ├── state.py             # AgentGraphState
+│   │   ├── nodes.py             # Node implementations
+│   │   └── retrieval_planner.py # Multi-step retrieval planning
+│   ├── agents/
+│   │   └── specialists.py       # 4 specialist agents
+│   ├── tools/
+│   │   ├── retrieval.py         # Hybrid search tool
+│   │   ├── market.py            # Market stats tool
+│   │   └── readiness.py         # Data readiness check
+│   ├── llm/
+│   │   └── gemini.py            # Gemini 2.0 Flash wrapper
+│   ├── evaluation/
+│   │   └── judge.py             # LLM Judge (5 metrics)
+│   ├── requirements.txt
+│   └── Dockerfile
+│
+├── crawler/                     # Playwright web scrapers
+│   ├── core/                    # Shared infrastructure
+│   │   ├── csv_writer.py        # CSV with dedup
+│   │   ├── parser.py            # Base parser
+│   │   └── listing_detail_parser.py  # Full detail parser
+│   ├── sale/                    # Sale listings
+│   │   ├── crawl_urls.py        # URL discovery (30 pages)
+│   │   └── crawl_details.py     # Detail scraping (4 workers)
+│   ├── rent/                    # Rental listings
+│   │   ├── crawl_urls.py
+│   │   └── crawl_details.py
+│   ├── projects/                # Real estate projects
+│   │   ├── crawl_urls.py
+│   │   └── crawl_details.py
+│   └── news/                    # News & articles
+│       └── crawl_articles.py
+│
+├── data_pipeline/               # ETL pipeline
+│   ├── clean.py                 # Data cleaning & normalization
+│   ├── enrich.py                # Geocoding + intent tagging
+│   ├── chunk.py                 # Semantic chunking (4 types)
+│   ├── embed.py                 # BGE-M3 embedding (1024d, batch 16)
+│   ├── load_db.py               # PostgreSQL upsert
+│   ├── ingestors/               # Source-specific ingestors
+│   │   ├── listings_ingestor.py
+│   │   ├── projects_ingestor.py
+│   │   ├── news_ingestor.py
+│   │   └── legal_kb_ingestor.py
+│   └── legal/                   # Legal KB processing
+│       ├── chunker.py           # Legal document chunking
+│       ├── html_parser.py       # HTML legal docs
+│       ├── pdf_parser.py        # PDF legal docs
+│       ├── structure.py         # Document structure
+│       ├── manifest.py          # Version tracking
+│       └── slug_disambiguation.py
+│
+├── airflow/                     # Workflow orchestration
+│   ├── dags/                    # 4 scheduled DAGs
+│   │   ├── daily_listings_dag.py    # Daily 02:00 HCM
+│   │   ├── weekly_projects_dag.py   # Sunday 03:00
+│   │   ├── weekly_news_dag.py       # Sunday 04:00
+│   │   └── monthly_legal_kb_dag.py  # 1st day 05:00
+│   ├── plugins/                 # Airflow plugins
+│   │   ├── pipeline_runner.py   # Crawl & ingest runner
+│   │   ├── alerting.py          # Slack + email alerts
+│   │   └── run_metrics.py       # Pipeline metrics
+│   ├── Dockerfile
+│   └── requirements.txt
+│
+├── chatbot/                     # Legacy LangGraph sandbox
+│   ├── graph.py, state.py, config.py
+│   ├── agents/                  # Experimental agents
+│   └── tools/                   # Experimental tools
+│
+├── docs/                        # Documentation
+│   ├── architecture.drawio      # System architecture diagram
+│   ├── implementation_plan.md
+│   ├── multiagent-workflow.md
+│   └── pipeline.md
+│
+├── report/                      # LaTeX report
+│   ├── main.tex
+│   ├── preamble.tex
+│   ├── contents/                # Chapter files
+│   └── figures/                 # Architecture diagram (PNG)
+│
+├── data/                        # Data directory
+│   ├── raw/                     # Raw crawl output (CSV)
+│   └── knowledge/               # Legal KB source files
+│
+├── infra/                       # Infrastructure config
+│   └── grafana/                 # Grafana dashboard configs
+│
+├── notebooks/                   # Jupyter notebooks (EDA)
+│
+├── docker-compose.yml           # 5-service orchestration
+├── docker-compose.override.yml
+└── .env                         # Environment variables
 \end{lstlisting}
 
 \newpage
 
-\hspace{1cm}{\fontsize{13}{16}\selectfont\bfseries Phụ lục B \quad SƠ ĐỒ LUỒNG DỮ LIỆU}
+\hspace{1cm}{\fontsize{13}{16}\selectfont\bfseries Phụ lục B \quad SƠ ĐỒ KIẾN TRÚC \& LUỒNG DỮ LIỆU}
 
 \vspace{0.3cm}
 
+\subsubsection*{Sơ đồ kiến trúc tổng thể}
+
 \begin{figure}[H]
     \centering
-    % Chèn sơ đồ luồng dữ liệu tại đây
-    \caption{Sơ đồ luồng dữ liệu từ crawl đến hiển thị}
-    \label{fig:dataflow}
+    \includegraphics[width=1.0\textwidth]{figures/architecturepng.png}
+    \caption{Sơ đồ kiến trúc tổng thể hệ thống (5 tầng: Người dùng -- Frontend -- Backend \& Agent Service -- Data -- Pipeline)}
+    \label{fig:architecture-appendix}
 \end{figure}
 
-Quy trình xử lý dữ liệu qua các bước:
+\subsubsection*{Luồng dữ liệu từ Crawl đến Hiển thị}
 
 \begin{enumerate}
-    \item \textbf{Crawl:} Playwright thu thập dữ liệu từ batdongsan.com.vn $\rightarrow$ CSV.
-    \item \textbf{Clean:} Chuẩn hóa giá (parse ``4,68 tỷ'' $\rightarrow$ 4.68), diện tích, phân loại.
-    \item \textbf{Enrich:} Geocode địa chỉ $\rightarrow$ tọa độ (lat/lon), trích xuất intent tags.
-    \item \textbf{Chunk:} Chia mỗi listing thành 4 loại chunk (overview, description, location, intent\_tags).
-    \item \textbf{Embed:} Tạo vector BGE-M3 1024 chiều cho từng chunk.
-    \item \textbf{Load DB:} Upsert vào PostgreSQL (listings) và pgvector (chunks).
-    \item \textbf{Serve:} FastAPI truy xuất dữ liệu qua SQL + kNN, frontend hiển thị.
+    \item \textbf{Crawl (Playwright + Stealth):} Thu thập dữ liệu từ batdongsan.com.vn với 4 workers song song. Output: file CSV UTF-8 BOM, deduplicate theo product\_id. Thực hiện bởi 4 module crawler (sale, rent, projects, news).
+
+    \item \textbf{Clean (data\_pipeline/clean.py):} Chuẩn hóa dữ liệu thô -- parse giá (``4,68 tỷ'' $\rightarrow$ price=4.68, unit=billion), parse diện tích (``75 m\textsuperscript{2}'' $\rightarrow$ area=75), phân loại property\_type, chuẩn hóa địa chỉ (tách ward, district, city).
+
+    \item \textbf{Enrich (data\_pipeline/enrich.py):} Làm giàu dữ liệu với 2 tác vụ: (a) Geocoding -- gọi Nominatim/Goong API chuyển địa chỉ text $\rightarrow$ tọa độ (latitude, longitude); (b) Intent Tagging -- phân tích mô tả, gán nhãn nhu cầu (``gần trường học'', ``view đẹp'', ``an ninh'', ``pháp lý rõ'').
+
+    \item \textbf{Chunk (data\_pipeline/chunk.py):} Chia mỗi listing thành 4 loại chunk ngữ nghĩa độc lập:
+    \begin{itemize}
+        \item \texttt{overview} -- Tổng quan: tiêu đề, giá, diện tích, khu vực, pháp lý, nội thất.
+        \item \texttt{description} -- Mô tả chi tiết từ người đăng.
+        \item \texttt{location} -- Vị trí: địa chỉ, quận/huyện, tỉnh/thành phố.
+        \item \texttt{intent\_tags} -- Nhu cầu phù hợp (dựa trên intent tagging).
+    \end{itemize}
+
+    \item \textbf{Embed (data\_pipeline/embed.py):} Tạo vector embedding 1024 chiều cho từng chunk bằng BGE-M3 (BAAI/bge-m3). Sử dụng sentence-transformers với batch\_size=16, normalize=True, retry 3 lần exponential backoff.
+
+    \item \textbf{Load DB (data\_pipeline/load\_db.py + ingestors/):} Upsert vào PostgreSQL qua asyncpg driver với batch processing (25--50 bản ghi/batch). Dữ liệu quan hệ $\rightarrow$ bảng listings; dữ liệu vector $\rightarrow$ bảng chunks với HNSW index (m=16, ef\_construction=64).
+
+    \item \textbf{Serve (FastAPI + Next.js):} Backend API truy xuất dữ liệu qua hybrid search (SQL filtering + pgvector kNN + Cohere rerank + Redis cache). Frontend hiển thị qua Next.js App Router với SSR.
+
+    \item \textbf{Schedule (Apache Airflow):} Toàn bộ pipeline từ bước 1--6 được lập lịch tự động qua 4 DAGs (daily, weekly$\times$2, monthly) với retry policy và alerting.
+\end{enumerate}
+
+\subsubsection*{Luồng xử lý Chatbot}
+
+\begin{enumerate}
+    \item \textbf{User gửi query} qua ChatWidget (Frontend).
+    \item \textbf{Frontend gọi} \texttt{POST /api/v1/chat} (Backend).
+    \item \textbf{Backend xác thực} (JWT hoặc anonymous), kiểm tra quota, lưu ChatMessage.
+    \item \textbf{Router phân loại ý định} (keyword-based hoặc Gemini-based).
+    \item \textbf{Orchestrator chọn agents} và gọi song song qua asyncio.gather().
+    \item \textbf{Agent thực thi} hybrid search (SQL + pgvector kNN $\pm$ Cohere rerank $\pm$ Redis cache).
+    \item \textbf{Kết quả tổng hợp} $\rightarrow$ AgentChatResponse (final\_response, sources, suggested\_actions).
+    \item \textbf{Nếu Agent Service được kích hoạt}, Backend ủy thác sang Agent Service (LangGraph 8-node workflow) thay vì pipeline nội bộ.
+    \item \textbf{Backend lưu} ChatMessage, AgentTrace và trả kết quả về Frontend.
+    \item \textbf{Frontend hiển thị} phản hồi kèm sources và suggested actions.
 \end{enumerate}
 
 \newpage
 
-\hspace{1cm}{\fontsize{13}{16}\selectfont\bfseries Phụ lục C \quad API ENDPOINTS CHÍNH}
+\hspace{1cm}{\fontsize{13}{16}\selectfont\bfseries Phụ lục C \quad DANH SÁCH API CHÍNH}
 
 \vspace{0.3cm}
 
-\begin{longtable}{|p{3.5cm}|p{2cm}|p{7cm}|}
+Bảng \ref{tab:api-list} liệt kê các API endpoint chính của hệ thống (33 endpoints, 7 routers + metrics). Tất cả endpoint đều có tiền tố \texttt{/api/v1} trừ \texttt{/metrics} và \texttt{/api/v1/health}.
+
+{\footnotesize
+\begin{longtable}{|p{5.2cm}|p{1.2cm}|p{9.3cm}|}
     \hline
     \textbf{Endpoint} & \textbf{Method} & \textbf{Mô tả} \\
     \hline
-    \texttt{/api/v1/listings} & GET & Danh sách bất động sản (hỗ trợ filter, phân trang) \\
+    \multicolumn{3}{|c|}{\textbf{Listings}} \\
     \hline
-    \texttt{/api/v1/listings/\{id\}} & GET & Chi tiết một bất động sản \\
+    \texttt{GET /listings} & GET & Danh sách BĐS (phân trang, 12+ bộ lọc: search, type, city, district, price, area, bedrooms,\dots) \\
     \hline
-    \texttt{/api/v1/listings/similar/\{id\}} & GET & Bất động sản tương tự (vector similarity) \\
+    \texttt{GET /listings/\{id\}} & GET & Chi tiết một BĐS (30+ trường) \\
     \hline
-    \texttt{/api/v1/market/stats} & GET & Thống kê tổng quan thị trường \\
+    \texttt{GET /listings/by-product-id/\{pid\}} & GET & Tìm BĐS theo product\_id gốc từ nguồn crawl \\
     \hline
-    \texttt{/api/v1/market/price-by-district} & GET & Giá trung bình theo quận \\
+    \texttt{GET /listings/similar/\{id\}} & GET & BĐS tương tự (cùng quận, loại hình, phân khúc giá) \\
     \hline
-    \texttt{/api/v1/market/cities} & GET & Danh sách thành phố có dữ liệu \\
+    \multicolumn{3}{|c|}{\textbf{Market}} \\
     \hline
-    \texttt{/api/v1/chat} & POST & Gửi tin nhắn đến chatbot \\
+    \texttt{GET /market/stats} & GET & Tổng quan thị trường (tổng tin, giá TB, diện tích TB, số TP/quận) \\
     \hline
-    \texttt{/api/v1/auth/register} & POST & Đăng ký tài khoản \\
+    \texttt{GET /market/top-locations} & GET & Top khu vực nhiều tin nhất (lọc theo listing\_type) \\
     \hline
-    \texttt{/api/v1/auth/login} & POST & Đăng nhập, nhận JWT token \\
+    \texttt{GET /market/price-by-district} & GET & Thống kê giá theo quận (avg, min, max, giá/m\textsuperscript{2}) \\
     \hline
-    \texttt{/api/v1/auth/me} & GET & Thông tin người dùng hiện tại \\
+    \texttt{GET /market/property-types} & GET & Phân bố số lượng theo loại hình BĐS \\
     \hline
-    \texttt{/metrics} & GET & Prometheus metrics \\
+    \texttt{GET /market/cities} & GET & Danh sách thành phố + số lượng tin \\
     \hline
+    \texttt{GET /market/districts} & GET & Danh sách quận/huyện (có thể lọc theo city) \\
+    \hline
+    \texttt{GET /market/categories} & GET & Danh sách tất cả loại hình BĐS \\
+    \hline
+    \multicolumn{3}{|c|}{\textbf{Chat}} \\
+    \hline
+    \texttt{POST /chat} & POST & Gửi tin nhắn đến chatbot (tự động tạo session nếu chưa có) \\
+    \hline
+    \texttt{GET /chat/sessions} & GET & Danh sách phiên chat của user (cần xác thực) \\
+    \hline
+    \texttt{GET /chat/sessions/\{id\}} & GET & Lịch sử tin nhắn của một phiên chat \\
+    \hline
+    \texttt{POST /chat/feedback} & POST & Gửi đánh giá (rating, issue\_type, comment) \\
+    \hline
+    \multicolumn{3}{|c|}{\textbf{Auth}} \\
+    \hline
+    \texttt{POST /auth/register} & POST & Đăng ký tài khoản (email, password, full\_name) \\
+    \hline
+    \texttt{POST /auth/login} & POST & Đăng nhập, nhận JWT token (hết hạn sau 24h) \\
+    \hline
+    \texttt{GET /auth/me} & GET & Thông tin người dùng hiện tại (cần xác thực) \\
+    \hline
+    \multicolumn{3}{|c|}{\textbf{Preferences \& Memory}} \\
+    \hline
+    \texttt{GET/PATCH /preferences} & GET/PATCH & Xem/cập nhật sở thích người dùng (cần xác thực) \\
+    \hline
+    \texttt{POST /memory-proposals/\{id\}/accept} & POST & Chấp nhận đề xuất ghi nhớ của chatbot \\
+    \hline
+    \texttt{POST /memory-proposals/\{id\}/reject} & POST & Từ chối đề xuất ghi nhớ \\
+    \hline
+    \multicolumn{3}{|c|}{\textbf{Admin} (cần quyền admin)} \\
+    \hline
+    \texttt{GET /admin/chat-traces} & GET & Danh sách agent traces (intent, agents, latency) \\
+    \hline
+    \texttt{GET /admin/chat-traces/\{id\}} & GET & Chi tiết một trace (từng bước, input/output) \\
+    \hline
+    \texttt{GET /admin/pipeline-readiness} & GET & Trạng thái sẵn sàng của các nguồn dữ liệu \\
+    \hline
+    \texttt{GET /admin/eval-runs} & GET & Danh sách kết quả đánh giá LLM Judge \\
+    \hline
+    \texttt{GET /admin/feedback} & GET & Danh sách phản hồi người dùng về chatbot \\
+    \hline
+    \texttt{GET /admin/memory-proposals} & GET & Danh sách memory proposals đang chờ xử lý \\
+    \hline
+    \texttt{GET /admin/agent-health} & GET & Thống kê sức khỏe agent theo trạng thái \\
+    \hline
+    \texttt{GET /admin/top-queries} & GET & Top truy vấn phổ biến (đang phát triển) \\
+    \hline
+    \multicolumn{3}{|c|}{\textbf{System}} \\
+    \hline
+    \texttt{GET /api/v1/health} & GET & Health check endpoint \\
+    \hline
+    \texttt{GET /metrics} & GET & Prometheus metrics (chat requests, latency, pipeline) \\
+    \hline
+    \caption{Danh sách API endpoints chính của hệ thống (tiền tố mặc định: \texttt{/api/v1})}
+    \label{tab:api-list}
 \end{longtable}
+}
 
 \newpage
 
@@ -116,17 +364,74 @@ Quy trình xử lý dữ liệu qua các bước:
 \begin{quote}
 \textbf{User:} ``Tôi muốn mua căn hộ chung cư ở Quận 7, giá dưới 5 tỷ, 2 phòng ngủ''
 
-\textbf{Agent sử dụng:} investment\_advisor, property\_search
+\textbf{Intent:} property\_search
+
+\textbf{Agent sử dụng:} property\_search
+
+\textbf{Bộ lọc trích xuất:} \texttt{\{listing\_type: "sale", property\_type: "apartment", district: "Quận 7", max\_price: 5, bedrooms: 2\}}
 
 \textbf{Phản hồi:}
 Dựa trên yêu cầu của bạn, tôi tìm thấy một số căn hộ phù hợp tại Quận 7:
 
-1. \textbf{Căn hộ chung cư ABC} -- 4.2 tỷ, 72m\textsuperscript{2}, 2PN, Phường Tân Phong. View sông, nội thất đầy đủ.
-2. \textbf{Căn hộ Sunshine City} -- 4.8 tỷ, 78m\textsuperscript{2}, 2PN, Phường Phú Thuận. Gần trường học, an ninh tốt.
+\begin{enumerate}
+    \item \textbf{Căn hộ chung cư ABC} -- 4,2 tỷ, 72m\textsuperscript{2}, 2PN, 2WC, Phường Tân Phong. View sông, nội thất đầy đủ, pháp lý sổ hồng.
+    \item \textbf{Căn hộ Sunshine City} -- 4,8 tỷ, 78m\textsuperscript{2}, 2PN, 1WC, Phường Phú Thuận. Gần trường học, an ninh tốt, có hồ bơi.
+    \item \textbf{Căn hộ Park View} -- 3,9 tỷ, 68m\textsuperscript{2}, 2PN, 1WC, Phường Tân Quy. Giá tốt nhất khu vực, gần siêu thị.
+\end{enumerate}
 
-\textbf{Nguồn:} [Link listing 1], [Link listing 2]
+\textbf{Nguồn tham khảo:} [Link BĐS 1] (độ liên quan: 0.95), [Link BĐS 2] (0.89), [Link BĐS 3] (0.82)
 
-\textbf{Gợi ý:} ``So sánh giá/m\textsuperscript{2} các căn hộ này'', ``Thủ tục mua chung cư cần những gì?''
+\textbf{Gợi ý tiếp theo:}
+\begin{itemize}
+    \item ``So sánh giá/m\textsuperscript{2} các căn hộ này''
+    \item ``Thủ tục pháp lý khi mua chung cư cần những gì?''
+    \item ``Khu vực Quận 7 có tiềm năng tăng giá không?''
+\end{itemize}
+\end{quote}
+
+\vspace{0.5cm}
+
+\textbf{Ví dụ 2: Tư vấn pháp lý + thị trường}
+
+\begin{quote}
+\textbf{User:} ``Thủ tục sang tên sổ đỏ mất bao lâu? Với lại giá đất ở Quận 9 hiện nay thế nào?''
+
+\textbf{Intent:} mixed (legal\_advice + market\_analysis)
+
+\textbf{Agent sử dụng:} legal\_advisor, market\_analysis
+
+\textbf{Phản hồi:}
+Tôi sẽ giải đáp từng phần câu hỏi của bạn:
+
+\textbf{1. Thủ tục sang tên sổ đỏ:}
+
+Theo quy định hiện hành, thủ tục sang tên sổ đỏ (chuyển nhượng quyền sử dụng đất) gồm các bước chính:
+\begin{itemize}
+    \item Công chứng hợp đồng chuyển nhượng tại văn phòng công chứng (1--2 ngày).
+    \item Kê khai thuế thu nhập cá nhân và lệ phí trước bạ tại Chi cục Thuế (3--5 ngày).
+    \item Nộp hồ sơ sang tên tại Văn phòng Đăng ký Đất đai (10--15 ngày làm việc).
+\end{itemize}
+Tổng thời gian ước tính: \textbf{3--5 tuần} tùy địa phương.
+
+Lưu ý quan trọng: Cần kiểm tra đất không có tranh chấp, không bị quy hoạch, và đã hoàn thành nghĩa vụ tài chính.
+
+\textbf{2. Giá đất tại Quận 9:}
+
+Hiện tại (dữ liệu cập nhật từ hệ thống):
+\begin{itemize}
+    \item Giá đất nền trung bình: \textbf{35--55 triệu/m\textsuperscript{2}} tùy vị trí.
+    \item Giá đất mặt tiền đường lớn: \textbf{60--90 triệu/m\textsuperscript{2}}.
+    \item Xu hướng: tăng nhẹ 5--8\% so với cùng kỳ năm trước, được thúc đẩy bởi hạ tầng giao thông (Metro, Vành đai 3).
+\end{itemize}
+
+\textbf{Nguồn tham khảo:} [Link KB Pháp lý 1], [Link KB Pháp lý 2], [Link Thống kê Quận 9]
+
+\textbf{Gợi ý tiếp theo:}
+\begin{itemize}
+    \item ``Các loại thuế phí khi mua đất là gì?''
+    \item ``So sánh giá đất Quận 9 với Quận 2 và Thủ Đức''
+    \item ``Có nên đầu tư đất nền Quận 9 thời điểm này?''
+\end{itemize}
 \end{quote}
 
 \newpage

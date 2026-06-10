@@ -56,5 +56,6 @@ data/knowledge/ingested/*
 .agent/
 
 batdongsancom-crawler/
+chatbot/
 
 report/

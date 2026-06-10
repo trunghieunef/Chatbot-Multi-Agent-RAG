@@ -29,6 +29,34 @@ services:
       timeout: 5s
       retries: 5
 
+  pipeline-worker:
+    build:
+      context: .
+      dockerfile: pipeline_worker/Dockerfile
+    container_name: realestate_pipeline_worker
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-admin}:${POSTGRES_PASSWORD:-realestate_secret_2026}@postgres:5432/${POSTGRES_DB:-realestate}
+      REDIS_URL: redis://redis:6379/0
+      AGENT_INTERNAL_KEY: ${AGENT_INTERNAL_KEY}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      HF_EMBEDDING_MODEL: ${HF_EMBEDDING_MODEL:-BAAI/bge-m3}
+      INTENT_EXTRACTOR: ${INTENT_EXTRACTOR:-rule}
+      CHATBOT_EMBEDDING_LOCAL_FILES_ONLY: ${CHATBOT_EMBEDDING_LOCAL_FILES_ONLY:-true}
+    volumes:
+      - ./data:/app/data
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8200/internal/pipeline/health', timeout=5)\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
   backend:
     build:
       context: ./backend
@@ -49,7 +77,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       AGENT_SERVICE_URL: http://agent-service:8100
       AGENT_INTERNAL_KEY: ${AGENT_INTERNAL_KEY}
-      CHATBOT_AGENT_SERVICE_ENABLED: ${CHATBOT_AGENT_SERVICE_ENABLED:-false}
+      CHATBOT_AGENT_SERVICE_ENABLED: ${CHATBOT_AGENT_SERVICE_ENABLED:-true}
     volumes:
       - ./data:/app/data
 

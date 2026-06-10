@@ -5,26 +5,69 @@
 
 \section{Đặt vấn đề}
 
-Thị trường bất động sản Việt Nam đang phát triển nhanh chóng với lượng giao dịch lớn và nhu cầu thông tin ngày càng cao từ phía người mua, người bán và nhà đầu tư. Tuy nhiên, việc tiếp cận thông tin bất động sản một cách toàn diện và đáng tin cậy vẫn còn nhiều thách thức:
+Thị trường bất động sản Việt Nam những năm gần đây chứng kiến sự phát triển sôi động với hàng trăm nghìn giao dịch mỗi năm và nhu cầu thông tin ngày càng cao từ phía người mua, người bán cũng như nhà đầu tư. Các cổng thông tin bất động sản trực tuyến như batdongsan.com.vn, alonhadat.com.vn đã trở thành kênh tiếp cận chính, với hàng chục nghìn tin đăng mới mỗi ngày. Tuy nhiên, việc khai thác thông tin từ các nền tảng này một cách hiệu quả vẫn còn nhiều thách thức:
 
-\begin{itemize}
-    \item \textbf{Thông tin phân mảnh:} Dữ liệu bất động sản nằm rải rác trên nhiều nền tảng, khó tổng hợp và so sánh.
-    \item \textbf{Thiếu tư vấn chuyên sâu:} Người dùng cần được tư vấn về pháp lý, xu hướng thị trường và tiềm năng đầu tư, nhưng các nền tảng hiện tại chủ yếu chỉ hiển thị danh sách tin đăng.
-    \item \textbf{Rào cản ngôn ngữ và ngữ cảnh:} Các giải pháp tìm kiếm bằng tiếng Việt chưa thực sự hiệu quả trong việc hiểu ngữ nghĩa và ngữ cảnh của truy vấn bất động sản.
-    \item \textbf{Thiếu tự động hóa:} Quy trình thu thập, làm sạch và cập nhật dữ liệu bất động sản thường thủ công, tốn nhiều thời gian và công sức.
-\end{itemize}
+\begin{enumerate}
+    \item \textbf{Thông tin phân mảnh và quá tải:} Dữ liệu bất động sản nằm rải rác trên nhiều nền tảng với hàng chục nghìn tin đăng. Người dùng phải tự duyệt qua hàng trăm kết quả, so sánh thủ công giữa các tin để tìm được bất động sản phù hợp. Việc tổng hợp thông tin từ nhiều nguồn và đưa ra quyết định dựa trên dữ liệu là một quá trình tốn nhiều thời gian và công sức.
 
-Trước bối cảnh đó, việc xây dựng một nền tảng bất động sản thông minh, tích hợp chatbot có khả năng hiểu ngôn ngữ tự nhiên tiếng Việt và tư vấn đa lĩnh vực là một nhu cầu cấp thiết, mang lại giá trị thiết thực cho người dùng.
+    \item \textbf{Thiếu tư vấn chuyên sâu đa lĩnh vực:} Một giao dịch bất động sản không chỉ đơn thuần là tìm kiếm và so sánh giá. Người mua cần được tư vấn về tình trạng pháp lý (sổ đỏ, quy hoạch, thủ tục sang tên), xu hướng thị trường (biến động giá, khu vực tiềm năng) và tiềm năng đầu tư (khả năng sinh lời, thanh khoản, tỷ suất cho thuê). Tuy nhiên, các nền tảng hiện tại chủ yếu chỉ hiển thị danh sách tin đăng và bộ lọc cơ bản, chưa có khả năng tư vấn tổng hợp đa chiều.
+
+    \item \textbf{Rào cản ngôn ngữ trong tìm kiếm ngữ nghĩa:} Các giải pháp tìm kiếm truyền thống dựa trên từ khóa chính xác (exact keyword matching) không hiểu được ngữ nghĩa và ngữ cảnh của truy vấn tiếng Việt. Ví dụ, người dùng tìm ``căn hộ thoáng mát gần công viên, dưới 3 tỷ'' yêu cầu hệ thống phải hiểu được khái niệm ``thoáng mát'', ``gần công viên'' -- những khái niệm không thể tra cứu bằng SQL thông thường.
+
+    \item \textbf{Thiếu tự động hóa trong thu thập và xử lý dữ liệu:} Quy trình thu thập dữ liệu bất động sản thường thủ công, không theo kịp tốc độ cập nhật của thị trường. Dữ liệu thô từ các nền tảng cần được làm sạch (chuẩn hóa giá, diện tích, địa chỉ), làm giàu (gán tọa độ địa lý, phân loại ý định) và cập nhật định kỳ mới có thể sử dụng được cho các hệ thống tìm kiếm thông minh.
+
+    \item \textbf{Thiếu công cụ phân tích thị trường trực quan:} Người dùng phổ thông và nhà đầu tư thiếu các công cụ giúp họ nắm bắt bức tranh tổng quan về thị trường -- giá trung bình theo khu vực, phân bố loại hình bất động sản, xu hướng biến động giá. Các số liệu thống kê thường nằm trong các báo cáo định kỳ, không có sẵn dưới dạng tương tác trực tuyến.
+\end{enumerate}
+
+Trước bối cảnh đó, việc xây dựng một nền tảng bất động sản thông minh, tích hợp trợ lý ảo có khả năng hiểu ngôn ngữ tự nhiên tiếng Việt và tư vấn đa lĩnh vực -- từ tìm kiếm bất động sản, phân tích thị trường, tư vấn pháp lý đến đánh giá đầu tư -- là một nhu cầu cấp thiết. Hệ thống cần được xây dựng trên nền tảng dữ liệu được thu thập và cập nhật tự động, đảm bảo thông tin luôn mới và đáng tin cậy.
 
 \section{Mục tiêu của đề tài}
 
-Đồ án hướng đến các mục tiêu chính sau:
+Đồ án hướng đến việc xây dựng một hệ thống toàn diện giải quyết các thách thức nêu trên, với 5 mục tiêu chính:
 
 \begin{enumerate}
-    \item \textbf{Xây dựng nền tảng web bất động sản hoàn chỉnh} với các chức năng: duyệt danh sách nhà đất, lọc theo nhiều tiêu chí, xem chi tiết bất động sản kèm bản đồ, thống kê và phân tích thị trường.
-    \item \textbf{Phát triển chatbot đa tác tử (Multi-Agent)} tích hợp kỹ thuật RAG (Retrieval-Augmented Generation), có khả năng tư vấn về tìm kiếm bất động sản, phân tích thị trường, tư vấn pháp lý và tư vấn đầu tư.
-    \item \textbf{Xây dựng pipeline thu thập và xử lý dữ liệu tự động} từ nguồn batdongsan.com.vn, bao gồm các bước: crawl, làm sạch, làm giàu (geocoding, intent tagging), chunking, embedding và nạp vào cơ sở dữ liệu.
-    \item \textbf{Triển khai hệ thống tìm kiếm lai (Hybrid Search)} kết hợp tìm kiếm theo bộ lọc SQL và tìm kiếm ngữ nghĩa qua pgvector, với xếp hạng lại bằng Cohere Rerank.
+    \item \textbf{Xây dựng nền tảng web bất động sản hoàn chỉnh:}
+    \begin{itemize}
+        \item Giao diện người dùng hiện đại với Next.js 16 + React 19, hỗ trợ SSR (Server-Side Rendering) cho SEO và hiệu năng cao.
+        \item Trang duyệt danh sách nhà đất bán và cho thuê với phân trang và sắp xếp đa tiêu chí (giá, diện tích, ngày đăng).
+        \item Bộ lọc nâng cao: loại tin, loại hình bất động sản, thành phố, quận/huyện, khoảng giá, diện tích, số phòng ngủ, số phòng tắm, hướng nhà, tìm kiếm theo từ khóa.
+        \item Trang chi tiết bất động sản với đầy đủ thông số kỹ thuật (giá, diện tích, pháp lý, nội thất, hướng, mặt tiền, số tầng, tọa độ).
+        \item Dashboard thống kê thị trường trực quan với các chỉ số tổng quan và biểu đồ phân tích.
+        \item Hệ thống xác thực người dùng qua JWT (đăng ký, đăng nhập, phiên đăng nhập 24 giờ).
+        \item Bảng điều khiển quản trị (admin dashboard) theo dõi trạng thái pipeline và agent traces.
+    \end{itemize}
+
+    \item \textbf{Phát triển chatbot đa tác tử (Multi-Agent) tích hợp RAG:}
+    \begin{itemize}
+        \item Pipeline chatbot nội bộ trong backend với router phân loại ý định (keyword-based và Gemini-based) và 4 agent chuyên biệt: Property Search, Market Analysis, Legal Advisor, Investment Advisor.
+        \item Agent Service riêng biệt chạy LangGraph StateGraph với quy trình 8 bước: context builder $\rightarrow$ readiness checker $\rightarrow$ router $\rightarrow$ retrieval planner $\rightarrow$ specialist agents (chạy song song) $\rightarrow$ synthesizer $\rightarrow$ safety validator $\rightarrow$ memory proposals.
+        \item Hỗ trợ tiếng Việt toàn diện -- từ nhận diện ý định, trích xuất bộ lọc đến sinh phản hồi.
+        \item Cơ chế ghi nhớ người dùng (memory) qua UserPreference và MemoryProposal, cho phép chatbot cá nhân hóa phản hồi dựa trên lịch sử tương tác.
+        \item Cơ chế đánh giá chất lượng (LLM judge) và thu thập phản hồi người dùng (chat feedback).
+    \end{itemize}
+
+    \item \textbf{Xây dựng pipeline thu thập và xử lý dữ liệu tự động:}
+    \begin{itemize}
+        \item Crawler sử dụng Playwright với cơ chế stealth để thu thập dữ liệu từ batdongsan.com.vn cho 4 loại nội dung: tin bán, tin cho thuê, dự án, tin tức.
+        \item Pipeline ETL đầy đủ: làm sạch (parse giá, diện tích, phân loại) $\rightarrow$ làm giàu (geocoding qua Nominatim/Goong, intent tagging) $\rightarrow$ chunking ngữ nghĩa $\rightarrow$ tạo embedding BGE-M3 (1024 chiều) $\rightarrow$ nạp vào PostgreSQL + pgvector qua các ingestor module.
+        \item Hệ thống kiến thức pháp lý (Legal KB) với khả năng xử lý tài liệu HTML và PDF.
+        \item Lập lịch tự động qua Apache Airflow với 4 DAGs: hàng ngày (tin đăng), hàng tuần (dự án, tin tức), hàng tháng (kiến thức pháp lý).
+    \end{itemize}
+
+    \item \textbf{Triển khai hệ thống tìm kiếm lai (Hybrid Search) hiệu quả:}
+    \begin{itemize}
+        \item Kết hợp tìm kiếm theo bộ lọc có cấu trúc (SQL WHERE) với tìm kiếm ngữ nghĩa qua pgvector HNSW index.
+        \item Xếp hạng lại (reranking) qua Cohere Rerank Multilingual v3.0 để cải thiện độ chính xác.
+        \item Redis caching cho cả embedding và kết quả tìm kiếm, giảm độ trễ cho truy vấn lặp lại.
+        \item Hỗ trợ trích xuất bộ lọc tự động từ truy vấn tiếng Việt (giá, diện tích, khu vực, loại hình).
+    \end{itemize}
+
+    \item \textbf{Thiết kế kiến trúc microservices có khả năng mở rộng:}
+    \begin{itemize}
+        \item 5 service độc lập trong Docker Compose: PostgreSQL + pgvector (cơ sở dữ liệu), Redis (cache), Backend API (FastAPI), Agent Service (FastAPI + LangGraph), Frontend (Next.js).
+        \item Hệ thống observability toàn diện: AgentTrace, AgentTraceStep, AgentLLMCall, AgentRetrievalEvent cho tracing; Prometheus metrics cho giám sát; ChatFeedback cho đánh giá chất lượng.
+        \item Bộ test hơn 55 file bao phủ toàn bộ các module: models, API, agent service, RAG, data pipeline, legal KB, crawler, Airflow DAGs.
+    \end{itemize}
 \end{enumerate}
 
 \section{Phạm vi nghiên cứu}
@@ -32,22 +75,87 @@ Trước bối cảnh đó, việc xây dựng một nền tảng bất động 
 Đồ án tập trung vào các phạm vi sau:
 
 \begin{itemize}
-    \item \textbf{Thị trường:} Bất động sản Việt Nam, dữ liệu được thu thập từ batdongsan.com.vn.
-    \item \textbf{Loại hình bất động sản:} Nhà đất bán và cho thuê (căn hộ chung cư, nhà riêng, nhà mặt phố, đất nền, biệt thự).
-    \item \textbf{Chức năng chính:} Tìm kiếm và duyệt bất động sản, chatbot tư vấn đa lĩnh vực, thống kê thị trường, xác thực người dùng.
-    \item \textbf{Công nghệ:} Hệ thống full-stack với Next.js (frontend), FastAPI (backend), PostgreSQL + pgvector (cơ sở dữ liệu), Redis (cache), LangGraph (điều phối agent), Google Gemini và BGE-M3 (AI/ML).
-    \item \textbf{Ngôn ngữ:} Giao diện và chatbot hỗ trợ tiếng Việt.
+    \item \textbf{Thị trường:} Bất động sản Việt Nam. Dữ liệu được thu thập từ nguồn chính là batdongsan.com.vn -- cổng thông tin bất động sản lớn nhất Việt Nam với hàng chục nghìn tin đăng mới mỗi ngày.
+
+    \item \textbf{Loại hình bất động sản:} Bao gồm cả tin bán và cho thuê với các loại hình chính: căn hộ chung cư, nhà riêng, nhà mặt phố, đất nền, biệt thự, nhà phố thương mại (shophouse).
+
+    \item \textbf{Chức năng chính:}
+    \begin{itemize}
+        \item \textit{Người dùng cuối:} Tìm kiếm và duyệt bất động sản với bộ lọc nâng cao; chatbot tư vấn đa lĩnh vực (tìm kiếm, thị trường, pháp lý, đầu tư); thống kê thị trường trực quan; xác thực và quản lý tài khoản.
+        \item \textit{Quản trị viên:} Giám sát pipeline dữ liệu qua admin dashboard; theo dõi agent traces và hiệu năng hệ thống; quản lý phản hồi người dùng và memory proposals.
+        \item \textit{Hệ thống:} Thu thập dữ liệu tự động theo lịch; xử lý ETL toàn diện; tạo và lập chỉ mục embedding; giám sát qua Prometheus metrics.
+    \end{itemize}
+
+    \item \textbf{Công nghệ sử dụng:}
+    \begin{itemize}
+        \item \textbf{Frontend:} Next.js 16 + React 19 (TypeScript), App Router, Tailwind CSS v4.
+        \item \textbf{Backend API:} FastAPI (Python 3.12), SQLAlchemy 2.0 async, Pydantic v2.
+        \item \textbf{Agent Service:} FastAPI + LangGraph với StateGraph 8-node workflow, Google Gemini 2.0 Flash.
+        \item \textbf{Cơ sở dữ liệu:} PostgreSQL 16 + pgvector (HNSW index, cosine distance).
+        \item \textbf{Cache:} Redis 7 (caching embedding, kết quả tìm kiếm, session).
+        \item \textbf{AI/ML:} Google Gemini 2.0 Flash (LLM + router), BGE-M3 BAAI/bge-m3 (embedding 1024 chiều), Cohere Rerank Multilingual v3.0 (xếp hạng lại).
+        \item \textbf{Data Pipeline:} Apache Airflow (lập lịch), Playwright (crawler), Nominatim/Goong (geocoding).
+        \item \textbf{Giám sát:} Prometheus metrics, AgentTrace observability system.
+    \end{itemize}
+
+    \item \textbf{Ngôn ngữ:}
+    \begin{itemize}
+        \item Giao diện người dùng và phản hồi chatbot: tiếng Việt.
+        \item Mã nguồn, docstring, tên biến/hàm/lớp: tiếng Anh.
+        \item URL slugs: tiếng Việt không dấu (\texttt{/nha-dat-ban}, \texttt{/thi-truong}, \texttt{/dang-nhap}).
+    \end{itemize}
 \end{itemize}
+
+\section{Phương pháp tiếp cận}
+
+Đồ án được triển khai theo phương pháp phát triển module, kết hợp giữa xây dựng hạ tầng dữ liệu và phát triển ứng dụng:
+
+\begin{enumerate}
+    \item \textbf{Thu thập và xử lý dữ liệu:} Bước đầu tiên là xây dựng pipeline thu thập dữ liệu tự động từ batdongsan.com.vn. Dữ liệu thô được làm sạch, chuẩn hóa, làm giàu (geocoding, intent tagging) và tổ chức thành các bảng quan hệ trong PostgreSQL. Văn bản được chia thành các đoạn ngữ nghĩa (chunks) và tạo vector embedding bằng mô hình BGE-M3 để phục vụ tìm kiếm ngữ nghĩa.
+
+    \item \textbf{Xây dựng backend API:} Backend được phát triển với FastAPI theo kiến trúc phân lớp rõ ràng: models (ORM) $\rightarrow$ schemas (Pydantic validation) $\rightarrow$ routers (API endpoints) $\rightarrow$ services (business logic). Các API cung cấp đầy đủ chức năng cho frontend: truy vấn danh sách bất động sản với bộ lọc và sắp xếp, thống kê thị trường, xác thực người dùng, và quan trọng nhất -- tích hợp chatbot multi-agent.
+
+    \item \textbf{Phát triển chatbot đa tác tử:} Chatbot được triển khai theo kiến trúc hai lớp:
+    \begin{itemize}
+        \item \textit{Lớp 1 -- Pipeline nội bộ:} Được tích hợp trực tiếp trong backend, sử dụng router keyword-based (có fallback Gemini) để phân loại ý định và orchestrator gọi song song các agent chuyên biệt. Đây là phương thức xử lý chính, đảm bảo độ trễ thấp và hoạt động ổn định ngay cả khi không có API key Gemini.
+        \item \textit{Lớp 2 -- Agent Service:} Microservice riêng biệt sử dụng LangGraph StateGraph với quy trình 8 bước, hỗ trợ multi-step reasoning, retrieval planning và LLM judge đánh giá chất lượng. Service này được kích hoạt tùy chọn cho các truy vấn phức tạp.
+    \end{itemize}
+
+    \item \textbf{Xây dựng giao diện người dùng:} Frontend được phát triển với Next.js App Router, tập trung vào trải nghiệm người dùng mượt mà và hiệu năng cao. Giao diện được tổ chức thành các thành phần (components) tái sử dụng, với chatbot widget nổi cho phép người dùng tương tác mọi lúc.
+
+    \item \textbf{Kiểm thử và đảm bảo chất lượng:} Hệ thống được kiểm thử với hơn 55 file test bao phủ tất cả các module. Các bài test bao gồm unit test (models, schemas, utilities), integration test (API endpoints, database operations) và end-to-end test (chatbot pipeline, data ingestion).
+\end{enumerate}
+
+\section{Đóng góp của đồ án}
+
+Đồ án có những đóng góp chính sau:
+
+\begin{enumerate}
+    \item \textbf{Về mặt ứng dụng:} Xây dựng một nền tảng bất động sản hoàn chỉnh, sẵn sàng triển khai thực tế, tích hợp công nghệ AI/ML tiên tiến (RAG, multi-agent, vector search) để giải quyết bài toán tư vấn bất động sản đa lĩnh vực bằng tiếng Việt.
+
+    \item \textbf{Về mặt kiến trúc:} Đề xuất kiến trúc chatbot hai lớp (pipeline nội bộ + agent service) với cơ chế fallback linh hoạt, đảm bảo hệ thống hoạt động ổn định trong nhiều điều kiện vận hành khác nhau (có/không có API key, có/không có agent service).
+
+    \item \textbf{Về mặt dữ liệu:} Xây dựng pipeline thu thập và xử lý dữ liệu bất động sản tự động, hoàn chỉnh từ khâu crawl đến embedding, có khả năng vận hành định kỳ qua Apache Airflow. Hệ thống legal KB cung cấp khả năng xử lý và truy xuất kiến thức pháp lý từ nhiều định dạng tài liệu.
+
+    \item \textbf{Về mặt kỹ thuật:} Tích hợp và đánh giá hiệu quả của hybrid search (SQL + pgvector HNSW + Cohere rerank + Redis cache) cho bài toán tìm kiếm bất động sản tiếng Việt, với khả năng trích xuất bộ lọc tự động từ truy vấn ngôn ngữ tự nhiên.
+
+    \item \textbf{Về mặt vận hành:} Thiết lập hệ thống observability toàn diện (AgentTrace, Prometheus metrics, ChatFeedback) và bộ test phong phú, tạo nền tảng vững chắc cho việc phát triển và vận hành hệ thống trong môi trường production.
+\end{enumerate}
 
 \section{Bố cục của báo cáo}
 
-Báo cáo được tổ chức thành 3 chương chính và phần kết luận:
+Báo cáo được tổ chức thành 4 chương chính và phần kết luận:
 
 \begin{itemize}
-    \item \textbf{Chương 1 -- Giới thiệu:} Đặt vấn đề, mục tiêu, phạm vi nghiên cứu và bố cục báo cáo.
-    \item \textbf{Chương 2 -- Cơ sở lý thuyết:} Trình bày các khái niệm nền tảng về RAG, multi-agent system, vector search, embedding và các công nghệ sử dụng trong đồ án.
-    \item \textbf{Chương 3 -- Phân tích thiết kế hệ thống:} Phân tích yêu cầu chức năng và phi chức năng, thiết kế kiến trúc tổng thể, cơ sở dữ liệu, giao diện người dùng, quy trình triển khai và kết quả kiểm thử.
-    \item \textbf{Kết luận:} Tổng kết kết quả đạt được, hạn chế và hướng phát triển trong tương lai.
+    \item \textbf{Chương 1 -- Giới thiệu:} Đặt vấn đề về những thách thức trong tiếp cận thông tin bất động sản tại Việt Nam; xác định 5 mục tiêu chính của đồ án; phạm vi nghiên cứu về thị trường, loại hình, chức năng và công nghệ; phương pháp tiếp cận theo hướng phát triển module; và những đóng góp chính của đồ án.
+
+    \item \textbf{Chương 2 -- Cơ sở lý thuyết:} Trình bày các khái niệm nền tảng: Retrieval-Augmented Generation (RAG), hệ đa tác tử (Multi-Agent System), vector embedding và tìm kiếm ngữ nghĩa, hybrid search và reranking. Giới thiệu các công nghệ được sử dụng: FastAPI, Next.js, PostgreSQL + pgvector, LangGraph, Google Gemini, BGE-M3 Embedding, Cohere Rerank, Redis, Apache Airflow và Playwright.
+
+    \item \textbf{Chương 3 -- Phân tích thiết kế hệ thống:} Phân tích yêu cầu chức năng (3 nhóm: người dùng cuối, chatbot, quản trị/dữ liệu) và phi chức năng. Thiết kế kiến trúc tổng thể 5 tầng với sơ đồ kiến trúc; thiết kế chi tiết các tầng (frontend, backend API, agent service, data layer, data pipeline); thiết kế cơ sở dữ liệu với 4 nhóm bảng và chiến lược indexing; thiết kế giao diện người dùng cho 6 loại trang chính.
+
+    \item \textbf{Chương 4 -- Triển khai và kiểm thử:} Trình bày chi tiết quy trình triển khai hệ thống với Docker Compose (5 service, health check, dependency chain); cấu hình môi trường và biến môi trường; quy trình CI/CD và giám sát (Prometheus metrics, AgentTrace observability, cảnh báo Slack/Email); lập lịch pipeline với Apache Airflow (4 DAGs); chiến lược kiểm thử đa cấp độ với 58 file test; kết quả kiểm thử chi tiết theo 10 nhóm chức năng; và đánh giá hiệu năng hệ thống.
+
+    %\item \textbf{Kết luận:} Tổng kết 8 kết quả chính đạt được; phân tích 7 hạn chế hiện tại; và đề xuất 7 hướng phát triển trong tương lai (mở rộng nguồn dữ liệu, nâng cấp chatbot, cải thiện tìm kiếm, mở rộng chức năng, triển khai production, tối ưu hiệu năng, hoàn thiện kiểm thử).
 \end{itemize}
 
 \newpage

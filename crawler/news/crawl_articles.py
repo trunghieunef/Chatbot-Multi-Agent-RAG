@@ -15,8 +15,10 @@ end. Output CSV columns:
 
 import argparse
 import glob
+import json
 import os
 import random
+import re
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -40,8 +42,12 @@ FIELDS = [
     "title",
     "body",
     "category",
+    "author",
     "source",
     "post_date",
+    "reading_time",
+    "summary",
+    "image_urls",
     "url",
 ]
 
@@ -79,6 +85,74 @@ def _text(soup: BeautifulSoup, selector: str) -> str:
     return " ".join(node.get_text(" ", strip=True).split()) if node else ""
 
 
+def _clean_text(value: str) -> str:
+    return " ".join((value or "").split())
+
+
+def _article_main(soup: BeautifulSoup):
+    return soup.select_one("main") or soup.select_one("article") or soup
+
+
+def _article_images(container, *, base_url: str) -> list[str]:
+    urls: list[str] = []
+    for image in container.select("img"):
+        src = image.get("data-src") or image.get("src") or ""
+        if not src or src.startswith("data:"):
+            continue
+        absolute = urljoin(base_url, src)
+        if absolute not in urls:
+            urls.append(absolute)
+    return urls
+
+
+def _meta_after_text(container, label: str) -> str:
+    for node in container.find_all(string=re.compile(re.escape(label), re.IGNORECASE)):
+        own_text = _clean_text(str(node))
+        if own_text and own_text.lower() != label.lower():
+            return own_text
+        current = node.parent
+        while current:
+            sibling = current.next_sibling
+            while sibling:
+                if hasattr(sibling, "get_text"):
+                    text = _clean_text(sibling.get_text(" ", strip=True))
+                else:
+                    text = _clean_text(str(sibling))
+                if text and text not in {"•"}:
+                    return text
+                sibling = sibling.next_sibling
+            current = current.parent if current.parent is not container else None
+    return ""
+
+
+def _article_author(container) -> str:
+    author_links = [
+        _clean_text(anchor.get_text(" ", strip=True))
+        for anchor in container.select('a[href*="/tac-gia/"]')
+        if anchor.get_text(strip=True)
+    ]
+    return author_links[-1] if author_links else ""
+
+
+def _article_body(container) -> tuple[str, str]:
+    pieces: list[str] = []
+    for node in container.find_all(["p", "figcaption", "h2", "h3"]):
+        text = _clean_text(node.get_text(" ", strip=True))
+        if not text:
+            continue
+        if node.name in {"h2", "h3"} and text.lower() in {
+            "chia sẻ bài viết này",
+            "bài viết được xem nhiều nhất",
+            "bài viết khác",
+        }:
+            break
+        if node.name in {"h2", "h3"}:
+            continue
+        pieces.append(text)
+    summary = pieces[0] if pieces else ""
+    return "\n".join(pieces), summary
+
+
 def _category_from_text(category_text: str) -> str:
     lowered = category_text.lower()
     if "phap ly" in lowered or "pháp lý" in lowered:
@@ -92,20 +166,21 @@ def _category_from_text(category_text: str) -> str:
 
 def parse_article(html: str, *, url: str) -> dict[str, str]:
     soup = BeautifulSoup(html, "html.parser")
-    title = _text(soup, "h1") or _text(soup, "[data-testid='article-title']")
-    body_nodes = soup.select("article p, .article-content p, [data-testid='article-body'] p")
-    body = "\n".join(
-        " ".join(node.get_text(" ", strip=True).split())
-        for node in body_nodes
-        if node.get_text(strip=True)
-    )
+    container = _article_main(soup)
+    title = _text(container, "h1") or _text(soup, "h1") or _text(soup, "[data-testid='article-title']")
+    body, summary = _article_body(container)
     category_text = _text(soup, ".breadcrumb a:last-child, [data-testid='category']")
+    post_date = _text(soup, "time, .date, [data-testid='post-date']") or _meta_after_text(container, "Cập nhật lần cuối vào")
     return {
         "title": title,
         "body": body,
         "category": _category_from_text(category_text),
+        "author": _article_author(container),
         "source": "batdongsan.com",
-        "post_date": _text(soup, "time, .date, [data-testid='post-date']"),
+        "post_date": post_date,
+        "reading_time": _meta_after_text(container, "Đọc trong khoảng"),
+        "summary": summary,
+        "image_urls": json.dumps(_article_images(container, base_url=url), ensure_ascii=False),
         "url": url,
     }
 

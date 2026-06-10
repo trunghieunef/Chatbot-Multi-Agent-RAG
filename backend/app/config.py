@@ -32,6 +32,7 @@ class Settings(BaseSettings):
     EMBEDDING_DIM: int = 1024
     EMBEDDING_BATCH_SIZE: int = 16
     HF_EMBEDDING_DEVICE: str = ""
+    CHATBOT_EMBEDDING_LOCAL_FILES_ONLY: bool = True
     CHUNK_SIZE_TOKENS: int = 400
     CHUNK_OVERLAP_TOKENS: int = 80
 
@@ -45,7 +46,7 @@ class Settings(BaseSettings):
     AGENT_SERVICE_URL: str = "http://localhost:8100"
     AGENT_INTERNAL_KEY: str = "dev-agent-internal-key"
     AGENT_SERVICE_TIMEOUT_SECONDS: float = 45.0
-    CHATBOT_AGENT_SERVICE_ENABLED: bool = False
+    CHATBOT_AGENT_SERVICE_ENABLED: bool = True
     CHATBOT_LLM_JUDGE_ENABLED: bool = False
     CHATBOT_MEMORY_ENABLED: bool = True
     CHATBOT_ADMIN_ENABLED: bool = True

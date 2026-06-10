@@ -18,6 +18,16 @@ def test_strip_accents_handles_none():
 
 @pytest.mark.asyncio
 async def test_agent_graph_returns_trace_summary_without_llm_key(monkeypatch):
+    async def fake_readiness_snapshot():
+        return {
+            "listings": {"status": "unknown", "parent_count": 0, "chunk_count": 0},
+            "projects": {"status": "unknown", "parent_count": 0, "chunk_count": 0},
+            "news": {"status": "unknown", "parent_count": 0, "chunk_count": 0},
+            "legal": {"status": "unknown", "parent_count": 0, "chunk_count": 0},
+        }
+
+    monkeypatch.setattr(nodes, "build_readiness_snapshot", fake_readiness_snapshot)
+
     request = AgentChatRequest(
         request_id="req-graph-1",
         message="Tim can ho Quan 7 duoi 5 ty",

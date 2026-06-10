@@ -52,6 +52,7 @@ async def get_db() -> AsyncSession:
 async def init_db():
     """Create all tables (dev only). Use Alembic for production."""
     async with engine.begin() as conn:
-        # Enable pgvector extension (required for Vector columns)
+        # Enable extensions required by vector search and Vietnamese text matching.
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS unaccent"))
         await conn.run_sync(Base.metadata.create_all)

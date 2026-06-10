@@ -2,3 +2,6 @@
 \addvspace {10\p@ }
 \addvspace {10\p@ }
 \addvspace {10\p@ }
+\contentsline {table}{\numberline {3.1}{\ignorespaces Các yêu cầu phi chức năng của hệ thống}}{40}{table.3.1}%
+\addvspace {10\p@ }
+\contentsline {table}{\numberline {4.1}{\ignorespaces Danh sách API endpoints chính của hệ thống (tiền tố mặc định: \texttt {/api/v1})}}{72}{table.4.1}%
