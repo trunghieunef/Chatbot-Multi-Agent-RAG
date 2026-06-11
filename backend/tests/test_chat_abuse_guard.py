@@ -32,6 +32,25 @@ def test_abuse_guard_resets_after_window_passes():
     assert guard.check("user:42").allowed is True
 
 
+def test_abuse_guard_prunes_expired_and_caps_keys():
+    now = [100.0]
+    guard = ChatAbuseGuard(
+        max_requests=1,
+        window_seconds=60,
+        clock=lambda: now[0],
+        max_keys=2,
+    )
+
+    assert guard.check("expired").allowed is True
+    now[0] = 161.0
+    assert guard.check("first").allowed is True
+    assert guard.check("second").allowed is True
+    assert guard.check("third").allowed is True
+
+    assert "expired" not in guard._requests
+    assert len(guard._requests) <= 2
+
+
 def test_disabled_abuse_guard_helper_allows_request():
     response = SimpleNamespace(headers={})
     guard = ChatAbuseGuard(max_requests=0, window_seconds=60, clock=lambda: 100.0)

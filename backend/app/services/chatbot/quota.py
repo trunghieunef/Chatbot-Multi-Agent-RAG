@@ -12,7 +12,7 @@ from app.models.chat import ChatMessage, ChatSession
 async def enforce_chat_quota(db, *, user, session_id) -> None:
     """Raise when the current user/session has exhausted today's chat quota."""
     settings = get_settings()
-    day_start = datetime.combine(datetime.now(UTC).date(), time.min, tzinfo=UTC)
+    day_start = datetime.combine(datetime.now(UTC).date(), time.min)
     day_end = day_start + timedelta(days=1)
 
     query = (

@@ -13,6 +13,9 @@ class FakeDB:
     def add(self, obj):
         self.added.append(obj)
 
+    async def execute(self, query):
+        return type("CountResult", (), {"scalar": lambda self: 0})()
+
     async def flush(self):
         for obj in self.added:
             if obj.__class__.__name__ == "ChatSession" and obj.id is None:
