@@ -21,6 +21,7 @@ class FakeDB:
         self.messages = messages or []
         self.quota_count = quota_count
         self.execute_count = 0
+        self.commit_count = 0
 
     def add(self, obj):
         self.added.append(obj)
@@ -60,6 +61,9 @@ class FakeDB:
                         and item.id is not None
                     ]
                 ) + 1
+
+    async def commit(self):
+        self.commit_count += 1
 
 
 class FakeAgentClient:
@@ -386,6 +390,39 @@ def test_agent_service_context_excludes_current_user_message(monkeypatch):
     )
 
     assert response.content == "Agent answer"
+
+
+def test_observability_failure_does_not_fail_committed_chat_response(monkeypatch):
+    db = FakeDB()
+    fake_client = FakeAgentClient()
+
+    async def memory_hints(*args):
+        return []
+
+    async def fail_observability(*args):
+        raise RuntimeError("observability database unavailable")
+
+    monkeypatch.setattr(chat, "is_agent_service_enabled", lambda: True)
+    monkeypatch.setattr(chat, "get_agent_service_client", lambda: fake_client)
+    monkeypatch.setattr(chat, "build_conversation_context", lambda db, session_id: [])
+    monkeypatch.setattr(chat, "load_user_preferences", lambda db, user_id: {})
+    monkeypatch.setattr(chat, "persist_agent_observability", fail_observability)
+    monkeypatch.setattr(chat, "handle_memory_proposals", memory_hints)
+
+    response = asyncio.run(
+        chat.send_message(
+            ChatMessageRequest(message="Tim nha Quan 2"),
+            user=None,
+            db=db,
+        )
+    )
+
+    chat_messages = [
+        item for item in db.added if item.__class__.__name__ == "ChatMessage"
+    ]
+    assert response.content == "Agent answer"
+    assert [message.role for message in chat_messages] == ["user", "assistant"]
+    assert db.commit_count == 1
 
 
 def test_legacy_agent_shape_uses_safe_fallback_answer():

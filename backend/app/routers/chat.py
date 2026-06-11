@@ -4,6 +4,7 @@ Chat API router.
 REST endpoint for chatbot interaction. WebSocket support will be added in Phase 3.
 """
 
+import logging
 import uuid
 from inspect import isawaitable
 
@@ -12,8 +13,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
-from app.database import get_db
-from app.models.agent_observability import AgentTrace
+from app.database import async_session, get_db
 from app.models.chat import ChatMessage, ChatSession
 from app.models.preference import ChatFeedback, MemoryProposal
 from app.models.user import User
@@ -36,6 +36,9 @@ from app.services.agent_service.contracts import (
     AgentChatResponse,
     TraceSummary,
 )
+from app.services.agent_service.observability import (
+    persist_agent_observability as _persist_agent_observability,
+)
 from app.services.chatbot import run_chat_pipeline
 from app.services.chatbot.context import (
     build_conversation_context,
@@ -55,6 +58,7 @@ from app.services.chatbot.quota import enforce_chat_quota
 from app.services.chatbot.session_guard import verify_session_ownership
 
 router = APIRouter(prefix="/chat", tags=["Chat"])
+logger = logging.getLogger(__name__)
 
 _anon_abuse_guard = ChatAbuseGuard(
     max_requests=get_settings().CHAT_ABUSE_GUARD_ANON_MAX_REQUESTS,
@@ -209,26 +213,24 @@ def _trace_summary_dict(response: AgentChatResponse) -> dict:
     return response.trace_summary.model_dump(mode="json")
 
 
-def persist_agent_observability(
-    db: AsyncSession,
-    session: ChatSession,
+async def persist_agent_observability(
+    session_factory,
+    chat_session: ChatSession,
     user: User | None,
     response: AgentChatResponse,
 ) -> None:
-    db.add(
-        AgentTrace(
-            request_id=response.request_id,
-            session_id=session.id,
-            user_id=user.id if user else None,
-            intent=response.trace_summary.intent,
-            agents_used=response.agents_used,
-            trace_summary_json=_trace_summary_dict(response),
-            full_trace_json=response.full_trace,
-            readiness_json=response.readiness,
-            latency_ms=response.trace_summary.latency_ms,
-            status="success",
-        )
+    await _persist_agent_observability(
+        session_factory=session_factory,
+        chat_session=chat_session,
+        user=user,
+        response=response,
     )
+
+
+async def _commit_if_supported(db: AsyncSession) -> None:
+    commit = getattr(db, "commit", None)
+    if commit is not None:
+        await commit()
 
 
 def _memory_proposal_hint(record: MemoryProposal) -> dict:
@@ -375,7 +377,6 @@ async def send_message(
     sources = _source_dicts(agent_response)
     suggested_actions = agent_response.suggested_actions
     trace_summary = _trace_summary_dict(agent_response)
-    persist_agent_observability(db, session, user, agent_response)
     memory_hints = await handle_memory_proposals(db, session, user, agent_response)
 
     # Save assistant response
@@ -396,6 +397,22 @@ async def send_message(
     )
     db.add(assistant_msg)
     await db.flush()
+    await _commit_if_supported(db)
+
+    try:
+        await _resolve(
+            persist_agent_observability(
+                async_session,
+                session,
+                user,
+                agent_response,
+            )
+        )
+    except Exception:
+        logger.exception(
+            "Failed to persist agent observability for request_id=%s",
+            agent_response.request_id,
+        )
 
     return ChatMessageResponse(
         session_id=session.id,

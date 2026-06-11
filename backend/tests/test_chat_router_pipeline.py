@@ -39,6 +39,7 @@ def test_send_message_uses_multi_agent_pipeline_by_default(monkeypatch):
 
     monkeypatch.setattr(chat, "is_agent_service_enabled", lambda: False)
     monkeypatch.setattr(chat, "run_chat_pipeline", fake_multi_agent, raising=False)
+    monkeypatch.setattr(chat, "persist_agent_observability", lambda *args: None)
 
     response = asyncio.run(
         chat.send_message(
@@ -61,6 +62,7 @@ def test_send_message_returns_safe_error_when_multi_agent_fails(monkeypatch):
 
     monkeypatch.setattr(chat, "is_agent_service_enabled", lambda: False)
     monkeypatch.setattr(chat, "run_chat_pipeline", failing_multi_agent, raising=False)
+    monkeypatch.setattr(chat, "persist_agent_observability", lambda *args: None)
 
     response = asyncio.run(
         chat.send_message(
@@ -82,6 +84,7 @@ def test_send_message_does_not_call_simple_rag(monkeypatch):
 
     monkeypatch.setattr(chat, "is_agent_service_enabled", lambda: False)
     monkeypatch.setattr(chat, "run_chat_pipeline", failing_multi_agent, raising=False)
+    monkeypatch.setattr(chat, "persist_agent_observability", lambda *args: None)
     assert not hasattr(chat, "run_simple_rag")
 
     response = asyncio.run(
