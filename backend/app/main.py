@@ -5,17 +5,31 @@ Main entry point that wires together all routers,
 middleware, and startup/shutdown events.
 """
 
-from contextlib import asynccontextmanager
+import asyncio
+import logging
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.database import init_db
+from app.database import async_session, init_db
 from app.routers import admin, auth, chat, listings, market, metrics, preferences
+from app.services.agent_service.observability import mark_stale_eval_runs_failed
 
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
+
+
+async def _observability_cleanup_loop() -> None:
+    while True:
+        try:
+            async with async_session() as db:
+                await mark_stale_eval_runs_failed(db)
+        except Exception:
+            logger.exception("Observability cleanup failed")
+        await asyncio.sleep(60)
 
 
 @asynccontextmanager
@@ -24,9 +38,18 @@ async def lifespan(app: FastAPI):
     # Startup: create tables (dev only, use Alembic in prod)
     await init_db()
     print("[OK] Database tables initialized")
-    yield
-    # Shutdown: cleanup
-    print("[BYE] Application shutting down")
+    cleanup_task = None
+    if settings.OBSERVABILITY_CLEANUP_ENABLED:
+        cleanup_task = asyncio.create_task(_observability_cleanup_loop())
+    try:
+        yield
+    finally:
+        if cleanup_task is not None:
+            cleanup_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await cleanup_task
+        # Shutdown: cleanup
+        print("[BYE] Application shutting down")
 
 
 app = FastAPI(

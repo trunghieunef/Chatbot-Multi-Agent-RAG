@@ -5,7 +5,10 @@ REST endpoint for chatbot interaction. WebSocket support will be added in Phase 
 """
 
 import logging
+import asyncio
+import random
 import uuid
+from datetime import datetime
 from inspect import isawaitable
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
@@ -14,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.database import async_session, get_db
+from app.models.agent_observability import EvalRun, EvalScore
 from app.models.chat import ChatMessage, ChatSession
 from app.models.preference import ChatFeedback, MemoryProposal
 from app.models.user import User
@@ -72,6 +76,24 @@ _auth_abuse_guard = ChatAbuseGuard(
 
 def is_agent_service_enabled() -> bool:
     return get_settings().CHATBOT_AGENT_SERVICE_ENABLED
+
+
+def should_schedule_eval(
+    *,
+    enabled: bool,
+    sample_rate: float,
+    answer: str,
+    mode: str | None,
+) -> bool:
+    if not enabled or not answer.strip():
+        return False
+    if mode in {"agent_service_error", "legacy_pipeline", "legacy"}:
+        return False
+    if sample_rate <= 0:
+        return False
+    if sample_rate >= 1:
+        return True
+    return random.random() < sample_rate
 
 
 def _chat_abuse_key(body: ChatMessageRequest, user: User | None, request: Request) -> str:
@@ -288,6 +310,142 @@ async def handle_memory_proposals(
     return hints
 
 
+def _trace_value(full_trace: dict, key: str, default: str) -> str:
+    value = full_trace.get(key)
+    if value is None or str(value).strip() == "":
+        return default
+    return str(value)
+
+
+def _score_value(metric: str, value) -> tuple[float, str]:
+    if isinstance(value, dict):
+        raw_score = value.get("score", 0.0)
+        rationale = value.get("rationale") or value.get("reason") or ""
+    else:
+        raw_score = value
+        rationale = ""
+    try:
+        score = float(raw_score)
+    except (TypeError, ValueError):
+        score = 0.0
+    return score, str(rationale)
+
+
+def _eval_payload(
+    *,
+    question: str,
+    answer: str,
+    sources: list[dict],
+    response: AgentChatResponse,
+    graph_version: str,
+    prompt_version: str,
+    model_name: str,
+) -> dict:
+    return {
+        "question": question,
+        "answer": answer,
+        "sources": sources,
+        "trace": response.full_trace if isinstance(response.full_trace, dict) else {},
+        "graph_version": graph_version,
+        "prompt_version": prompt_version,
+        "model_name": model_name,
+    }
+
+
+async def _process_eval_run(
+    *,
+    session_factory,
+    eval_run_id: int,
+    payload: dict,
+) -> None:
+    async with session_factory() as db:
+        result = await db.execute(select(EvalRun).where(EvalRun.id == eval_run_id))
+        eval_run = result.scalar_one_or_none()
+        if eval_run is None:
+            return
+        try:
+            evaluation = await get_agent_service_client().evaluate(payload)
+            status = str(evaluation.get("status") or "completed")
+            eval_run.status = status if status in {"completed", "skipped"} else "completed"
+            eval_run.summary_json = evaluation.get("summary") or {}
+            eval_run.error_message = None
+            eval_run.completed_at = datetime.utcnow()
+            if eval_run.status == "completed":
+                scores = evaluation.get("scores") or {}
+                if isinstance(scores, dict):
+                    for metric, value in scores.items():
+                        score, rationale = _score_value(str(metric), value)
+                        db.add(
+                            EvalScore(
+                                eval_run_id=eval_run.id,
+                                metric=str(metric),
+                                score=score,
+                                rationale=rationale,
+                            )
+                        )
+        except Exception as exc:
+            logger.exception("Agent evaluation failed for eval_run_id=%s", eval_run_id)
+            eval_run.status = "failed"
+            eval_run.error_message = exc.__class__.__name__
+            eval_run.completed_at = datetime.utcnow()
+        await db.commit()
+
+
+async def schedule_agent_evaluation(
+    *,
+    session_factory,
+    chat_session: ChatSession,
+    question: str,
+    sources: list[dict],
+    response: AgentChatResponse,
+    sync_for_tests: bool,
+) -> None:
+    full_trace = response.full_trace if isinstance(response.full_trace, dict) else {}
+    graph_version = _trace_value(full_trace, "graph_version", "unknown_graph")
+    prompt_version = _trace_value(full_trace, "prompt_version", "unknown_prompt")
+    model_name = _trace_value(full_trace, "model_name", "unknown_model")
+    payload = _eval_payload(
+        question=question,
+        answer=response.final_response,
+        sources=sources,
+        response=response,
+        graph_version=graph_version,
+        prompt_version=prompt_version,
+        model_name=model_name,
+    )
+
+    async with session_factory() as db:
+        eval_run = EvalRun(
+            request_id=response.request_id,
+            session_id=chat_session.id,
+            status="pending",
+            evaluator="gemini",
+            graph_version=graph_version,
+            prompt_version=prompt_version,
+            model_name=model_name,
+            summary_json={},
+        )
+        db.add(eval_run)
+        await db.flush()
+        eval_run_id = eval_run.id
+        await db.commit()
+
+    if sync_for_tests:
+        await _process_eval_run(
+            session_factory=session_factory,
+            eval_run_id=eval_run_id,
+            payload=payload,
+        )
+    else:
+        asyncio.create_task(
+            _process_eval_run(
+                session_factory=session_factory,
+                eval_run_id=eval_run_id,
+                payload=payload,
+            )
+        )
+
+
 @router.post("/feedback", response_model=ChatFeedbackResponse)
 async def submit_feedback(
     body: ChatFeedbackRequest,
@@ -413,6 +571,29 @@ async def send_message(
             "Failed to persist agent observability for request_id=%s",
             agent_response.request_id,
         )
+
+    settings = get_settings()
+    full_trace = agent_response.full_trace if isinstance(agent_response.full_trace, dict) else {}
+    if should_schedule_eval(
+        enabled=settings.CHATBOT_EVAL_ENABLED,
+        sample_rate=settings.CHATBOT_EVAL_SAMPLE_RATE,
+        answer=response_text,
+        mode=full_trace.get("mode"),
+    ):
+        try:
+            await schedule_agent_evaluation(
+                session_factory=async_session,
+                chat_session=session,
+                question=body.message,
+                sources=sources,
+                response=agent_response,
+                sync_for_tests=settings.CHATBOT_EVAL_SYNC_FOR_TESTS,
+            )
+        except Exception:
+            logger.exception(
+                "Failed to schedule agent evaluation for request_id=%s",
+                agent_response.request_id,
+            )
 
     return ChatMessageResponse(
         session_id=session.id,

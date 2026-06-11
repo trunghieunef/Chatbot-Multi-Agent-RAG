@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterable
+from datetime import datetime, timedelta
 from typing import Any
 
 from sqlalchemy import delete, select
@@ -10,6 +11,7 @@ from app.models.agent_observability import (
     AgentRetrievalEvent,
     AgentTrace,
     AgentTraceStep,
+    EvalRun,
 )
 from app.models.chat import ChatSession
 from app.models.user import User
@@ -296,3 +298,21 @@ async def persist_agent_observability(
             )
 
         await db.commit()
+
+
+async def mark_stale_eval_runs_failed(db) -> int:
+    cutoff = datetime.utcnow() - timedelta(minutes=10)
+    result = await db.execute(
+        select(EvalRun).where(
+            EvalRun.status == "pending",
+            EvalRun.created_at < cutoff,
+        )
+    )
+    runs = result.scalars().all()
+    for run in runs:
+        run.status = "failed"
+        run.error_message = "eval_timeout_stale"
+        run.completed_at = datetime.utcnow()
+    if runs:
+        await db.commit()
+    return len(runs)

@@ -54,6 +54,39 @@ class AgentServiceClient:
                 "Agent Service request failed: invalid response"
             ) from None
 
+    async def evaluate(self, body: dict) -> dict:
+        headers = {"X-Internal-Agent-Key": self.internal_key}
+        timeout = httpx.Timeout(self.timeout_seconds)
+        try:
+            async with httpx.AsyncClient(
+                timeout=timeout,
+                transport=self.transport,
+            ) as client:
+                response = await client.post(
+                    f"{self.base_url}/internal/agent/evaluate",
+                    json=body,
+                    headers=headers,
+                )
+                response.raise_for_status()
+                data = response.json()
+                if not isinstance(data, dict):
+                    raise ValueError("invalid response")
+                return data
+        except httpx.HTTPStatusError as exc:
+            status_code = exc.response.status_code
+            raise AgentServiceError(
+                f"Agent Service request failed: HTTP {status_code}"
+            ) from None
+        except httpx.HTTPError as exc:
+            error_type = exc.__class__.__name__
+            raise AgentServiceError(
+                f"Agent Service request failed: {error_type}"
+            ) from None
+        except ValueError as exc:
+            raise AgentServiceError(
+                "Agent Service request failed: invalid response"
+            ) from None
+
 
 def get_agent_service_client() -> AgentServiceClient:
     settings = get_settings()

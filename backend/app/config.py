@@ -48,10 +48,16 @@ class Settings(BaseSettings):
     AGENT_SERVICE_TIMEOUT_SECONDS: float = 45.0
     CHATBOT_AGENT_SERVICE_ENABLED: bool = True
     CHATBOT_LLM_JUDGE_ENABLED: bool = False
+    CHATBOT_EVAL_ENABLED: bool = False
+    CHATBOT_EVAL_SAMPLE_RATE: float = 0.0
+    CHATBOT_EVAL_SYNC_FOR_TESTS: bool = False
     CHATBOT_MEMORY_ENABLED: bool = True
     CHATBOT_ADMIN_ENABLED: bool = True
     CHATBOT_TRACE_LEVEL: str = "full"
     GEMINI_JUDGE_MODEL: str = "gemini-2.0-flash"
+    OBSERVABILITY_ANON_RETENTION_DAYS: int = 30
+    OBSERVABILITY_AUTH_RETENTION_DAYS: int = 90
+    OBSERVABILITY_CLEANUP_ENABLED: bool = True
 
     # Chat quotas
     ANON_CHAT_DAILY_LIMIT: int = 20
