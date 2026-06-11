@@ -47,6 +47,7 @@ from app.services.chatbot.memory import (
     mark_memory_proposal_resolved,
     upsert_user_preference,
 )
+from app.services.chatbot.session_guard import verify_session_ownership
 
 router = APIRouter(prefix="/chat", tags=["Chat"])
 
@@ -298,8 +299,7 @@ async def send_message(
         session = result.scalar_one_or_none()
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
-        if session.user_id is not None and (user is None or session.user_id != user.id):
-            raise HTTPException(status_code=404, detail="Session not found")
+        verify_session_ownership(session, user)
     else:
         session = ChatSession(
             user_id=user.id if user else None,
@@ -400,6 +400,7 @@ async def get_sessions(
 @router.get("/sessions/{session_id}", response_model=ChatHistoryResponse)
 async def get_session_history(
     session_id: uuid.UUID,
+    user: User | None = Depends(get_optional_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Get full chat history for a session."""
@@ -409,6 +410,7 @@ async def get_session_history(
     session = result.scalar_one_or_none()
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
+    verify_session_ownership(session, user)
 
     msg_result = await db.execute(
         select(ChatMessage)

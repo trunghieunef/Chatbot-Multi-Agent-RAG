@@ -15,15 +15,20 @@ from app.services.agent_service.contracts import (
 
 
 class FakeDB:
-    def __init__(self, session=None):
+    def __init__(self, session=None, messages=None):
         self.added = []
         self.session = session
+        self.messages = messages or []
+        self.execute_count = 0
 
     def add(self, obj):
         self.added.append(obj)
 
     async def execute(self, query):
-        return SimpleNamespace(scalar_one_or_none=lambda: self.session)
+        self.execute_count += 1
+        if self.execute_count == 1:
+            return SimpleNamespace(scalar_one_or_none=lambda: self.session)
+        return SimpleNamespace(scalars=lambda: SimpleNamespace(all=lambda: self.messages))
 
     async def flush(self):
         for obj in self.added:
@@ -249,6 +254,99 @@ def test_anonymous_user_cannot_use_authenticated_session(monkeypatch):
         raise AssertionError("expected session ownership rejection")
 
     assert db.added == []
+
+
+def test_session_history_rejects_authenticated_non_owner():
+    session_id = uuid.uuid4()
+    db = FakeDB(
+        session=SimpleNamespace(
+            id=session_id,
+            user_id=7,
+            title="secret",
+            created_at=datetime(2026, 1, 1),
+            updated_at=datetime(2026, 1, 1),
+        )
+    )
+
+    try:
+        asyncio.run(
+            chat.get_session_history(
+                session_id,
+                user=SimpleNamespace(id=42),
+                db=db,
+            )
+        )
+    except HTTPException as exc:
+        assert exc.status_code == 404
+        assert exc.detail == "Session not found"
+    else:
+        raise AssertionError("foreign session history must return 404")
+
+
+def test_session_history_allows_authenticated_owner():
+    session_id = uuid.uuid4()
+    message = SimpleNamespace(
+        role="user",
+        content="Owner message",
+        agent_used=None,
+        metadata_json={},
+        created_at=datetime(2026, 1, 1),
+    )
+    db = FakeDB(
+        session=SimpleNamespace(
+            id=session_id,
+            user_id=42,
+            title="owner",
+            created_at=datetime(2026, 1, 1),
+            updated_at=datetime(2026, 1, 1),
+        ),
+        messages=[message],
+    )
+
+    response = asyncio.run(
+        chat.get_session_history(
+            session_id,
+            user=SimpleNamespace(id=42),
+            db=db,
+        )
+    )
+
+    assert response.session.id == session_id
+    assert response.session.message_count == 1
+    assert response.messages[0].content == "Owner message"
+
+
+def test_session_history_allows_anonymous_session_by_direct_id():
+    session_id = uuid.uuid4()
+    message = SimpleNamespace(
+        role="assistant",
+        content="Anonymous answer",
+        agent_used="property_search",
+        metadata_json={},
+        created_at=datetime(2026, 1, 1),
+    )
+    db = FakeDB(
+        session=SimpleNamespace(
+            id=session_id,
+            user_id=None,
+            title="anonymous",
+            created_at=datetime(2026, 1, 1),
+            updated_at=datetime(2026, 1, 1),
+        ),
+        messages=[message],
+    )
+
+    response = asyncio.run(
+        chat.get_session_history(
+            session_id,
+            user=None,
+            db=db,
+        )
+    )
+
+    assert response.session.id == session_id
+    assert response.session.message_count == 1
+    assert response.messages[0].content == "Anonymous answer"
 
 
 def test_agent_service_context_excludes_current_user_message(monkeypatch):
