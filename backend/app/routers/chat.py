@@ -358,37 +358,40 @@ async def _process_eval_run(
     eval_run_id: int,
     payload: dict,
 ) -> None:
-    async with session_factory() as db:
-        result = await db.execute(select(EvalRun).where(EvalRun.id == eval_run_id))
-        eval_run = result.scalar_one_or_none()
-        if eval_run is None:
-            return
-        try:
-            evaluation = await get_agent_service_client().evaluate(payload)
-            status = str(evaluation.get("status") or "completed")
-            eval_run.status = status if status in {"completed", "skipped"} else "completed"
-            eval_run.summary_json = evaluation.get("summary") or {}
-            eval_run.error_message = None
-            eval_run.completed_at = datetime.utcnow()
-            if eval_run.status == "completed":
-                scores = evaluation.get("scores") or {}
-                if isinstance(scores, dict):
-                    for metric, value in scores.items():
-                        score, rationale = _score_value(str(metric), value)
-                        db.add(
-                            EvalScore(
-                                eval_run_id=eval_run.id,
-                                metric=str(metric),
-                                score=score,
-                                rationale=rationale,
+    try:
+        async with session_factory() as db:
+            result = await db.execute(select(EvalRun).where(EvalRun.id == eval_run_id))
+            eval_run = result.scalar_one_or_none()
+            if eval_run is None:
+                return
+            try:
+                evaluation = await get_agent_service_client().evaluate(payload)
+                status = str(evaluation.get("status") or "completed")
+                eval_run.status = status if status in {"completed", "skipped"} else "completed"
+                eval_run.summary_json = evaluation.get("summary") or {}
+                eval_run.error_message = None
+                eval_run.completed_at = datetime.utcnow()
+                if eval_run.status == "completed":
+                    scores = evaluation.get("scores") or {}
+                    if isinstance(scores, dict):
+                        for metric, value in scores.items():
+                            score, rationale = _score_value(str(metric), value)
+                            db.add(
+                                EvalScore(
+                                    eval_run_id=eval_run.id,
+                                    metric=str(metric),
+                                    score=score,
+                                    rationale=rationale,
+                                )
                             )
-                        )
-        except Exception as exc:
-            logger.exception("Agent evaluation failed for eval_run_id=%s", eval_run_id)
-            eval_run.status = "failed"
-            eval_run.error_message = exc.__class__.__name__
-            eval_run.completed_at = datetime.utcnow()
-        await db.commit()
+            except Exception as exc:
+                logger.exception("Agent evaluation failed for eval_run_id=%s", eval_run_id)
+                eval_run.status = "failed"
+                eval_run.error_message = exc.__class__.__name__
+                eval_run.completed_at = datetime.utcnow()
+            await db.commit()
+    except Exception:
+        logger.exception("Agent evaluation task failed for eval_run_id=%s", eval_run_id)
 
 
 async def schedule_agent_evaluation(

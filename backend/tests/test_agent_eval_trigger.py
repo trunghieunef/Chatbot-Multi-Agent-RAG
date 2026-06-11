@@ -268,6 +268,30 @@ def test_eval_failure_does_not_fail_chat_and_marks_run_failed(monkeypatch):
     assert eval_session.eval_runs[0].error_message == "AgentServiceError"
 
 
+def test_eval_task_session_failure_is_logged_not_raised(monkeypatch):
+    logged = {}
+
+    def failing_session_factory():
+        raise RuntimeError("database unavailable")
+
+    def capture_exception(message, *args):
+        logged["message"] = message
+        logged["args"] = args
+
+    monkeypatch.setattr(chat.logger, "exception", capture_exception)
+
+    asyncio.run(
+        chat._process_eval_run(
+            session_factory=failing_session_factory,
+            eval_run_id=123,
+            payload={},
+        )
+    )
+
+    assert logged["message"] == "Agent evaluation task failed for eval_run_id=%s"
+    assert logged["args"] == (123,)
+
+
 @pytest.mark.asyncio
 async def test_stale_pending_eval_runs_are_marked_failed():
     now = datetime.utcnow()
