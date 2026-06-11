@@ -15,17 +15,23 @@ from app.services.agent_service.contracts import (
 
 
 class FakeDB:
-    def __init__(self, session=None, messages=None):
+    def __init__(self, session=None, messages=None, quota_count=0):
         self.added = []
         self.session = session
         self.messages = messages or []
+        self.quota_count = quota_count
         self.execute_count = 0
 
     def add(self, obj):
         self.added.append(obj)
 
+    def _is_count_query(self, query):
+        return "count(" in str(query).lower()
+
     async def execute(self, query):
         self.execute_count += 1
+        if self._is_count_query(query):
+            return SimpleNamespace(scalar=lambda: self.quota_count)
         if self.execute_count == 1:
             return SimpleNamespace(scalar_one_or_none=lambda: self.session)
         return SimpleNamespace(scalars=lambda: SimpleNamespace(all=lambda: self.messages))

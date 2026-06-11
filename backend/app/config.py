@@ -56,6 +56,11 @@ class Settings(BaseSettings):
     # Chat quotas
     ANON_CHAT_DAILY_LIMIT: int = 20
     AUTH_CHAT_DAILY_LIMIT: int = 200
+    CHAT_ABUSE_GUARD_ENABLED: bool = True
+    CHAT_ABUSE_GUARD_ANON_MAX_REQUESTS: int = 10
+    CHAT_ABUSE_GUARD_ANON_WINDOW_SECONDS: int = 60
+    CHAT_ABUSE_GUARD_AUTH_MAX_REQUESTS: int = 30
+    CHAT_ABUSE_GUARD_AUTH_WINDOW_SECONDS: int = 60
 
     # JWT
     JWT_SECRET_KEY: str = "your-super-secret-jwt-key-change-in-production"

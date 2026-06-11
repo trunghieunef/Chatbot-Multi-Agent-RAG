@@ -1,0 +1,71 @@
+from types import SimpleNamespace
+
+from fastapi import HTTPException
+
+from app.services.chatbot.abuse_guard import (
+    ChatAbuseGuard,
+    enforce_chat_abuse_guard,
+)
+
+
+def test_abuse_guard_blocks_after_threshold():
+    now = [100.0]
+    guard = ChatAbuseGuard(max_requests=2, window_seconds=60, clock=lambda: now[0])
+
+    assert guard.check("anon:session").allowed is True
+    assert guard.check("anon:session").allowed is True
+    blocked = guard.check("anon:session")
+
+    assert blocked.allowed is False
+    assert blocked.retry_after_seconds > 0
+
+
+def test_abuse_guard_resets_after_window_passes():
+    now = [100.0]
+    guard = ChatAbuseGuard(max_requests=1, window_seconds=60, clock=lambda: now[0])
+
+    assert guard.check("user:42").allowed is True
+    assert guard.check("user:42").allowed is False
+
+    now[0] = 161.0
+
+    assert guard.check("user:42").allowed is True
+
+
+def test_disabled_abuse_guard_helper_allows_request():
+    response = SimpleNamespace(headers={})
+    guard = ChatAbuseGuard(max_requests=0, window_seconds=60, clock=lambda: 100.0)
+
+    enforce_chat_abuse_guard(
+        guard,
+        key="anon:ip:127.0.0.1",
+        enabled=False,
+        response=response,
+    )
+
+    assert response.headers == {}
+
+
+def test_abuse_guard_helper_sets_retry_after_when_blocked():
+    response = SimpleNamespace(headers={})
+    guard = ChatAbuseGuard(max_requests=1, window_seconds=60, clock=lambda: 100.0)
+    enforce_chat_abuse_guard(
+        guard,
+        key="auth:42",
+        enabled=True,
+        response=response,
+    )
+
+    try:
+        enforce_chat_abuse_guard(
+            guard,
+            key="auth:42",
+            enabled=True,
+            response=response,
+        )
+    except HTTPException as exc:
+        assert exc.status_code == 429
+        assert response.headers["Retry-After"] == "60"
+        assert "thu lai" in exc.detail.lower()
+    else:
+        raise AssertionError("expected abuse guard rejection")

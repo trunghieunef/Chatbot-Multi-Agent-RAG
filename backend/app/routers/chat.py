@@ -7,7 +7,7 @@ REST endpoint for chatbot interaction. WebSocket support will be added in Phase 
 import uuid
 from inspect import isawaitable
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -47,13 +47,52 @@ from app.services.chatbot.memory import (
     mark_memory_proposal_resolved,
     upsert_user_preference,
 )
+from app.services.chatbot.abuse_guard import (
+    ChatAbuseGuard,
+    enforce_chat_abuse_guard,
+)
+from app.services.chatbot.quota import enforce_chat_quota
 from app.services.chatbot.session_guard import verify_session_ownership
 
 router = APIRouter(prefix="/chat", tags=["Chat"])
 
+_anon_abuse_guard = ChatAbuseGuard(
+    max_requests=get_settings().CHAT_ABUSE_GUARD_ANON_MAX_REQUESTS,
+    window_seconds=get_settings().CHAT_ABUSE_GUARD_ANON_WINDOW_SECONDS,
+)
+_auth_abuse_guard = ChatAbuseGuard(
+    max_requests=get_settings().CHAT_ABUSE_GUARD_AUTH_MAX_REQUESTS,
+    window_seconds=get_settings().CHAT_ABUSE_GUARD_AUTH_WINDOW_SECONDS,
+)
+
 
 def is_agent_service_enabled() -> bool:
     return get_settings().CHATBOT_AGENT_SERVICE_ENABLED
+
+
+def _chat_abuse_key(body: ChatMessageRequest, user: User | None, request: Request) -> str:
+    if user is not None:
+        return f"auth:{user.id}"
+    if body.session_id is not None:
+        return f"anon:session:{body.session_id}"
+    client_host = request.client.host if request.client else "unknown"
+    return f"anon:ip:{client_host}"
+
+
+def _enforce_chat_abuse_guard(
+    body: ChatMessageRequest,
+    user: User | None,
+    request: Request,
+    response: Response,
+) -> None:
+    settings = get_settings()
+    guard = _auth_abuse_guard if user is not None else _anon_abuse_guard
+    enforce_chat_abuse_guard(
+        guard,
+        key=_chat_abuse_key(body, user, request),
+        enabled=settings.CHAT_ABUSE_GUARD_ENABLED,
+        response=response,
+    )
 
 
 async def _run_chatbot_pipeline(
@@ -280,6 +319,8 @@ async def submit_feedback(
 @router.post("", response_model=ChatMessageResponse)
 async def send_message(
     body: ChatMessageRequest,
+    request: Request = None,
+    response: Response = None,
     user: User | None = Depends(get_optional_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -290,6 +331,9 @@ async def send_message(
     The RAG multi-agent pipeline will process the message (Phase 3).
     """
     request_id = str(uuid.uuid4())
+    request = request or Request({"type": "http", "client": ("direct-test", 0)})
+    response = response or Response()
+    _enforce_chat_abuse_guard(body, user, request, response)
 
     # Get or create session
     if body.session_id:
@@ -307,6 +351,8 @@ async def send_message(
         )
         db.add(session)
         await db.flush()
+
+    await enforce_chat_quota(db, user=user, session_id=session.id)
 
     agent_response = await _run_agent_service_pipeline(
         body.message,
