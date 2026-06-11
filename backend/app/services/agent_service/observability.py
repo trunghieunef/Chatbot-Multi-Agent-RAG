@@ -135,11 +135,62 @@ def _retrieval_events_from_steps(steps: Iterable[dict[str, Any]]) -> list[dict[s
     return events
 
 
-def _retrieval_events(full_trace: dict[str, Any], steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    events = _retrieval_events_from_steps(steps)
+def _retrieval_plan_by_id(full_trace: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    plan = full_trace.get("retrieval_plan", [])
+    if not isinstance(plan, list):
+        return {}
+    return {
+        str(task["task_id"]): task
+        for task in plan
+        if isinstance(task, dict) and task.get("task_id")
+    }
+
+
+def _retrieval_result_event(
+    task_id: str,
+    result: dict[str, Any],
+    task: dict[str, Any] | None,
+) -> dict[str, Any]:
+    event = dict(result)
+    event["task_id"] = event.get("task_id") or task_id
+    if task:
+        for key in (
+            "tool",
+            "domain",
+            "filters",
+            "retrieved_for",
+            "depends_on",
+            "dependency_mode",
+        ):
+            if key not in event and key in task:
+                event[key] = task[key]
+    return event
+
+
+def _fallback_retrieval_events(full_trace: dict[str, Any]) -> list[dict[str, Any]]:
     fallback = full_trace.get("retrieval_results", [])
     if isinstance(fallback, list):
-        events.extend(event for event in fallback if isinstance(event, dict))
+        return [event for event in fallback if isinstance(event, dict)]
+    if not isinstance(fallback, dict):
+        return []
+
+    plan_by_id = _retrieval_plan_by_id(full_trace)
+    events = []
+    for task_id, result in fallback.items():
+        if isinstance(result, dict):
+            events.append(
+                _retrieval_result_event(
+                    str(task_id),
+                    result,
+                    plan_by_id.get(str(task_id)),
+                )
+            )
+    return events
+
+
+def _retrieval_events(full_trace: dict[str, Any], steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    events = _retrieval_events_from_steps(steps)
+    events.extend(_fallback_retrieval_events(full_trace))
     return events
 
 
@@ -212,7 +263,7 @@ async def persist_agent_observability(
                     step_name=step.get("step_name") or "unknown",
                     status=step.get("status") or "success",
                     latency_ms=_safe_float(step.get("latency_ms")),
-                    input_json=_truncate_json(step.get("input", {})),
+                    input_json=_truncate_json(step.get("input", {}), 4096),
                     output_json=_truncate_json(step.get("output", {})),
                     error_message=step.get("error_message"),
                 )

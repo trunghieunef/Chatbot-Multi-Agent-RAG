@@ -224,6 +224,50 @@ async def test_retrieval_events_create_retrieval_event_rows(obs_session):
 
 
 @pytest.mark.asyncio
+async def test_dict_retrieval_results_create_retrieval_event_rows(obs_session):
+    await persist_agent_observability(
+        session_factory=_factory(obs_session),
+        chat_session=SimpleNamespace(id=uuid.uuid4()),
+        user=None,
+        response=AgentChatResponse(
+            request_id="req-dict-retrieval-results",
+            final_response="Answer",
+            agents_used=["router", "property_search"],
+            trace_summary=TraceSummary(intent="property_search"),
+            full_trace={
+                "retrieval_plan": [
+                    {
+                        "task_id": "task-property",
+                        "domain": "property",
+                        "tool": "hybrid_search",
+                        "filters": {"district": "Quan 2"},
+                        "retrieved_for": ["property_search"],
+                    }
+                ],
+                "retrieval_results": {
+                    "task-property": {
+                        "status": "completed",
+                        "evidence_ids": ["listing:1", "listing:2"],
+                        "duration_ms": 25,
+                    }
+                },
+            },
+        ),
+    )
+
+    assert len(obs_session.retrieval_events) == 1
+    event = obs_session.retrieval_events[0]
+    assert event.tool_name == "hybrid_search"
+    assert event.filters_json == {"district": "Quan 2"}
+    assert event.result_count == 2
+    assert event.latency_ms == 25
+    assert event.status == "completed"
+    assert event.metadata_json["task_id"] == "task-property"
+    assert event.metadata_json["domain"] == "property"
+    assert event.metadata_json["retrieved_for"] == ["property_search"]
+
+
+@pytest.mark.asyncio
 async def test_legacy_trace_creates_trace_without_invalid_steps(obs_session):
     await persist_agent_observability(
         session_factory=_factory(obs_session),
@@ -264,7 +308,7 @@ async def test_oversized_step_payloads_are_truncated(obs_session):
     )
 
     step = obs_session.steps[0]
-    assert len(step.input_json["truncated_json"]) <= 16384
+    assert len(step.input_json["truncated_json"]) <= 4096
     assert len(step.output_json["truncated_json"]) <= 16384
     assert step.input_json["truncated"] is True
     assert step.output_json["truncated"] is True
