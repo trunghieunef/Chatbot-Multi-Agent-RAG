@@ -66,6 +66,7 @@ def test_abuse_guard_helper_sets_retry_after_when_blocked():
     except HTTPException as exc:
         assert exc.status_code == 429
         assert response.headers["Retry-After"] == "60"
+        assert exc.headers["Retry-After"] == "60"
         assert "thu lai" in exc.detail.lower()
     else:
         raise AssertionError("expected abuse guard rejection")

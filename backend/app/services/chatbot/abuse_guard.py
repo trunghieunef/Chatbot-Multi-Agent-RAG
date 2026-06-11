@@ -56,8 +56,10 @@ def enforce_chat_abuse_guard(
     if result.allowed:
         return
 
-    response.headers["Retry-After"] = str(result.retry_after_seconds)
+    retry_after = str(result.retry_after_seconds)
+    response.headers["Retry-After"] = retry_after
     raise HTTPException(
         status_code=429,
         detail="He thong dang nhan qua nhieu yeu cau. Vui long thu lai sau.",
+        headers={"Retry-After": retry_after},
     )
