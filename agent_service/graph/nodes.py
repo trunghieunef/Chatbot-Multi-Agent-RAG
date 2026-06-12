@@ -167,7 +167,10 @@ def _invalid_claim_ratio(claims: list[Any], valid_ids: set[str]) -> float:
     invalid = [
         claim
         for claim in checked
-        if not _claim_evidence_ids(claim).intersection(valid_ids)
+        if not (
+            (claim_ids := _claim_evidence_ids(claim))
+            and claim_ids.issubset(valid_ids)
+        )
     ]
     return len(invalid) / len(checked)
 

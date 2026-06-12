@@ -12,6 +12,7 @@ from agent_service.agents.specialists import (
     run_property_agent,
 )
 from agent_service.contracts import AgentChatRequest, AgentSource, Evidence, MatchedChunk
+from agent_service.config import get_agent_settings
 from agent_service.graph.nodes import synthesizer_node
 from agent_service.llm.gemini import GeminiClient
 
@@ -59,6 +60,9 @@ async def test_gemini_client_generation_methods_are_async_without_api_key():
 
 @pytest.mark.asyncio
 async def test_gemini_client_uses_worker_thread_when_api_key_is_set(monkeypatch):
+    monkeypatch.setenv("AGENT_LLM_COST_TRACKING_ENABLED", "false")
+    get_agent_settings.cache_clear()
+
     class FakeModels:
         def generate_content(self, *, model, contents):
             assert model == "model"
@@ -88,6 +92,7 @@ async def test_gemini_client_uses_worker_thread_when_api_key_is_set(monkeypatch)
 
     assert await client.generate_text("hello") == "threaded response"
     assert called
+    get_agent_settings.cache_clear()
 
 
 def test_source_from_record_uses_rag_fallback_fields():

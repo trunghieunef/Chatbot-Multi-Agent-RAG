@@ -43,6 +43,11 @@ class GeminiClient:
 
         if self.settings.AGENT_LLM_COST_TRACKING_ENABLED:
             summary = get_runtime_cost_summary(self.settings)
+            if not summary.get("tracking_available", True):
+                return GeminiResult(
+                    text="",
+                    skipped_reason="llm_cost_tracking_unavailable",
+                )
             if summary.get("budget_exceeded"):
                 return GeminiResult(text="", skipped_reason="llm_budget_exceeded")
 

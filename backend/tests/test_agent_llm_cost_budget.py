@@ -57,6 +57,44 @@ async def test_budget_exceeded_skips_live_gemini_call(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_cost_tracking_unavailable_skips_live_gemini_call(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "key")
+    monkeypatch.setenv("GEMINI_MODEL", "model")
+    get_agent_settings.cache_clear()
+    called = False
+
+    class FakeModels:
+        def generate_content(self, *, model, contents):
+            nonlocal called
+            called = True
+            return types.SimpleNamespace(text="should not be called")
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            self.models = FakeModels()
+
+    monkeypatch.setitem(
+        sys.modules,
+        "google",
+        types.SimpleNamespace(genai=types.SimpleNamespace(Client=FakeClient)),
+    )
+    monkeypatch.setattr(
+        "agent_service.llm.gemini.get_runtime_cost_summary",
+        lambda settings: {
+            "budget_exceeded": False,
+            "tracking_available": False,
+        },
+    )
+
+    result = await GeminiClient().generate_text_with_usage("hello")
+
+    assert result.text == ""
+    assert result.skipped_reason == "llm_cost_tracking_unavailable"
+    assert called is False
+    get_agent_settings.cache_clear()
+
+
+@pytest.mark.asyncio
 async def test_live_gemini_call_requires_explicit_model(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("GEMINI_API_KEY", "key")
@@ -91,6 +129,7 @@ async def test_live_gemini_call_requires_explicit_model(monkeypatch, tmp_path):
 @pytest.mark.asyncio
 async def test_gemini_client_passes_transport_timeout(monkeypatch):
     monkeypatch.setenv("GEMINI_API_KEY", "key")
+    monkeypatch.setenv("AGENT_LLM_COST_TRACKING_ENABLED", "false")
     get_agent_settings.cache_clear()
     seen = {}
 

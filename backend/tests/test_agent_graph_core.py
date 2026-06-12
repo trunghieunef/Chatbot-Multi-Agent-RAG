@@ -509,6 +509,58 @@ def test_safety_validator_replaces_unsupported_claim_content():
     ]
 
 
+def test_safety_validator_rejects_partially_fake_claim_evidence_ids():
+    validator = getattr(nodes, "safety_validator_node", None)
+    assert callable(validator)
+    original_response = "Can ho A co du bang chung va them nguon khong ton tai."
+    fallback_response = "Chua co du bang chung hop le de ket luan."
+    evidence = Evidence(
+        evidence_id="ev_valid",
+        retrieval_task_id="search_property_1",
+        domain="property",
+        source_type="listing",
+        source_identity="listing:p-1",
+        record={},
+        facts={"title": "Can ho A"},
+        source=AgentSource(type="listing", domain="property", id="listing:p-1"),
+        assigned_to=["property_search"],
+    )
+    state = {
+        "request": AgentChatRequest(
+            request_id="req-safety-partial-fake-claim",
+            message="Can ho nay co on khong?",
+            session_id="session-1",
+        ),
+        "agents_to_run": ["property_search"],
+        "agent_results": {
+            "property_search": {
+                "content": original_response,
+                "fallback_content": fallback_response,
+                "claims": [
+                    {
+                        "type": "fact",
+                        "text": original_response,
+                        "evidence_ids": ["ev_valid", "ev_fake"],
+                    }
+                ],
+                "warnings": [],
+            }
+        },
+        "evidence_by_id": {"ev_valid": evidence},
+        "evidence_for_agent": {"property_search": ["ev_valid"]},
+        "final_response": original_response,
+        "sources": [evidence.source],
+        "suggested_actions": [],
+        "warnings": [],
+        "trace_steps": [],
+    }
+
+    result = validator(state)
+
+    assert result["final_response"] == fallback_response
+    assert "agent_answer_missing_valid_evidence" in result["warnings"]
+
+
 @pytest.mark.asyncio
 async def test_agent_graph_routes_legal_question_without_llm_key():
     request = AgentChatRequest(
