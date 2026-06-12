@@ -156,19 +156,25 @@ def _response_from_result(
 async def run_agent_graph(request: AgentChatRequest) -> AgentChatResponse:
     settings = get_agent_settings()
     timeout = settings.AGENT_TOTAL_TIMEOUT_SECONDS
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout
     try:
         result = await asyncio.wait_for(_invoke_graph(request), timeout=timeout)
     except asyncio.TimeoutError:
-        try:
-            result = await asyncio.wait_for(
-                _invoke_graph(request, force_deterministic=True),
-                timeout=timeout,
-            )
-            result["warnings"] = [
-                *result.get("warnings", []),
-                "agent_total_timeout_exceeded",
-            ]
-        except asyncio.TimeoutError:
+        remaining_timeout = max(0.0, deadline - loop.time())
+        if remaining_timeout <= 0:
             result = _timeout_fallback_result(request)
+        else:
+            try:
+                result = await asyncio.wait_for(
+                    _invoke_graph(request, force_deterministic=True),
+                    timeout=remaining_timeout,
+                )
+                result["warnings"] = [
+                    *result.get("warnings", []),
+                    "agent_total_timeout_exceeded",
+                ]
+            except asyncio.TimeoutError:
+                result = _timeout_fallback_result(request)
 
     return _response_from_result(request, result)

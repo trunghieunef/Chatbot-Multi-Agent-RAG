@@ -7,6 +7,7 @@ from json import JSONDecodeError
 from typing import Any
 
 from agent_service.config import get_agent_settings
+from agent_service.llm.cost import get_runtime_cost_summary, record_runtime_llm_cost
 
 
 @dataclass(frozen=True)
@@ -14,11 +15,14 @@ class GeminiResult:
     text: str
     input_tokens: int | None = None
     output_tokens: int | None = None
+    estimated_cost_usd: float = 0.0
+    skipped_reason: str | None = None
 
 
 class GeminiClient:
     def __init__(self, api_key: str | None = None, model: str | None = None) -> None:
         settings = get_agent_settings()
+        self.settings = settings
         self.api_key = api_key if api_key is not None else settings.GEMINI_API_KEY
         self.model = model or settings.GEMINI_MODEL
         self.timeout_seconds = settings.AGENT_LLM_TIMEOUT_SECONDS
@@ -31,6 +35,11 @@ class GeminiClient:
     ) -> GeminiResult:
         if not self.api_key:
             return GeminiResult(text="")
+
+        if self.settings.AGENT_LLM_COST_TRACKING_ENABLED:
+            summary = get_runtime_cost_summary(self.settings)
+            if summary.get("budget_exceeded"):
+                return GeminiResult(text="", skipped_reason="llm_budget_exceeded")
 
         try:
             from google import genai
@@ -55,16 +64,32 @@ class GeminiClient:
         )
         return GeminiResult(
             text=response.text or "",
-            input_tokens=getattr(usage, "prompt_token_count", None),
-            output_tokens=getattr(usage, "candidates_token_count", None),
+            input_tokens=(input_tokens := getattr(usage, "prompt_token_count", None)),
+            output_tokens=(
+                output_tokens := getattr(usage, "candidates_token_count", None)
+            ),
+            estimated_cost_usd=record_runtime_llm_cost(
+                self.settings,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+            ),
         )
 
     async def generate_text(self, prompt: str) -> str:
         result = await self.generate_text_with_usage(prompt)
         return result.text
 
-    async def generate_json(self, prompt: str) -> dict[str, Any]:
-        text = await self.generate_text(prompt)
+    async def generate_json(
+        self,
+        prompt: str,
+        *,
+        timeout_seconds: float | None = None,
+    ) -> dict[str, Any]:
+        result = await self.generate_text_with_usage(
+            prompt,
+            timeout_seconds=timeout_seconds,
+        )
+        text = result.text
         if not text:
             return {}
 

@@ -362,6 +362,7 @@ async def specialist_agents_node(state: AgentGraphState) -> AgentGraphState:
                 preferences=request.user_preferences,
                 readiness=state.get("readiness", {}),
                 generate_json=llm_client.generate_json,
+                timeout_seconds=settings.AGENT_SPECIALIST_LLM_TIMEOUT_SECONDS,
             )
         else:
             agent_results[agent] = await runner(
@@ -542,7 +543,7 @@ def safety_validator_node(state: AgentGraphState) -> AgentGraphState:
             evidence_by_id=evidence_by_id,
             evidence_for_agent=evidence_for_agent,
         )
-        if _invalid_claim_ratio(claims, valid_ids) > 0.30:
+        if _invalid_claim_ratio(claims, valid_ids) > 0.0:
             grounding_fallback_agents.append(agent)
             added_warnings.append("agent_answer_missing_valid_evidence")
 

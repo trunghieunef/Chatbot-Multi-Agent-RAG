@@ -1,4 +1,11 @@
-from agent_service.graph.query_understanding import merge_query_filters
+import pytest
+
+from agent_service.config import get_agent_settings
+from agent_service.contracts import AgentChatRequest
+from agent_service.graph.query_understanding import (
+    build_query_understanding,
+    merge_query_filters,
+)
 
 
 def test_current_query_filter_overrides_llm_inferred_filter():
@@ -9,3 +16,36 @@ def test_current_query_filter_overrides_llm_inferred_filter():
 
     assert merged["district"] == "Quan 7"
     assert merged["max_price"] == 5000000000
+
+
+@pytest.mark.asyncio
+async def test_query_understanding_uses_query_timeout(monkeypatch):
+    monkeypatch.setenv("AGENT_QUERY_REWRITE_ENABLED", "true")
+    monkeypatch.setenv("AGENT_LLM_QUERY_TIMEOUT_SECONDS", "1.75")
+    get_agent_settings.cache_clear()
+    seen = {}
+
+    class FakeClient:
+        async def generate_json(self, prompt, *, timeout_seconds=None):
+            seen["timeout_seconds"] = timeout_seconds
+            return {
+                "rewritten_query": "tim can ho quan 7",
+                "expanded_queries": [],
+                "filters": {},
+                "missing_slots": [],
+            }
+
+    await build_query_understanding(
+        {
+            "normalized_query": "tim can ho quan 7",
+            "request": AgentChatRequest(
+                request_id="req-query-timeout",
+                message="tim can ho quan 7",
+                session_id="session-1",
+            ),
+        },
+        client=FakeClient(),
+    )
+
+    assert seen["timeout_seconds"] == 1.75
+    get_agent_settings.cache_clear()

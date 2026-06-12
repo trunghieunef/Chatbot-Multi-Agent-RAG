@@ -136,3 +136,36 @@ def get_runtime_cost_summary(settings) -> dict:
             month=month,
             monthly_budget_usd=settings.AGENT_LLM_MONTHLY_BUDGET_USD,
         )
+
+
+def record_runtime_llm_cost(
+    settings,
+    *,
+    input_tokens: int | None,
+    output_tokens: int | None,
+) -> float:
+    if (
+        not settings.AGENT_LLM_COST_TRACKING_ENABLED
+        or input_tokens is None
+        or output_tokens is None
+    ):
+        return 0.0
+
+    amount = estimate_cost_usd(
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        input_price_per_million=settings.AGENT_LLM_INPUT_PRICE_PER_MILLION_USD,
+        output_price_per_million=settings.AGENT_LLM_OUTPUT_PRICE_PER_MILLION_USD,
+    )
+    if amount <= 0:
+        return 0.0
+
+    try:
+        tracker = RedisCostTracker(
+            redis_url=settings.REDIS_URL,
+            monthly_budget_usd=settings.AGENT_LLM_MONTHLY_BUDGET_USD,
+        )
+        tracker.add_estimated_cost(current_month_key(), amount)
+    except Exception:
+        return 0.0
+    return round(amount, 6)

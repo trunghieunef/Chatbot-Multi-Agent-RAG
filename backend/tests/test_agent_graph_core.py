@@ -27,6 +27,18 @@ def test_agent_llm_flags_default_to_deterministic(monkeypatch):
     assert settings.AGENT_SPECIALIST_LLM_ENABLED is False
 
 
+def test_live_llm_requires_explicit_gemini_model(monkeypatch, tmp_path):
+    from agent_service.config import AgentSettings
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("GEMINI_API_KEY", "key")
+    monkeypatch.setenv("AGENT_ROUTER_MODE", "llm")
+    monkeypatch.delenv("GEMINI_MODEL", raising=False)
+
+    with pytest.raises(ValueError, match="GEMINI_MODEL"):
+        AgentSettings()
+
+
 def test_strip_accents_handles_none():
     assert _strip_accents(None) == ""
 
@@ -455,7 +467,26 @@ def test_safety_validator_replaces_unsupported_claim_content():
                         "type": "fact",
                         "text": original_response,
                         "evidence_ids": ["ev_missing"],
-                    }
+                    },
+                    {
+                        "type": "fact",
+                        "text": "Can ho A co trong bang chung.",
+                        "evidence_ids": ["ev_valid"],
+                    },
+                    {
+                        "type": "fact",
+                        "text": "Nguon listing duoc dung de tham khao.",
+                        "evidence_ids": ["ev_valid"],
+                    },
+                    {
+                        "type": "fact",
+                        "text": "Can ho A nam trong tap bang chung.",
+                        "evidence_ids": ["ev_valid"],
+                    },
+                    {
+                        "type": "disclaimer",
+                        "text": "Can tu tham dinh them.",
+                    },
                 ],
                 "warnings": [],
             }

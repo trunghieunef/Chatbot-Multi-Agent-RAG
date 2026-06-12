@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field, ValidationError
 
 
 DeterministicRunner = Callable[..., Awaitable[dict[str, Any]]]
-GenerateJson = Callable[[str], Awaitable[dict[str, Any]]]
+GenerateJson = Callable[..., Awaitable[dict[str, Any]]]
 
 
 class LLMSpecialistOutput(BaseModel):
@@ -89,6 +89,7 @@ async def run_llm_or_deterministic_specialist(
     preferences: dict[str, Any],
     readiness: dict[str, Any],
     generate_json: GenerateJson,
+    timeout_seconds: float | None = None,
 ) -> dict[str, Any]:
     deterministic_result = await deterministic_runner(
         query=query,
@@ -98,14 +99,16 @@ async def run_llm_or_deterministic_specialist(
     )
 
     try:
-        payload = await generate_json(
-            build_specialist_prompt(
-                agent_name=agent_name,
-                query=query,
-                evidence=evidence,
-                preferences=preferences,
-            )
+        prompt = build_specialist_prompt(
+            agent_name=agent_name,
+            query=query,
+            evidence=evidence,
+            preferences=preferences,
         )
+        try:
+            payload = await generate_json(prompt, timeout_seconds=timeout_seconds)
+        except TypeError:
+            payload = await generate_json(prompt)
         output = LLMSpecialistOutput.model_validate(payload)
     except (TypeError, ValueError, ValidationError):
         return _append_warning(deterministic_result, "llm_specialist_invalid_json")

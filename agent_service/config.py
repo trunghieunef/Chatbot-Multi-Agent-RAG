@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -43,6 +43,8 @@ class AgentSettings(BaseSettings):
     AGENT_TOTAL_TIMEOUT_SECONDS: float = 10.0
     AGENT_LLM_MONTHLY_BUDGET_USD: float = 100.0
     AGENT_LLM_COST_TRACKING_ENABLED: bool = True
+    AGENT_LLM_INPUT_PRICE_PER_MILLION_USD: float = 0.0
+    AGENT_LLM_OUTPUT_PRICE_PER_MILLION_USD: float = 0.0
 
     @field_validator("DEBUG", mode="before")
     @classmethod
@@ -58,6 +60,26 @@ class AgentSettings(BaseSettings):
         if value not in allowed:
             raise ValueError(f"AGENT_ROUTER_MODE must be one of {sorted(allowed)}")
         return value
+
+    @model_validator(mode="after")
+    def require_explicit_model_for_live_llm(self):
+        live_llm_enabled = (
+            self.AGENT_ROUTER_MODE != "rule"
+            or self.AGENT_QUERY_REWRITE_ENABLED
+            or self.AGENT_SPECIALIST_LLM_ENABLED
+        )
+        if (
+            self.GEMINI_API_KEY
+            and live_llm_enabled
+            and (
+                "GEMINI_MODEL" not in self.model_fields_set
+                or not self.GEMINI_MODEL.strip()
+            )
+        ):
+            raise ValueError(
+                "GEMINI_MODEL must be explicitly configured when live LLM features are enabled."
+            )
+        return self
 
 
 @lru_cache

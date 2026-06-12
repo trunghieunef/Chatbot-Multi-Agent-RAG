@@ -70,7 +70,8 @@ async def build_query_understanding(
             _query_understanding_prompt(
                 request.message,
                 settings.AGENT_LLM_MAX_REWRITES,
-            )
+            ),
+            timeout_seconds=settings.AGENT_LLM_QUERY_TIMEOUT_SECONDS,
         )
         try:
             raw = QueryUnderstanding.model_validate(

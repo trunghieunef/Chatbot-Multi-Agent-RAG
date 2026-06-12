@@ -1,4 +1,5 @@
 import asyncio
+import time
 
 import pytest
 
@@ -23,8 +24,11 @@ async def test_total_timeout_falls_back_deterministically(monkeypatch):
     monkeypatch.setenv("AGENT_TOTAL_TIMEOUT_SECONDS", "0.01")
     get_agent_settings.cache_clear()
 
+    started = time.perf_counter()
     response = await run_agent_graph(request)
+    elapsed = time.perf_counter() - started
 
     assert "agent_total_timeout_exceeded" in response.trace_summary.warnings
+    assert elapsed < 0.05
     assert response.final_response
     get_agent_settings.cache_clear()
