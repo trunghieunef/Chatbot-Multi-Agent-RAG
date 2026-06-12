@@ -932,7 +932,7 @@ git commit -m "feat: record intelligence trace metadata"
 **Files:**
 - Verify only.
 
-- [ ] **Step 1: Run focused intelligence tests**
+- [x] **Step 1: Run focused intelligence tests**
 
 ```powershell
 python -m pytest backend\tests\test_agent_llm_router.py backend\tests\test_agent_query_understanding.py backend\tests\test_agent_memory_filters.py backend\tests\test_agent_llm_specialists.py backend\tests\test_agent_llm_cost_budget.py backend\tests\test_agent_total_timeout.py backend\tests\test_agent_graph_core.py backend\tests\test_agent_retrieval_planner.py backend\tests\test_agent_specialists.py backend\tests\test_agent_evaluation.py -q
@@ -940,7 +940,9 @@ python -m pytest backend\tests\test_agent_llm_router.py backend\tests\test_agent
 
 Expected: PASS.
 
-- [ ] **Step 2: Compile Python packages**
+Result: PASS (`60 passed, 2 warnings`) with `-p no:cacheprovider` in the Codex worktree.
+
+- [x] **Step 2: Compile Python packages**
 
 ```powershell
 python -m compileall agent_service backend\app
@@ -948,7 +950,9 @@ python -m compileall agent_service backend\app
 
 Expected: no syntax errors.
 
-- [ ] **Step 3: Verify deterministic default**
+Result: `compileall` could not write `__pycache__` in the Codex worktree (`WinError 5`), so syntax was verified with in-memory `compile()` over `agent_service` and `backend/app` (`82` files).
+
+- [x] **Step 3: Verify deterministic default**
 
 Run a graph test with all LLM env vars unset:
 
@@ -958,7 +962,9 @@ python -m pytest backend\tests\test_agent_graph_core.py::test_agent_llm_flags_de
 
 Expected: PASS and no live Gemini call.
 
-- [ ] **Step 4: Check compose config**
+Result: PASS (`1 passed`) with LLM flags defaulting to deterministic mode.
+
+- [x] **Step 4: Check compose config**
 
 ```powershell
 docker compose config --services
@@ -966,7 +972,9 @@ docker compose config --services
 
 Expected: command exits 0.
 
-- [ ] **Step 5: Commit verification docs if changed**
+Result: PASS. Services: `postgres`, `redis`, `agent-service`, `backend`, `frontend`, `pipeline-worker`. Compose warned that `AGENT_INTERNAL_KEY` was unset.
+
+- [x] **Step 5: Commit verification docs if changed**
 
 If no files changed, do not create an empty commit. If documentation changed:
 
