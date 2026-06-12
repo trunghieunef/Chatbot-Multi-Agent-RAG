@@ -111,3 +111,40 @@ async def test_empty_claims_llm_specialist_falls_back_to_deterministic():
 
     assert result["content"] == "deterministic grounded answer"
     assert "llm_specialist_missing_claims" in result["warnings"]
+
+
+@pytest.mark.asyncio
+async def test_empty_claims_and_no_used_ids_falls_back_when_evidence_available():
+    async def deterministic_runner(**kwargs):
+        return {
+            "agent_name": "property_search",
+            "status": "completed",
+            "content": "deterministic grounded answer",
+            "evidence_ids_used": ["ev1"],
+            "warnings": [],
+        }
+
+    async def empty_grounding_json(prompt: str, *, timeout_seconds=None):
+        return {
+            "agent_name": "property_search",
+            "status": "completed",
+            "content": "unsupported persuasive answer",
+            "claims": [],
+            "evidence_ids_used": [],
+            "confidence": "medium",
+            "warnings": [],
+            "missing_evidence": [],
+        }
+
+    result = await run_llm_or_deterministic_specialist(
+        agent_name="property_search",
+        deterministic_runner=deterministic_runner,
+        query="tim can ho",
+        evidence=[{"evidence_id": "ev1"}],
+        preferences={},
+        readiness={},
+        generate_json=empty_grounding_json,
+    )
+
+    assert result["content"] == "deterministic grounded answer"
+    assert "llm_specialist_missing_claims" in result["warnings"]
