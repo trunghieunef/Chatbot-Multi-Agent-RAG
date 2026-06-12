@@ -84,6 +84,12 @@ def _returns_source_backed_content(output: LLMSpecialistOutput) -> bool:
     return output.status in {"completed", "partial"} and bool(output.content.strip())
 
 
+def _claim_requires_evidence(claim: Any) -> bool:
+    if not isinstance(claim, dict):
+        return True
+    return claim.get("type") not in {"caveat", "disclaimer", "missing_evidence"}
+
+
 async def run_llm_or_deterministic_specialist(
     *,
     agent_name: str,
@@ -128,6 +134,18 @@ async def run_llm_or_deterministic_specialist(
         return _append_warning(deterministic_result, "llm_specialist_missing_claims")
 
     used_ids = {str(evidence_id) for evidence_id in output.evidence_ids_used}
+    if _returns_source_backed_content(output) and not used_ids:
+        return _append_warning(deterministic_result, "llm_specialist_missing_evidence")
+
+    evidence_claims = [
+        claim for claim in output.claims if _claim_requires_evidence(claim)
+    ]
+    if _returns_source_backed_content(output) and not evidence_claims:
+        return _append_warning(
+            deterministic_result,
+            "llm_specialist_missing_evidence_claims",
+        )
+
     if not used_ids.issubset(allowed_ids):
         return _append_warning(deterministic_result, "llm_specialist_invalid_evidence")
 
