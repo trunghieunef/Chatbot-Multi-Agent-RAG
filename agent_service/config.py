@@ -31,12 +31,32 @@ class AgentSettings(BaseSettings):
 
     AGENT_REQUEST_TIMEOUT_SECONDS: float = 45.0
     AGENT_LLM_TIMEOUT_SECONDS: float = 30.0
+    AGENT_ROUTER_MODE: str = "rule"
+    AGENT_QUERY_REWRITE_ENABLED: bool = False
+    AGENT_MEMORY_FILTERS_ENABLED: bool = False
+    AGENT_SPECIALIST_LLM_ENABLED: bool = False
+    AGENT_LLM_CONFIDENCE_THRESHOLD: float = 0.65
+    AGENT_LLM_MAX_REWRITES: int = 3
+    AGENT_LLM_ROUTER_TIMEOUT_SECONDS: float = 5.0
+    AGENT_LLM_QUERY_TIMEOUT_SECONDS: float = 5.0
+    AGENT_SPECIALIST_LLM_TIMEOUT_SECONDS: float = 12.0
+    AGENT_TOTAL_TIMEOUT_SECONDS: float = 10.0
+    AGENT_LLM_MONTHLY_BUDGET_USD: float = 100.0
+    AGENT_LLM_COST_TRACKING_ENABLED: bool = True
 
     @field_validator("DEBUG", mode="before")
     @classmethod
     def parse_debug(cls, value):
         if isinstance(value, str) and value.lower() in {"release", "prod", "production"}:
             return False
+        return value
+
+    @field_validator("AGENT_ROUTER_MODE")
+    @classmethod
+    def validate_router_mode(cls, value: str) -> str:
+        allowed = {"rule", "llm", "hybrid"}
+        if value not in allowed:
+            raise ValueError(f"AGENT_ROUTER_MODE must be one of {sorted(allowed)}")
         return value
 
 

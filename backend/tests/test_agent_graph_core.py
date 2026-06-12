@@ -12,6 +12,21 @@ from agent_service.graph.nodes import _strip_accents
 from agent_service.graph.workflow import run_agent_graph
 
 
+def test_agent_llm_flags_default_to_deterministic(monkeypatch):
+    from agent_service.config import AgentSettings
+
+    monkeypatch.delenv("AGENT_ROUTER_MODE", raising=False)
+    monkeypatch.delenv("AGENT_QUERY_REWRITE_ENABLED", raising=False)
+    monkeypatch.delenv("AGENT_SPECIALIST_LLM_ENABLED", raising=False)
+
+    settings = AgentSettings()
+
+    assert settings.AGENT_ROUTER_MODE == "rule"
+    assert settings.AGENT_QUERY_REWRITE_ENABLED is False
+    assert settings.AGENT_MEMORY_FILTERS_ENABLED is False
+    assert settings.AGENT_SPECIALIST_LLM_ENABLED is False
+
+
 def test_strip_accents_handles_none():
     assert _strip_accents(None) == ""
 
