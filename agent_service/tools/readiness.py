@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from sqlalchemy import func, select
 
 from app.database import async_session
 from app.models import Article, Chunk, Listing, Project
+
+
+READINESS_SOURCE_TIMEOUT_SECONDS = 2.0
+SOURCE_NAMES = ("listings", "projects", "news", "legal")
 
 
 def _status(parent_count: int, chunk_count: int) -> str:
@@ -61,15 +66,22 @@ async def count_source(source_name: str) -> dict[str, Any]:
 
 
 async def build_readiness_snapshot() -> dict[str, dict[str, Any]]:
-    snapshot: dict[str, dict[str, Any]] = {}
-    for source_name in ("listings", "projects", "news", "legal"):
+    async def safe_count(source_name: str) -> tuple[str, dict[str, Any]]:
         try:
-            snapshot[source_name] = await count_source(source_name)
+            result = await asyncio.wait_for(
+                count_source(source_name),
+                timeout=READINESS_SOURCE_TIMEOUT_SECONDS,
+            )
         except Exception as exc:
-            snapshot[source_name] = {
+            result = {
                 "status": "unknown",
                 "parent_count": 0,
                 "chunk_count": 0,
                 "warning": str(exc),
             }
-    return snapshot
+        return source_name, result
+
+    pairs = await asyncio.gather(
+        *(safe_count(source_name) for source_name in SOURCE_NAMES)
+    )
+    return dict(pairs)

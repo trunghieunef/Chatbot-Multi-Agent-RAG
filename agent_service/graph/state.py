@@ -16,6 +16,7 @@ from agent_service.contracts import (
 class AgentGraphState(TypedDict, total=False):
     request: AgentChatRequest
     normalized_query: str
+    force_deterministic: bool
     intent: str
     agents_to_run: list[str]
     routing_filters: dict[str, Any]

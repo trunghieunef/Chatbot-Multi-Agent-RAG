@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import asyncio
+
 from langgraph.graph import END, StateGraph
 
+from agent_service.config import get_agent_settings
 from agent_service.contracts import AgentChatRequest, AgentChatResponse, TraceSummary
 from agent_service.graph.nodes import (
     context_builder,
@@ -42,10 +45,43 @@ def build_agent_graph():
 chat_graph = build_agent_graph()
 
 
-async def run_agent_graph(request: AgentChatRequest) -> AgentChatResponse:
-    result = await chat_graph.ainvoke(
-        {"request": request, "trace_steps": [], "warnings": []}
+async def _invoke_graph(
+    request: AgentChatRequest,
+    *,
+    force_deterministic: bool = False,
+) -> dict:
+    return await chat_graph.ainvoke(
+        {
+            "request": request,
+            "trace_steps": [],
+            "warnings": [],
+            "force_deterministic": force_deterministic,
+        }
     )
+
+
+def _timeout_fallback_result(request: AgentChatRequest) -> dict:
+    return {
+        "request": request,
+        "intent": "fallback",
+        "agents_to_run": ["property_search"],
+        "final_response": "He thong dang ban, vui long thu lai sau.",
+        "sources": [],
+        "suggested_actions": ["Thu lai sau"],
+        "trace_steps": [],
+        "warnings": [
+            "agent_total_timeout_exceeded",
+            "agent_deterministic_fallback_timeout",
+        ],
+        "memory_proposals": [],
+        "readiness": {},
+    }
+
+
+def _response_from_result(
+    request: AgentChatRequest,
+    result: dict,
+) -> AgentChatResponse:
     steps = result.get("trace_steps", [])
     agents_used = result.get("agents_to_run", [])
     sources = result.get("sources", [])
@@ -102,3 +138,24 @@ async def run_agent_graph(request: AgentChatRequest) -> AgentChatResponse:
             "source_count": len(sources),
         },
     )
+
+
+async def run_agent_graph(request: AgentChatRequest) -> AgentChatResponse:
+    settings = get_agent_settings()
+    timeout = settings.AGENT_TOTAL_TIMEOUT_SECONDS
+    try:
+        result = await asyncio.wait_for(_invoke_graph(request), timeout=timeout)
+    except asyncio.TimeoutError:
+        try:
+            result = await asyncio.wait_for(
+                _invoke_graph(request, force_deterministic=True),
+                timeout=timeout,
+            )
+            result["warnings"] = [
+                *result.get("warnings", []),
+                "agent_total_timeout_exceeded",
+            ]
+        except asyncio.TimeoutError:
+            result = _timeout_fallback_result(request)
+
+    return _response_from_result(request, result)
