@@ -66,8 +66,9 @@ async def test_gemini_client_uses_worker_thread_when_api_key_is_set(monkeypatch)
             return types.SimpleNamespace(text="threaded response")
 
     class FakeClient:
-        def __init__(self, *, api_key):
+        def __init__(self, *, api_key, http_options=None):
             assert api_key == "key"
+            assert http_options is not None
             self.models = FakeModels()
 
     called = False

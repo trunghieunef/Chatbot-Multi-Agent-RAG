@@ -80,6 +80,14 @@ def _valid_evidence_ids(evidence: list[dict[str, Any]]) -> set[str]:
     }
 
 
+def _requires_source_claims(output: LLMSpecialistOutput) -> bool:
+    return (
+        output.status in {"completed", "partial"}
+        and bool(output.content.strip())
+        and bool(output.evidence_ids_used)
+    )
+
+
 async def run_llm_or_deterministic_specialist(
     *,
     agent_name: str,
@@ -115,6 +123,9 @@ async def run_llm_or_deterministic_specialist(
 
     if output.agent_name != agent_name:
         return _append_warning(deterministic_result, "llm_specialist_invalid_json")
+
+    if _requires_source_claims(output) and not output.claims:
+        return _append_warning(deterministic_result, "llm_specialist_missing_claims")
 
     allowed_ids = _valid_evidence_ids(evidence)
     used_ids = {str(evidence_id) for evidence_id in output.evidence_ids_used}

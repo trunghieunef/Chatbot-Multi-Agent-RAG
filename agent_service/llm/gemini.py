@@ -24,6 +24,9 @@ class GeminiClient:
         settings = get_agent_settings()
         self.settings = settings
         self.api_key = api_key if api_key is not None else settings.GEMINI_API_KEY
+        self.model_explicitly_configured = (
+            model is not None or "GEMINI_MODEL" in settings.model_fields_set
+        )
         self.model = model or settings.GEMINI_MODEL
         self.timeout_seconds = settings.AGENT_LLM_TIMEOUT_SECONDS
 
@@ -35,6 +38,8 @@ class GeminiClient:
     ) -> GeminiResult:
         if not self.api_key:
             return GeminiResult(text="")
+        if not self.model_explicitly_configured:
+            return GeminiResult(text="", skipped_reason="gemini_model_not_configured")
 
         if self.settings.AGENT_LLM_COST_TRACKING_ENABLED:
             summary = get_runtime_cost_summary(self.settings)
@@ -44,14 +49,16 @@ class GeminiClient:
         try:
             from google import genai
 
-            client = genai.Client(api_key=self.api_key)
+            timeout = timeout_seconds or self.timeout_seconds
+            http_options = {"timeout": int(timeout * 1000)}
+            client = genai.Client(api_key=self.api_key, http_options=http_options)
 
             def generate_sync():
                 return client.models.generate_content(model=self.model, contents=prompt)
 
             response = await asyncio.wait_for(
                 asyncio.to_thread(generate_sync),
-                timeout=timeout_seconds or self.timeout_seconds,
+                timeout=timeout,
             )
         except asyncio.TimeoutError:
             return GeminiResult(text="")

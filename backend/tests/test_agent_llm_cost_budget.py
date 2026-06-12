@@ -21,6 +21,7 @@ def test_monthly_budget_summary_marks_exceeded():
 @pytest.mark.asyncio
 async def test_budget_exceeded_skips_live_gemini_call(monkeypatch):
     monkeypatch.setenv("GEMINI_API_KEY", "key")
+    monkeypatch.setenv("GEMINI_MODEL", "model")
     get_agent_settings.cache_clear()
     called = False
 
@@ -31,7 +32,7 @@ async def test_budget_exceeded_skips_live_gemini_call(monkeypatch):
             return types.SimpleNamespace(text="should not be called")
 
     class FakeClient:
-        def __init__(self, *, api_key):
+        def __init__(self, *, api_key, http_options=None):
             self.models = FakeModels()
 
     monkeypatch.setitem(
@@ -56,8 +57,77 @@ async def test_budget_exceeded_skips_live_gemini_call(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_live_gemini_call_requires_explicit_model(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("GEMINI_API_KEY", "key")
+    monkeypatch.delenv("GEMINI_MODEL", raising=False)
+    get_agent_settings.cache_clear()
+    called = False
+
+    class FakeModels:
+        def generate_content(self, *, model, contents):
+            nonlocal called
+            called = True
+            return types.SimpleNamespace(text="should not be called")
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            self.models = FakeModels()
+
+    monkeypatch.setitem(
+        sys.modules,
+        "google",
+        types.SimpleNamespace(genai=types.SimpleNamespace(Client=FakeClient)),
+    )
+
+    result = await GeminiClient().generate_text_with_usage("hello")
+
+    assert result.text == ""
+    assert result.skipped_reason == "gemini_model_not_configured"
+    assert called is False
+    get_agent_settings.cache_clear()
+
+
+@pytest.mark.asyncio
+async def test_gemini_client_passes_transport_timeout(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "key")
+    get_agent_settings.cache_clear()
+    seen = {}
+
+    class FakeModels:
+        def generate_content(self, *, model, contents):
+            return types.SimpleNamespace(text="threaded response")
+
+    class FakeClient:
+        def __init__(self, *, api_key, http_options=None):
+            seen["api_key"] = api_key
+            seen["timeout"] = (
+                http_options.get("timeout")
+                if isinstance(http_options, dict)
+                else getattr(http_options, "timeout", None)
+            )
+            self.models = FakeModels()
+
+    monkeypatch.setitem(
+        sys.modules,
+        "google",
+        types.SimpleNamespace(genai=types.SimpleNamespace(Client=FakeClient)),
+    )
+
+    result = await GeminiClient(model="model").generate_text_with_usage(
+        "hello",
+        timeout_seconds=1.25,
+    )
+
+    assert result.text == "threaded response"
+    assert seen == {"api_key": "key", "timeout": 1250}
+    get_agent_settings.cache_clear()
+
+
+@pytest.mark.asyncio
 async def test_usage_metadata_records_estimated_cost(monkeypatch):
     monkeypatch.setenv("GEMINI_API_KEY", "key")
+    monkeypatch.setenv("GEMINI_MODEL", "model")
     monkeypatch.setenv("AGENT_LLM_INPUT_PRICE_PER_MILLION_USD", "0.10")
     monkeypatch.setenv("AGENT_LLM_OUTPUT_PRICE_PER_MILLION_USD", "0.40")
     get_agent_settings.cache_clear()
@@ -74,7 +144,7 @@ async def test_usage_metadata_records_estimated_cost(monkeypatch):
             )
 
     class FakeClient:
-        def __init__(self, *, api_key):
+        def __init__(self, *, api_key, http_options=None):
             self.models = FakeModels()
 
     monkeypatch.setitem(
