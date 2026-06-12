@@ -99,8 +99,6 @@ def should_schedule_eval(
 def _chat_abuse_key(body: ChatMessageRequest, user: User | None, request: Request) -> str:
     if user is not None:
         return f"auth:{user.id}"
-    if body.session_id is not None:
-        return f"anon:session:{body.session_id}"
     client_host = request.client.host if request.client else "unknown"
     return f"anon:ip:{client_host}"
 

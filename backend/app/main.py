@@ -76,7 +76,8 @@ app.include_router(chat.router, prefix="/api/v1")
 app.include_router(preferences.router, prefix="/api/v1")
 app.include_router(preferences.memory_router, prefix="/api/v1")
 app.include_router(metrics.router, prefix="/api/v1")
-app.include_router(admin.router, prefix="/api/v1")
+if settings.CHATBOT_ADMIN_ENABLED:
+    app.include_router(admin.router, prefix="/api/v1")
 
 
 # ─── Health check ─────────────────────────────────────────────

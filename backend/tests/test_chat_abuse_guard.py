@@ -1,7 +1,10 @@
+import uuid
 from types import SimpleNamespace
 
 from fastapi import HTTPException
+from starlette.requests import Request
 
+from app.routers import chat
 from app.services.chatbot.abuse_guard import (
     ChatAbuseGuard,
     enforce_chat_abuse_guard,
@@ -89,3 +92,20 @@ def test_abuse_guard_helper_sets_retry_after_when_blocked():
         assert "thu lai" in exc.detail.lower()
     else:
         raise AssertionError("expected abuse guard rejection")
+
+
+def test_anonymous_abuse_key_uses_ip_even_when_session_id_is_rotated():
+    request = Request({"type": "http", "client": ("203.0.113.10", 12345)})
+    first = chat._chat_abuse_key(
+        SimpleNamespace(session_id=uuid.uuid4()),
+        user=None,
+        request=request,
+    )
+    second = chat._chat_abuse_key(
+        SimpleNamespace(session_id=uuid.uuid4()),
+        user=None,
+        request=request,
+    )
+
+    assert first == "anon:ip:203.0.113.10"
+    assert second == first

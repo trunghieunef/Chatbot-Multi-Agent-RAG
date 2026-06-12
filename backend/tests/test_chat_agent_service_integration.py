@@ -29,7 +29,7 @@ class FakeDB:
     def _is_count_query(self, query):
         return "count(" in str(query).lower()
 
-    async def execute(self, query):
+    async def execute(self, query, params=None):
         self.execute_count += 1
         if self._is_count_query(query):
             return SimpleNamespace(scalar=lambda: self.quota_count)

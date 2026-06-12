@@ -50,6 +50,24 @@ def test_admin_router_is_included_in_main_app():
     assert "/api/v1/admin/agent-health" in paths
 
 
+def test_admin_router_is_not_included_when_disabled(monkeypatch):
+    import app.main as main_module
+    from app.config import get_settings
+
+    monkeypatch.setenv("CHATBOT_ADMIN_ENABLED", "false")
+    get_settings.cache_clear()
+    disabled_main = importlib.reload(main_module)
+
+    paths = {route.path for route in disabled_main.app.routes}
+
+    assert "/api/v1/admin/chat-traces" not in paths
+    assert "/api/v1/admin/agent-health" not in paths
+
+    monkeypatch.setenv("CHATBOT_ADMIN_ENABLED", "true")
+    get_settings.cache_clear()
+    importlib.reload(main_module)
+
+
 def test_admin_routes_depend_on_require_admin_user():
     from app.routers import admin
 

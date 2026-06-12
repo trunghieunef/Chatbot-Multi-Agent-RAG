@@ -3,10 +3,25 @@
 from datetime import UTC, datetime, time, timedelta
 
 from fastapi import HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 
 from app.config import get_settings
 from app.models.chat import ChatMessage, ChatSession
+
+
+async def _acquire_quota_lock(db, *, user, session_id, day_start: datetime) -> None:
+    if user is not None:
+        subject = f"auth:{user.id}"
+    elif session_id is not None:
+        subject = f"anon:session:{session_id}"
+    else:
+        return
+
+    lock_key = f"chat-quota:{day_start.date().isoformat()}:{subject}"
+    await db.execute(
+        text("SELECT pg_advisory_xact_lock(hashtext(:lock_key))"),
+        {"lock_key": lock_key},
+    )
 
 
 async def enforce_chat_quota(db, *, user, session_id) -> None:
@@ -14,6 +29,12 @@ async def enforce_chat_quota(db, *, user, session_id) -> None:
     settings = get_settings()
     day_start = datetime.combine(datetime.now(UTC).date(), time.min)
     day_end = day_start + timedelta(days=1)
+    await _acquire_quota_lock(
+        db,
+        user=user,
+        session_id=session_id,
+        day_start=day_start,
+    )
 
     query = (
         select(func.count())

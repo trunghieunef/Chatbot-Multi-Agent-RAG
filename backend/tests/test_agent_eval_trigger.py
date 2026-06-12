@@ -21,7 +21,7 @@ class FakeDB:
     def add(self, obj):
         self.added.append(obj)
 
-    async def execute(self, query):
+    async def execute(self, query, params=None):
         if "count(" in str(query).lower():
             return SimpleNamespace(scalar=lambda: 0)
         return SimpleNamespace(scalar_one_or_none=lambda: None)
