@@ -17,6 +17,8 @@ from agent_service.contracts import (
     MemoryProposal,
     StructuredWarning,
 )
+from agent_service.config import get_agent_settings
+from agent_service.graph.memory_filters import derive_memory_filters
 from agent_service.graph.retrieval_planner import (
     build_retrieval_plan,
     execute_retrieval_plan,
@@ -190,15 +192,33 @@ async def router_node(state: AgentGraphState) -> AgentGraphState:
 
 async def query_understanding_node(state: AgentGraphState) -> AgentGraphState:
     start_time = time.perf_counter()
+    settings = get_agent_settings()
     understanding = await build_query_understanding(state)
+    memory_filters = None
+    if settings.AGENT_MEMORY_FILTERS_ENABLED and not state.get("force_deterministic", False):
+        memory_filters = derive_memory_filters(
+            state["request"].user_preferences,
+            understanding.filters,
+            state["request"].message,
+        )
+        understanding = understanding.model_copy(
+            update={"filters": memory_filters.filters}
+        )
+    output = understanding.model_dump(mode="json")
+    if memory_filters is not None:
+        output["memory_filters"] = memory_filters.model_dump(mode="json")
     return {
         "query_understanding": understanding.model_dump(mode="python"),
-        "warnings": [*state.get("warnings", []), *understanding.warnings],
+        "warnings": [
+            *state.get("warnings", []),
+            *understanding.warnings,
+            *((memory_filters.warnings if memory_filters else [])),
+        ],
         "trace_steps": _append_trace(
             state,
             "query_understanding",
             start_time,
-            understanding.model_dump(mode="json"),
+            output,
         ),
     }
 
