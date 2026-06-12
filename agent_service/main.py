@@ -4,6 +4,7 @@ from agent_service.config import get_agent_settings
 from agent_service.contracts import AgentChatRequest, AgentChatResponse
 from agent_service.evaluation.judge import judge_answer
 from agent_service.graph.workflow import run_agent_graph
+from agent_service.llm.cost import get_runtime_cost_summary
 from agent_service.security import require_internal_key
 
 
@@ -21,6 +22,7 @@ async def health(_: None = Depends(require_internal_key)) -> dict:
         "status": "ok",
         "service": settings.SERVICE_NAME,
         "graph_version": settings.AGENT_GRAPH_VERSION,
+        "llm_cost": get_runtime_cost_summary(settings),
     }
 
 

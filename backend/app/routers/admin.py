@@ -22,6 +22,10 @@ from app.schemas.admin import (
     AgentTraceListItem,
     AgentTraceSearchResponse,
 )
+from app.services.agent_service.client import (
+    AgentServiceError,
+    get_agent_service_client,
+)
 
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
@@ -169,6 +173,17 @@ async def agent_health(
         .group_by(AgentTrace.status)
         .order_by(AgentTrace.status)
     )
+    llm_cost = {
+        "tracking_available": False,
+        "budget_exceeded": False,
+        "estimated_cost_usd": 0.0,
+    }
+    try:
+        agent_health_payload = await get_agent_service_client().health()
+        llm_cost = agent_health_payload.get("llm_cost") or llm_cost
+    except AgentServiceError:
+        pass
+
     return {
         "items": [
             {
@@ -177,7 +192,8 @@ async def agent_health(
                 "avg_latency_ms": float(avg_latency_ms or 0.0),
             }
             for status, count, avg_latency_ms in result.all()
-        ]
+        ],
+        "llm_cost": llm_cost,
     }
 
 

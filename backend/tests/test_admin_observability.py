@@ -286,7 +286,7 @@ def test_chat_trace_detail_includes_normalized_children():
     assert response["eval_runs"][0]["status"] == "completed"
 
 
-def test_agent_health_returns_grouped_trace_statuses():
+def test_agent_health_returns_grouped_trace_statuses(monkeypatch):
     from app.routers import admin
 
     class FakeResult:
@@ -301,7 +301,19 @@ def test_agent_health_returns_grouped_trace_statuses():
             self.query = query
             return FakeResult()
 
+    class FakeAgentClient:
+        async def health(self):
+            return {
+                "llm_cost": {
+                    "month": "2026-06",
+                    "estimated_cost_usd": 1.25,
+                    "monthly_budget_usd": 100.0,
+                    "budget_exceeded": False,
+                }
+            }
+
     db = FakeDB()
+    monkeypatch.setattr(admin, "get_agent_service_client", lambda: FakeAgentClient())
 
     response = asyncio.run(
         admin.agent_health(user=SimpleNamespace(is_admin=True), db=db)
@@ -311,5 +323,11 @@ def test_agent_health_returns_grouped_trace_statuses():
         "items": [
             {"status": "error", "count": 1, "avg_latency_ms": 120.0},
             {"status": "success", "count": 2, "avg_latency_ms": 45.5},
-        ]
+        ],
+        "llm_cost": {
+            "month": "2026-06",
+            "estimated_cost_usd": 1.25,
+            "monthly_budget_usd": 100.0,
+            "budget_exceeded": False,
+        },
     }
