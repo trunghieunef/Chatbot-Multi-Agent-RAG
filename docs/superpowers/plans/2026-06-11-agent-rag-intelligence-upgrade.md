@@ -734,7 +734,7 @@ git commit -m "feat: add memory-aware retrieval filters"
 - Test: `backend/tests/test_agent_llm_specialists.py`
 - Test: `backend/tests/test_agent_specialists.py`
 
-- [ ] **Step 1: Write failing LLM specialist fallback tests**
+- [x] **Step 1: Write failing LLM specialist fallback tests**
 
 Create `backend/tests/test_agent_llm_specialists.py`.
 
@@ -765,7 +765,7 @@ async def test_invalid_llm_specialist_json_falls_back(monkeypatch):
     assert "llm_specialist_invalid_json" in result["warnings"]
 ```
 
-- [ ] **Step 2: Implement common output schema**
+- [x] **Step 2: Implement common output schema**
 
 Create `agent_service/agents/llm_specialists.py`.
 
@@ -784,7 +784,7 @@ class LLMSpecialistOutput(BaseModel):
     missing_evidence: list[str] = Field(default_factory=list)
 ```
 
-- [ ] **Step 3: Implement LLM wrapper with deterministic fallback**
+- [x] **Step 3: Implement LLM wrapper with deterministic fallback**
 
 ```python
 async def run_llm_or_deterministic_specialist(
@@ -815,7 +815,7 @@ async def run_llm_or_deterministic_specialist(
     return output.model_dump(mode="python")
 ```
 
-- [ ] **Step 4: Integrate specialist node**
+- [x] **Step 4: Integrate specialist node**
 
 In `agent_service/graph/nodes.py`:
 
@@ -826,7 +826,7 @@ else:
     agent_results[agent] = await runner(...)
 ```
 
-- [ ] **Step 5: Verify specialist tests**
+- [x] **Step 5: Verify specialist tests**
 
 ```powershell
 python -m pytest backend\tests\test_agent_llm_specialists.py backend\tests\test_agent_specialists.py -q
@@ -834,7 +834,7 @@ python -m pytest backend\tests\test_agent_llm_specialists.py backend\tests\test_
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```powershell
 git add agent_service\agents\llm_specialists.py agent_service\agents\specialists.py agent_service\graph\nodes.py backend\tests\test_agent_llm_specialists.py backend\tests\test_agent_specialists.py

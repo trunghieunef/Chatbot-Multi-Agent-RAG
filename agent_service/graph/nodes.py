@@ -3,6 +3,7 @@ from __future__ import annotations
 import time
 from typing import Any
 
+from agent_service.agents.llm_specialists import run_llm_or_deterministic_specialist
 from agent_service.agents.specialists import (
     run_investment_agent,
     run_legal_agent,
@@ -26,6 +27,7 @@ from agent_service.graph.retrieval_planner import (
 from agent_service.graph.query_understanding import build_query_understanding
 from agent_service.graph.router import _strip_accents, route_request
 from agent_service.graph.state import AgentGraphState
+from agent_service.llm.gemini import GeminiClient
 from agent_service.tools.readiness import build_readiness_snapshot
 
 
@@ -245,6 +247,7 @@ async def retrieval_planner_node(state: AgentGraphState) -> AgentGraphState:
 async def specialist_agents_node(state: AgentGraphState) -> AgentGraphState:
     start_time = time.perf_counter()
     request = state["request"]
+    settings = get_agent_settings()
     evidence_by_id = state.get("evidence_by_id", {})
     evidence_for_agent = state.get("evidence_for_agent", {})
     runners = {
@@ -256,6 +259,11 @@ async def specialist_agents_node(state: AgentGraphState) -> AgentGraphState:
         "investment_advisor": run_investment_agent,
     }
     agent_results = {}
+    use_llm_specialists = (
+        settings.AGENT_SPECIALIST_LLM_ENABLED
+        and not state.get("force_deterministic", False)
+    )
+    llm_client = GeminiClient() if use_llm_specialists else None
     for agent in state.get("agents_to_run", []):
         runner = runners.get(agent)
         if runner is None:
@@ -265,12 +273,23 @@ async def specialist_agents_node(state: AgentGraphState) -> AgentGraphState:
             for evidence_id in evidence_for_agent.get(agent, [])
             if evidence_id in evidence_by_id
         ]
-        agent_results[agent] = await runner(
-            query=request.message,
-            evidence=assigned_evidence,
-            preferences=request.user_preferences,
-            readiness=state.get("readiness", {}),
-        )
+        if llm_client is not None:
+            agent_results[agent] = await run_llm_or_deterministic_specialist(
+                agent_name=agent,
+                deterministic_runner=runner,
+                query=request.message,
+                evidence=assigned_evidence,
+                preferences=request.user_preferences,
+                readiness=state.get("readiness", {}),
+                generate_json=llm_client.generate_json,
+            )
+        else:
+            agent_results[agent] = await runner(
+                query=request.message,
+                evidence=assigned_evidence,
+                preferences=request.user_preferences,
+                readiness=state.get("readiness", {}),
+            )
 
     return {
         "agent_results": agent_results,
