@@ -10,6 +10,7 @@ from app.models.agent_observability import (
 from app.models.chunk import Chunk
 from app.models.chat import ChatMessage, ChatSession
 from app.models.listing import Listing
+from app.models.listing_image import ListingImage
 from app.models.pipeline_run import PipelineRun
 from app.models.preference import ChatFeedback, MemoryProposal, UserPreference
 from app.models.project import Project
@@ -27,6 +28,7 @@ __all__ = [
     "EvalRun",
     "EvalScore",
     "Listing",
+    "ListingImage",
     "MemoryProposal",
     "PipelineRun",
     "Project",

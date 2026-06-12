@@ -22,9 +22,17 @@ export default function ListingCard({ listing, index = 0 }: Props) {
       className="group flex flex-col rounded-xl border border-border bg-card overflow-hidden shadow-sm transition-all duration-300 hover:shadow-lg hover:-translate-y-1 animate-fade-in-up"
       style={{ animationDelay: `${index * 60}ms` }}
     >
-      {/* Image placeholder */}
-      <div className="relative h-44 bg-gradient-to-br from-primary/10 via-accent-light/10 to-muted flex items-center justify-center">
-        <span className="text-4xl opacity-30">🏠</span>
+      <div className="relative h-44 bg-gradient-to-br from-primary/10 via-accent-light/10 to-muted flex items-center justify-center overflow-hidden">
+        {listing.primary_image_url ? (
+          <img
+            src={listing.primary_image_url}
+            alt={listing.title || "Listing image"}
+            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+            loading="lazy"
+          />
+        ) : (
+          <span className="text-4xl opacity-30">🏠</span>
+        )}
         {listing.badge && (
           <span className="absolute top-2 left-2 rounded-md bg-primary px-2 py-0.5 text-[10px] font-semibold text-primary-foreground uppercase tracking-wide">
             {listing.badge}

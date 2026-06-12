@@ -50,34 +50,28 @@
 \contentsline {subsubsection}{Nhóm bảng observability \& vận hành (Observability Tables)}{48}{subsection.3.3.1}%
 \contentsline {subsection}{\numberline {3.3.2}Chiến lược indexing}{49}{subsection.3.3.2}%
 \contentsline {section}{\numberline {3.4}Thiết kế giao diện người dùng}{49}{section.3.4}%
-\contentsline {subsection}{\numberline {3.4.1}Trang chủ (Home Page)}{49}{subsection.3.4.1}%
-\contentsline {subsection}{\numberline {3.4.2}Trang danh sách bất động sản (Listing Pages)}{49}{subsection.3.4.2}%
-\contentsline {subsection}{\numberline {3.4.3}Trang chi tiết bất động sản (Detail Page)}{50}{subsection.3.4.3}%
-\contentsline {subsection}{\numberline {3.4.4}Trang thống kê thị trường (Market Dashboard)}{50}{subsection.3.4.4}%
-\contentsline {subsection}{\numberline {3.4.5}Trang quản trị (Admin Dashboard)}{50}{subsection.3.4.5}%
-\contentsline {subsection}{\numberline {3.4.6}Chat Widget}{51}{subsection.3.4.6}%
-\contentsline {chapter}{\numberline {4}TRIỂN KHAI VÀ KIỂM THỬ}{52}{chapter.4}%
-\contentsline {section}{\numberline {4.1}Triển khai hệ thống với Docker}{52}{section.4.1}%
-\contentsline {subsection}{\numberline {4.1.1}Kiến trúc triển khai}{52}{subsection.4.1.1}%
-\contentsline {subsection}{\numberline {4.1.2}Cấu hình Docker Compose}{52}{subsection.4.1.2}%
-\contentsline {subsection}{\numberline {4.1.3}Cấu hình chi tiết từng service}{53}{subsection.4.1.3}%
-\contentsline {subsubsection}{PostgreSQL + pgvector}{53}{subsection.4.1.3}%
-\contentsline {subsubsection}{Redis}{54}{subsection.4.1.3}%
-\contentsline {subsubsection}{Agent Service}{54}{subsection.4.1.3}%
-\contentsline {subsubsection}{Backend API}{55}{subsection.4.1.3}%
-\contentsline {subsubsection}{Frontend}{56}{subsection.4.1.3}%
-\contentsline {subsection}{\numberline {4.1.4}Mạng nội bộ và giao tiếp giữa các service}{56}{subsection.4.1.4}%
-\contentsline {subsection}{\numberline {4.1.5}Quy trình triển khai}{57}{subsection.4.1.5}%
-\contentsline {subsubsection}{Chuẩn bị môi trường}{57}{subsection.4.1.5}%
-\contentsline {subsubsection}{Build và khởi động}{57}{subsection.4.1.5}%
-\contentsline {subsubsection}{Kiểm tra trạng thái triển khai}{59}{Item.79}%
-\contentsline {subsection}{\numberline {4.1.6}Nạp dữ liệu ban đầu}{59}{subsection.4.1.6}%
-\contentsline {section}{\numberline {4.2}Kiểm thử hệ thống}{59}{section.4.2}%
-\contentsline {subsection}{\numberline {4.2.1}Chiến lược kiểm thử}{59}{subsection.4.2.1}%
-\contentsline {subsection}{\numberline {4.2.2}Công cụ và framework kiểm thử}{60}{subsection.4.2.2}%
-\contentsline {chapter}{KẾT LUẬN}{61}{chapter*.6}%
-\contentsline {section}{Kết quả đạt được}{61}{section*.7}%
-\contentsline {section}{Hạn chế}{62}{Item.99}%
-\contentsline {chapter}{PHỤ LỤC}{63}{chapter*.8}%
-\contentsline {chapter}{CHỈ MỤC}{75}{chapter*.10}%
-\contentsline {chapter}{TÀI LIỆU THAM KHẢO}{76}{chapter*.11}%
+\contentsline {chapter}{\numberline {4}TRIỂN KHAI VÀ KIỂM THỬ}{50}{chapter.4}%
+\contentsline {section}{\numberline {4.1}Triển khai hệ thống với Docker}{50}{section.4.1}%
+\contentsline {subsection}{\numberline {4.1.1}Kiến trúc triển khai}{50}{subsection.4.1.1}%
+\contentsline {subsection}{\numberline {4.1.2}Cấu hình Docker Compose}{50}{subsection.4.1.2}%
+\contentsline {subsection}{\numberline {4.1.3}Cấu hình chi tiết từng service}{51}{subsection.4.1.3}%
+\contentsline {subsubsection}{PostgreSQL + pgvector}{51}{subsection.4.1.3}%
+\contentsline {subsubsection}{Redis}{52}{subsection.4.1.3}%
+\contentsline {subsubsection}{Agent Service}{52}{subsection.4.1.3}%
+\contentsline {subsubsection}{Backend API}{53}{subsection.4.1.3}%
+\contentsline {subsubsection}{Frontend}{54}{subsection.4.1.3}%
+\contentsline {subsection}{\numberline {4.1.4}Mạng nội bộ và giao tiếp giữa các service}{54}{subsection.4.1.4}%
+\contentsline {subsection}{\numberline {4.1.5}Quy trình triển khai}{55}{subsection.4.1.5}%
+\contentsline {subsubsection}{Chuẩn bị môi trường}{55}{subsection.4.1.5}%
+\contentsline {subsubsection}{Build và khởi động}{55}{subsection.4.1.5}%
+\contentsline {subsubsection}{Kiểm tra trạng thái triển khai}{57}{Item.79}%
+\contentsline {subsection}{\numberline {4.1.6}Nạp dữ liệu ban đầu}{57}{subsection.4.1.6}%
+\contentsline {section}{\numberline {4.2}Kiểm thử hệ thống}{57}{section.4.2}%
+\contentsline {subsection}{\numberline {4.2.1}Chiến lược kiểm thử}{57}{subsection.4.2.1}%
+\contentsline {subsection}{\numberline {4.2.2}Công cụ và framework kiểm thử}{58}{subsection.4.2.2}%
+\contentsline {chapter}{KẾT LUẬN}{59}{chapter*.6}%
+\contentsline {section}{Kết quả đạt được}{59}{section*.7}%
+\contentsline {section}{Hạn chế}{60}{Item.99}%
+\contentsline {chapter}{PHỤ LỤC}{61}{chapter*.8}%
+\contentsline {chapter}{CHỈ MỤC}{73}{chapter*.10}%
+\contentsline {chapter}{TÀI LIỆU THAM KHẢO}{74}{chapter*.11}%

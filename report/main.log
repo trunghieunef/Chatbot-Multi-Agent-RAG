@@ -1,4 +1,4 @@
-This is XeTeX, Version 3.141592653-2.6-0.999998 (TeX Live 2026) (preloaded format=xelatex 2026.5.28)  7 JUN 2026 15:40
+This is XeTeX, Version 3.141592653-2.6-0.999998 (TeX Live 2026) (preloaded format=xelatex 2026.5.28)  10 JUN 2026 11:08
 entering extended mode
  restricted \write18 enabled.
  file:line:error style messages enabled.
@@ -986,11 +986,11 @@ Overfull \hbox (22.19377pt too wide) in paragraph at lines 408--409
 []\TU/TimesNewRoman(0)/b/n/13 agent_trace_steps: \TU/TimesNewRoman(0)/m/n/13 Chi tiết từng bước trong trace: step_name, status, latency, input/output
  []
 
-[48] [49] [50] [51]) (./contents/10-chuong4.tex
+[48] [49]) (./contents/10-chuong4.tex
 Chương 4.
-[52
+[50
 
-] [53]
+] [51]
 Overfull \hbox (9.72899pt too wide) in paragraph at lines 90--91
 []\TU/TimesNewRoman(0)/m/n/13 Redis sử dụng image Alpine nhẹ (chỉ khoảng 30MB), phù hợp với môi trường container
  []
@@ -1005,7 +1005,7 @@ Overfull \hbox (14.14796pt too wide) in paragraph at lines 114--115
 \TU/TimesNewRoman(0)/m/n/13 trường \TU/CourierNew(0)/m/n/13 PYTHONPATH \TU/TimesNewRoman(0)/m/n/13 được thiết lập để Agent Service có thể import các module từ \TU/CourierNew(0)/m/n/13 backend/
  []
 
-[54]
+[52]
 Overfull \hbox (100.02219pt too wide) in paragraph at lines 141--141
 []    \TU/CourierNew(0)/m/n/13 DATABASE_URL: postgresql+asyncpg://admin:...@postgres:5432/realestate[] 
  []
@@ -1020,7 +1020,7 @@ Overfull \hbox (4.44353pt too wide) in paragraph at lines 145--146
 []\TU/TimesNewRoman(0)/m/n/13 Biến \TU/CourierNew(0)/m/n/13 CHATBOT_AGENT_SERVICE_ENABLED \TU/TimesNewRoman(0)/m/n/13 (mặc định: false) cho phép vận hành
  []
 
-[55]
+[53]
 Overfull \hbox (4.4465pt too wide) in paragraph at lines 169--170
 []\TU/CourierNew(0)/m/n/13 NEXT_PUBLIC_API_URL\TU/TimesNewRoman(0)/m/n/13 : URL công khai để client-side gọi API thông qua browser. 
  []
@@ -1040,7 +1040,7 @@ Overfull \hbox (97.17723pt too wide) in paragraph at lines 180--181
 []\TU/TimesNewRoman(0)/b/n/13 Backend & Agent Service $\OMS/cmsy/m/n/12 !$ \TU/TimesNewRoman(0)/b/n/13 Redis: \TU/TimesNewRoman(0)/m/n/13 Cả hai service kết nối đến Redis qua \TU/CourierNew(0)/m/n/13 redis://redis:6379/0\TU/TimesNewRoman(0)/m/n/13 . 
  []
 
-[56]
+[54]
 Overfull \hbox (115.62473pt too wide) in paragraph at lines 215--215
 []\TU/CourierNew(0)/m/n/13 DATABASE_URL=postgresql+asyncpg://admin:<password>@postgres:5432/realestate[] 
  []
@@ -1050,7 +1050,7 @@ Overfull \hbox (61.01584pt too wide) in paragraph at lines 215--215
 []\TU/CourierNew(0)/m/n/13 CHATBOT_AGENT_SERVICE_ENABLED=false  # true de su dung Agent Service[] 
  []
 
-[57]
+[55]
 Overfull \hbox (6.94017pt too wide) in paragraph at lines 238--239
 \TU/TimesNewRoman(0)/m/n/13 Khi phát triển, chỉ cần chạy PostgreSQL và Redis qua Docker, còn Backend và Frontend
  []
@@ -1060,12 +1060,12 @@ Overfull \hbox (58.96573pt too wide) in paragraph at lines 238--239
 \TU/TimesNewRoman(0)/m/n/13 chạy trực tiếp trên máy host để thuận tiện cho việc debug. Backend: \TU/CourierNew(0)/m/n/13 uvicorn app.main:app
  []
 
-[58]
+[56]
 Overfull \hbox (46.3316pt too wide) in paragraph at lines 265--266
 []\TU/TimesNewRoman(0)/b/n/13 Agent Service health: \TU/CourierNew(0)/m/n/13 GET http://localhost:8100/internal/agent/health
  []
 
-[59] [60]) (./contents/10-ketluan.tex
+[57] [58]) (./contents/10-ketluan.tex
 
 Package hyperref Warning: The anchor of a bookmark and its parent's must not
 (hyperref)                be the same. Added a new anchor on input line 8.
@@ -1085,16 +1085,16 @@ Overfull \hbox (27.65367pt too wide) in paragraph at lines 25--26
 \TU/TimesNewRoman(0)/m/n/13 AgentLLMCall, AgentRetrievalEvent), chat feedback, memory proposals, source readiness
  []
 
-[61
+[59
 
 ]
 Overfull \hbox (13.3778pt too wide) in paragraph at lines 27--28
 \TU/TimesNewRoman(0)/m/n/13 agent service, hybrid search, RAG, data pipeline, legal KB, crawler, memory/preferences
  []
 
-[62]) (./contents/11-phuluc.tex [63
+[60]) (./contents/11-phuluc.tex [61
 
-] [64] [65] [66] [67]
+] [62] [63] [64] [65]
 File: figures/architecturepng.png Graphic file (type bmp)
 <figures/architecturepng.png>
 
@@ -1102,7 +1102,7 @@ Overfull \hbox (8.58023pt too wide) in paragraph at lines 226--227
 \TU/TimesNewRoman(0)/m/n/13 price=4.68, unit=billion), parse diện tích (“75 m$[]$” $\OMS/cmsy/m/n/12 !$ \TU/TimesNewRoman(0)/m/n/13 area=75), phân loại property_type,
  []
 
-[68]
+[66]
 Overfull \hbox (4.10068pt too wide) in paragraph at lines 238--239
 []\TU/TimesNewRoman(0)/b/n/13 Embed (data_pipeline/embed.py): \TU/TimesNewRoman(0)/m/n/13 Tạo vector embedding 1024 chiều cho từng chunk
  []
@@ -1117,7 +1117,7 @@ Overfull \hbox (0.44862pt too wide) in paragraph at lines 257--258
 []\TU/TimesNewRoman(0)/b/n/13 Nếu Agent Service được kích hoạt\TU/TimesNewRoman(0)/m/n/13 , Backend ủy thác sang Agent Service (LangGraph
  []
 
-[69] [70]
+[67] [68]
 Underfull \hbox (badness 10000) in paragraph at lines 281--281
 []|\TU/CourierNew(0)/m/n/10 GET
  []
@@ -1203,16 +1203,16 @@ Overfull \hbox (13.23767pt too wide) in alignment at lines 271--353
  []
 
 
-ignored: Infinite glue shrinkage found in box being split [71] [72]
+ignored: Infinite glue shrinkage found in box being split [69] [70]
 Overfull \hbox (75.91478pt too wide) in paragraph at lines 371--372
 []\TU/TimesNewRoman(0)/b/n/13 Bộ lọc trích xuất: \TU/CourierNew(0)/m/n/13 {listing_type: ”sale”, property_type: ”apartment”,
  []
 
-[73] [74]) (./contents/12-chimuc.tex
+[71] [72]) (./contents/12-chimuc.tex
 No file main.ind.
-[75
+[73
 
-]) (./contents/13-tailieuthamkhao.tex [76
+]) (./contents/13-tailieuthamkhao.tex [74
 
 ]) (./main.aux)
  ***********
@@ -1224,19 +1224,16 @@ L3 programming layer <2026-05-15>
 LaTeX Font Warning: Size substitutions with differences
 (Font)              up to 1.0pt have occurred.
 
-
-LaTeX Warning: Label(s) may have changed. Rerun to get cross-references right.
-
 Package rerunfilecheck Info: File `main.out' has not changed.
-(rerunfilecheck)             Checksum: 0E827D716B4370EE38A03B8060C867AF;11232.
+(rerunfilecheck)             Checksum: 6F6CAEA1D274DCEF365EFC72F32E7589;9727.
  ) 
 Here is how much of TeX's memory you used:
- 17738 strings out of 467983
- 337906 string characters out of 5425473
- 1106882 words of memory out of 5000000
- 46320 multiletter control sequences out of 15000+600000
+ 17737 strings out of 467983
+ 337893 string characters out of 5425473
+ 1104319 words of memory out of 5000000
+ 46319 multiletter control sequences out of 15000+600000
  637736 words of font info for 140 fonts, out of 8000000 for 9000
  1348 hyphenation exceptions out of 8191
  78i,9n,96p,635b,1788s stack positions out of 10000i,1000n,20000p,200000b,200000s
 
-Output written on main.pdf (76 pages).
+Output written on main.pdf (74 pages).

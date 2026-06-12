@@ -6,6 +6,7 @@ import Link from "next/link";
 import {
   Ruler, Bed, Bath, Layers, Compass, Scale, Sofa,
   MapPin, Phone, User, Calendar, ArrowLeft, Share2,
+  ChevronLeft, ChevronRight,
 } from "lucide-react";
 import { getListingDetail, getSimilarListings } from "@/lib/api";
 import ListingCard from "@/components/listing/ListingCard";
@@ -23,11 +24,13 @@ export default function ListingDetailPage() {
   const [listing, setListing] = useState<ListingDetail | null>(null);
   const [similar, setSimilar] = useState<ListingCardType[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
 
   useEffect(() => {
     if (!id) return;
     getListingDetail(id)
       .then((data) => {
+        setSelectedImageIndex(0);
         setListing(data);
         return getSimilarListings(id, 4);
       })
@@ -77,6 +80,25 @@ export default function ListingDetailPage() {
     { icon: <Scale size={16} />, label: "Pháp lý", value: listing.legal_status },
     { icon: <Sofa size={16} />, label: "Nội thất", value: listing.furniture },
   ].filter((s) => s.value != null && s.value !== "");
+  const imageUrls = listing.image_urls.length > 0
+    ? listing.image_urls
+    : listing.primary_image_url
+      ? [listing.primary_image_url]
+      : [];
+  const selectedImageUrl = imageUrls[selectedImageIndex] || imageUrls[0];
+  const hasMultipleImages = imageUrls.length > 1;
+
+  const showPreviousImage = () => {
+    setSelectedImageIndex((current) => (
+      current === 0 ? imageUrls.length - 1 : current - 1
+    ));
+  };
+
+  const showNextImage = () => {
+    setSelectedImageIndex((current) => (
+      current === imageUrls.length - 1 ? 0 : current + 1
+    ));
+  };
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-6">
@@ -91,13 +113,69 @@ export default function ListingDetailPage() {
         </span>
       </nav>
 
-      {/* Image placeholder */}
-      <div className="mb-6 h-64 sm:h-80 rounded-2xl bg-gradient-to-br from-primary/10 via-accent-light/10 to-muted flex items-center justify-center relative overflow-hidden">
-        <span className="text-7xl opacity-20">🏠</span>
-        {listing.badge && (
-          <span className="absolute top-4 left-4 rounded-lg bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground">
-            {listing.badge}
-          </span>
+      <div className="mb-6 overflow-hidden rounded-2xl">
+        <div className="h-64 sm:h-80 bg-gradient-to-br from-primary/10 via-accent-light/10 to-muted flex items-center justify-center relative overflow-hidden">
+          {selectedImageUrl ? (
+            <img
+              src={selectedImageUrl}
+              alt={listing.title || "Listing image"}
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            <span className="text-7xl opacity-20">🏠</span>
+          )}
+          {hasMultipleImages && (
+            <>
+              <button
+                type="button"
+                onClick={showPreviousImage}
+                className="absolute left-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur transition-colors hover:bg-black/65"
+                aria-label="Ảnh trước"
+              >
+                <ChevronLeft size={22} />
+              </button>
+              <button
+                type="button"
+                onClick={showNextImage}
+                className="absolute right-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur transition-colors hover:bg-black/65"
+                aria-label="Ảnh sau"
+              >
+                <ChevronRight size={22} />
+              </button>
+              <span className="absolute bottom-3 right-3 rounded-full bg-black/55 px-3 py-1 text-xs font-semibold text-white backdrop-blur">
+                {selectedImageIndex + 1}/{imageUrls.length}
+              </span>
+            </>
+          )}
+          {listing.badge && (
+            <span className="absolute top-4 left-4 rounded-lg bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground">
+              {listing.badge}
+            </span>
+          )}
+        </div>
+        {hasMultipleImages && (
+          <div className="flex gap-2 overflow-x-auto bg-card p-2">
+            {imageUrls.map((imageUrl, index) => (
+              <button
+                key={`${imageUrl}-${index}`}
+                type="button"
+                onClick={() => setSelectedImageIndex(index)}
+                className={`h-16 w-24 shrink-0 overflow-hidden rounded-md border-2 transition-colors ${
+                  selectedImageIndex === index
+                    ? "border-primary"
+                    : "border-transparent hover:border-primary/50"
+                }`}
+                aria-label={`Xem ảnh ${index + 1}`}
+              >
+                <img
+                  src={imageUrl}
+                  alt={`${listing.title || "Listing image"} ${index + 1}`}
+                  className="h-full w-full object-cover"
+                  loading="lazy"
+                />
+              </button>
+            ))}
+          </div>
         )}
       </div>
 

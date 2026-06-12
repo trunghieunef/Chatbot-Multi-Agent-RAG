@@ -18,6 +18,8 @@ export interface ListingCard {
   post_date: string | null;
   badge: string | null;
   url: string | null;
+  primary_image_url: string | null;
+  image_urls: string[];
 }
 
 export interface ListingDetail extends ListingCard {

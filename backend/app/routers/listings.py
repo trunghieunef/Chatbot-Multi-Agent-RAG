@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models.listing import Listing
+from app.models.listing_image import ListingImage
 from app.schemas.common import PaginatedResponse
 from app.schemas.listing import ListingResponse, ListingCardResponse
 
@@ -76,6 +77,36 @@ def _apply_sort(query, sort: str | None):
     return query.order_by(order)
 
 
+def listing_card_response(listing: Listing, image_urls: list[str] | None = None) -> ListingCardResponse:
+    response = ListingCardResponse.model_validate(listing)
+    urls = image_urls or []
+    response.image_urls = urls
+    response.primary_image_url = urls[0] if urls else None
+    return response
+
+
+def listing_detail_response(listing: Listing, image_urls: list[str] | None = None) -> ListingResponse:
+    response = ListingResponse.model_validate(listing)
+    urls = image_urls or []
+    response.image_urls = urls
+    response.primary_image_url = urls[0] if urls else None
+    return response
+
+
+async def _listing_image_map(db: AsyncSession, listing_ids: list[int]) -> dict[int, list[str]]:
+    if not listing_ids:
+        return {}
+    result = await db.execute(
+        select(ListingImage)
+        .where(ListingImage.listing_id.in_(listing_ids))
+        .order_by(ListingImage.listing_id, ListingImage.sort_order, ListingImage.id)
+    )
+    images_by_listing: dict[int, list[str]] = {listing_id: [] for listing_id in listing_ids}
+    for image in result.scalars().all():
+        images_by_listing.setdefault(image.listing_id, []).append(image.image_url)
+    return images_by_listing
+
+
 @router.get("", response_model=PaginatedResponse)
 async def get_listings(
     search: str | None = None,
@@ -117,9 +148,10 @@ async def get_listings(
 
     result = await db.execute(query)
     listings = result.scalars().all()
+    image_map = await _listing_image_map(db, [listing.id for listing in listings])
 
     return PaginatedResponse(
-        items=[ListingCardResponse.model_validate(l) for l in listings],
+        items=[listing_card_response(l, image_map.get(l.id, [])) for l in listings],
         total=total,
         page=page,
         limit=limit,
@@ -139,7 +171,8 @@ async def get_listing_by_product_id(
     listing = result.scalar_one_or_none()
     if not listing:
         raise HTTPException(status_code=404, detail="Listing not found")
-    return ListingResponse.model_validate(listing)
+    image_map = await _listing_image_map(db, [listing.id])
+    return listing_detail_response(listing, image_map.get(listing.id, []))
 
 
 @router.get("/similar/{listing_id}", response_model=list[ListingCardResponse])
@@ -170,8 +203,9 @@ async def get_similar_listings(
     query = select(Listing).where(and_(*filters)).limit(limit)
     result = await db.execute(query)
     similar = result.scalars().all()
+    image_map = await _listing_image_map(db, [item.id for item in similar])
 
-    return [ListingCardResponse.model_validate(l) for l in similar]
+    return [listing_card_response(l, image_map.get(l.id, [])) for l in similar]
 
 
 @router.get("/{listing_id}", response_model=ListingResponse)
@@ -184,4 +218,5 @@ async def get_listing_detail(
     listing = result.scalar_one_or_none()
     if not listing:
         raise HTTPException(status_code=404, detail="Listing not found")
-    return ListingResponse.model_validate(listing)
+    image_map = await _listing_image_map(db, [listing.id])
+    return listing_detail_response(listing, image_map.get(listing.id, []))
