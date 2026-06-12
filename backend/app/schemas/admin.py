@@ -36,6 +36,16 @@ class AgentTraceDetail(AgentTraceListItem):
 
     full_trace_json: dict[str, Any] = Field(default_factory=dict)
     readiness_json: dict[str, Any] = Field(default_factory=dict)
+    steps: list[dict[str, Any]] = Field(default_factory=list)
+    retrieval_events: list[dict[str, Any]] = Field(default_factory=list)
+    eval_runs: list[dict[str, Any]] = Field(default_factory=list)
 
     class Config:
         from_attributes = True
+
+
+class AgentTraceSearchResponse(BaseModel):
+    """Paginated trace search response."""
+
+    items: list[AgentTraceListItem]
+    total: int
