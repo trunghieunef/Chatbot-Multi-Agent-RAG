@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import re
 import time
-import unicodedata
 from typing import Any
 
 from agent_service.agents.specialists import (
@@ -23,36 +21,10 @@ from agent_service.graph.retrieval_planner import (
     build_retrieval_plan,
     execute_retrieval_plan,
 )
+from agent_service.graph.router import _strip_accents, route_request
 from agent_service.graph.state import AgentGraphState
 from agent_service.tools.readiness import build_readiness_snapshot
 
-
-AGENT_ORDER = [
-    "legal_advisor",
-    "investment_advisor",
-    "market_analysis",
-    "news_agent",
-    "project_agent",
-    "property_search",
-]
-
-INTENT_BY_AGENT = {
-    "legal_advisor": "legal_advice",
-    "investment_advisor": "investment_advice",
-    "market_analysis": "market_analysis",
-    "news_agent": "news",
-    "project_agent": "project",
-    "property_search": "property_search",
-}
-
-KEYWORDS_BY_AGENT = {
-    "legal_advisor": ["phap ly", "luat", "thu tuc", "cong chung", "so do", "sang ten"],
-    "investment_advisor": ["dau tu", "roi", "loi nhuan", "sinh loi", "rental yield"],
-    "market_analysis": ["thi truong", "xu huong", "thong ke", "gia trung binh"],
-    "news_agent": ["tin tuc", "bao chi", "cap nhat"],
-    "project_agent": ["du an", "chu dau tu"],
-    "property_search": ["tim", "mua", "thue", "can ho", "nha", "dat", "quan "],
-}
 
 SOURCE_BACKED_AGENTS = {
     "legal_advisor",
@@ -71,32 +43,6 @@ NO_SOURCE_WARNINGS = {
     "no_project_evidence",
     "project_source_not_ready",
 }
-
-
-def _strip_accents(value: str | None) -> str:
-    normalized = unicodedata.normalize("NFD", value or "")
-    without_marks = "".join(
-        char for char in normalized if unicodedata.category(char) != "Mn"
-    )
-    return without_marks.lower()
-
-
-def _normalized_tokens(value: str) -> set[str]:
-    return set(re.findall(r"[a-z0-9]+", value))
-
-
-def _keyword_matches(
-    keyword: str,
-    normalized_query: str,
-    normalized_tokens: set[str],
-) -> bool:
-    normalized_keyword = _strip_accents(keyword)
-    stripped_keyword = normalized_keyword.strip()
-    if not stripped_keyword:
-        return False
-    if stripped_keyword != normalized_keyword or " " in stripped_keyword:
-        return normalized_keyword in normalized_query
-    return stripped_keyword in normalized_tokens
 
 
 def _trace_step(name: str, started: float, output: dict[str, Any]) -> dict[str, Any]:
@@ -224,40 +170,19 @@ async def readiness_checker(state: AgentGraphState) -> AgentGraphState:
     return {**state, "readiness": readiness, "trace_steps": steps}
 
 
-def router_node(state: AgentGraphState) -> AgentGraphState:
+async def router_node(state: AgentGraphState) -> AgentGraphState:
     start_time = time.perf_counter()
-    normalized_query = state.get("normalized_query", "")
-    normalized_tokens = _normalized_tokens(normalized_query)
-    agents_to_run = [
-        agent
-        for agent in AGENT_ORDER
-        if any(
-            _keyword_matches(keyword, normalized_query, normalized_tokens)
-            for keyword in KEYWORDS_BY_AGENT[agent]
-        )
-    ]
-
-    if not agents_to_run:
-        agents_to_run = ["property_search"]
-
-    intent = (
-        INTENT_BY_AGENT[agents_to_run[0]]
-        if len(agents_to_run) == 1
-        else "mixed"
-    )
-    routing_filters = {
-        "locale": state["request"].locale,
-        "user_preferences": state["request"].user_preferences,
-    }
+    decision = await route_request(state)
     return {
-        "intent": intent,
-        "agents_to_run": agents_to_run,
-        "routing_filters": routing_filters,
+        "intent": decision.intent,
+        "agents_to_run": decision.agents,
+        "routing_filters": decision.filters,
+        "warnings": [*state.get("warnings", []), *decision.warnings],
         "trace_steps": _append_trace(
             state,
             "router",
             start_time,
-            {"intent": intent, "agents_to_run": agents_to_run},
+            decision.model_dump(mode="json"),
         ),
     }
 
