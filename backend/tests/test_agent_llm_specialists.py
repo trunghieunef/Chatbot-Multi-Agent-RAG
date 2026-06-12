@@ -148,3 +148,41 @@ async def test_empty_claims_and_no_used_ids_falls_back_when_evidence_available()
 
     assert result["content"] == "deterministic grounded answer"
     assert "llm_specialist_missing_claims" in result["warnings"]
+
+
+@pytest.mark.asyncio
+async def test_completed_llm_specialist_falls_back_when_no_evidence_available():
+    async def deterministic_runner(**kwargs):
+        return {
+            "agent_name": "property_search",
+            "status": "no_evidence",
+            "content": "Chua co bang chung listing phu hop.",
+            "evidence_ids_used": [],
+            "warnings": [],
+        }
+
+    async def ungrounded_json(prompt: str, *, timeout_seconds=None):
+        return {
+            "agent_name": "property_search",
+            "status": "completed",
+            "content": "unsupported answer without retrieved evidence",
+            "claims": [],
+            "evidence_ids_used": [],
+            "confidence": "medium",
+            "warnings": [],
+            "missing_evidence": [],
+        }
+
+    result = await run_llm_or_deterministic_specialist(
+        agent_name="property_search",
+        deterministic_runner=deterministic_runner,
+        query="tim can ho",
+        evidence=[],
+        preferences={},
+        readiness={},
+        generate_json=ungrounded_json,
+    )
+
+    assert result["status"] == "no_evidence"
+    assert result["content"] == "Chua co bang chung listing phu hop."
+    assert "llm_specialist_missing_evidence" in result["warnings"]
