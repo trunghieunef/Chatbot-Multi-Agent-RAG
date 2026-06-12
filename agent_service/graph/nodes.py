@@ -136,6 +136,86 @@ def _dedupe_sources(sources: list[AgentSource]) -> list[AgentSource]:
     return unique
 
 
+def _claim_requires_evidence(claim: Any) -> bool:
+    if not isinstance(claim, dict):
+        return True
+    return claim.get("type") not in {"caveat", "disclaimer", "missing_evidence"}
+
+
+def _claim_evidence_ids(claim: Any) -> set[str]:
+    if not isinstance(claim, dict):
+        return set()
+
+    evidence_ids: set[str] = set()
+    raw_ids = claim.get("evidence_ids", [])
+    if isinstance(raw_ids, (list, tuple, set)):
+        evidence_ids.update(str(value) for value in raw_ids if value is not None)
+    elif raw_ids is not None:
+        evidence_ids.add(str(raw_ids))
+
+    raw_id = claim.get("evidence_id")
+    if raw_id is not None:
+        evidence_ids.add(str(raw_id))
+    return evidence_ids
+
+
+def _invalid_claim_ratio(claims: list[Any], valid_ids: set[str]) -> float:
+    checked = [claim for claim in claims if _claim_requires_evidence(claim)]
+    if not checked:
+        return 0.0
+
+    invalid = [
+        claim
+        for claim in checked
+        if not _claim_evidence_ids(claim).intersection(valid_ids)
+    ]
+    return len(invalid) / len(checked)
+
+
+def _valid_claim_evidence_ids(
+    *,
+    agent: str,
+    evidence_by_id: dict[str, Evidence],
+    evidence_for_agent: dict[str, list[str]],
+) -> set[str]:
+    return {
+        evidence_id
+        for evidence_id, evidence in evidence_by_id.items()
+        if _is_evidence_assigned_to_agent(
+            evidence_id=evidence_id,
+            agent=agent,
+            evidence=evidence,
+            evidence_for_agent=evidence_for_agent,
+        )
+    }
+
+
+def _fallback_content_for_agent(result: dict[str, Any]) -> str:
+    fallback = result.get("fallback_content")
+    if fallback:
+        return str(fallback)
+    return "Chua co du bang chung hop le de tra loi an toan."
+
+
+def _response_with_grounding_fallbacks(
+    *,
+    agents_to_run: list[str],
+    agent_results: dict[str, dict[str, Any]],
+    fallback_agents: set[str],
+    current_response: str,
+) -> str:
+    parts: list[str] = []
+    for agent in agents_to_run:
+        result = agent_results.get(agent) or {}
+        if agent in fallback_agents:
+            content = _fallback_content_for_agent(result)
+        else:
+            content = str(result.get("content") or "")
+        if content:
+            parts.append(content)
+    return "\n\n".join(parts) if parts else current_response
+
+
 def _warning(
     code: str,
     domain: str | None,
@@ -423,6 +503,10 @@ def safety_validator_node(state: AgentGraphState) -> AgentGraphState:
     warning_texts = [_warning_text(warning) for warning in warnings]
     normalized_response = _strip_accents(final_response)
     added_warnings: list[str] = []
+    agent_results = state.get("agent_results", {})
+    evidence_by_id = state.get("evidence_by_id", {})
+    evidence_for_agent = state.get("evidence_for_agent", {})
+    grounding_fallback_agents: list[str] = []
 
     if (
         final_response
@@ -448,6 +532,28 @@ def safety_validator_node(state: AgentGraphState) -> AgentGraphState:
     ):
         added_warnings.append("financial_disclaimer_missing")
 
+    for agent in agents_to_run:
+        result = agent_results.get(agent) or {}
+        claims = list(result.get("claims") or [])
+        if not claims:
+            continue
+        valid_ids = _valid_claim_evidence_ids(
+            agent=agent,
+            evidence_by_id=evidence_by_id,
+            evidence_for_agent=evidence_for_agent,
+        )
+        if _invalid_claim_ratio(claims, valid_ids) > 0.30:
+            grounding_fallback_agents.append(agent)
+            added_warnings.append("agent_answer_missing_valid_evidence")
+
+    if grounding_fallback_agents:
+        final_response = _response_with_grounding_fallbacks(
+            agents_to_run=agents_to_run,
+            agent_results=agent_results,
+            fallback_agents=set(grounding_fallback_agents),
+            current_response=final_response,
+        )
+
     warnings = _dedupe_warnings([*warnings, *added_warnings])
     return {
         "final_response": final_response,
@@ -461,6 +567,7 @@ def safety_validator_node(state: AgentGraphState) -> AgentGraphState:
             {
                 "warning_count": len(warnings),
                 "added_warnings": added_warnings,
+                "grounding_fallback_agents": grounding_fallback_agents,
             },
         ),
     }

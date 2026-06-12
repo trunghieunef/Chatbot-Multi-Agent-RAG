@@ -118,4 +118,6 @@ async def run_llm_or_deterministic_specialist(
     if not used_ids.issubset(allowed_ids):
         return _append_warning(deterministic_result, "llm_specialist_invalid_evidence")
 
-    return output.model_dump(mode="python")
+    result = output.model_dump(mode="python")
+    result["fallback_content"] = deterministic_result.get("content", "")
+    return result

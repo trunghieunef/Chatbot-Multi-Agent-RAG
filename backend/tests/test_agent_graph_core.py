@@ -423,6 +423,61 @@ def test_safety_validator_flags_investment_answer_without_financial_disclaimer()
     assert result["warnings"] == ["financial_disclaimer_missing"]
 
 
+def test_safety_validator_replaces_unsupported_claim_content():
+    validator = getattr(nodes, "safety_validator_node", None)
+    assert callable(validator)
+    original_response = "Can ho nay chac chan tang gia manh trong 12 thang toi."
+    fallback_response = "Chua co du bang chung hop le de ket luan ve gia."
+    evidence = Evidence(
+        evidence_id="ev_valid",
+        retrieval_task_id="search_property_1",
+        domain="property",
+        source_type="listing",
+        source_identity="listing:p-1",
+        record={},
+        facts={"title": "Can ho A"},
+        source=AgentSource(type="listing", domain="property", id="listing:p-1"),
+        assigned_to=["property_search"],
+    )
+    state = {
+        "request": AgentChatRequest(
+            request_id="req-safety-claims",
+            message="Can ho nay co tang gia khong?",
+            session_id="session-1",
+        ),
+        "agents_to_run": ["property_search"],
+        "agent_results": {
+            "property_search": {
+                "content": original_response,
+                "fallback_content": fallback_response,
+                "claims": [
+                    {
+                        "type": "fact",
+                        "text": original_response,
+                        "evidence_ids": ["ev_missing"],
+                    }
+                ],
+                "warnings": [],
+            }
+        },
+        "evidence_by_id": {"ev_valid": evidence},
+        "evidence_for_agent": {"property_search": ["ev_valid"]},
+        "final_response": original_response,
+        "sources": [evidence.source],
+        "suggested_actions": [],
+        "warnings": [],
+        "trace_steps": [],
+    }
+
+    result = validator(state)
+
+    assert result["final_response"] == fallback_response
+    assert "agent_answer_missing_valid_evidence" in result["warnings"]
+    assert result["trace_steps"][-1]["output"]["grounding_fallback_agents"] == [
+        "property_search"
+    ]
+
+
 @pytest.mark.asyncio
 async def test_agent_graph_routes_legal_question_without_llm_key():
     request = AgentChatRequest(

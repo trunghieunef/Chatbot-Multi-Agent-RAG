@@ -1,7 +1,9 @@
 import pytest
 from fastapi.testclient import TestClient
 
+from agent_service.contracts import AgentChatRequest
 from agent_service.config import get_agent_settings
+from agent_service.graph.workflow import run_agent_graph
 from agent_service.main import app
 
 
@@ -41,6 +43,38 @@ def test_build_judge_prompt_includes_metrics_and_versions():
     assert "Can ho nao gan metro o Thu Duc?" in prompt
     assert "Can ho A" in prompt
     assert '"agents"' in prompt
+
+
+@pytest.mark.asyncio
+async def test_trace_records_intelligence_feature_modes(monkeypatch):
+    async def fake_readiness_snapshot():
+        return {
+            "listings": {"status": "unknown", "parent_count": 0, "chunk_count": 0},
+            "projects": {"status": "unknown", "parent_count": 0, "chunk_count": 0},
+            "news": {"status": "unknown", "parent_count": 0, "chunk_count": 0},
+            "legal": {"status": "unknown", "parent_count": 0, "chunk_count": 0},
+        }
+
+    monkeypatch.setattr(
+        "agent_service.graph.nodes.build_readiness_snapshot",
+        fake_readiness_snapshot,
+    )
+
+    response = await run_agent_graph(
+        AgentChatRequest(
+            request_id="req-meta",
+            message="thi truong quan 7",
+            session_id="session-1",
+        )
+    )
+
+    metadata = response.full_trace["intelligence"]
+
+    assert metadata["router_mode"] in {"rule", "llm", "hybrid"}
+    assert "query_rewrite_enabled" in metadata
+    assert "memory_filters_enabled" in metadata
+    assert "specialist_llm_enabled" in metadata
+    assert metadata["prompt_version"]
 
 
 def test_fallback_scores_marks_all_metrics_skipped_with_reason():

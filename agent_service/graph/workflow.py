@@ -85,6 +85,7 @@ def _response_from_result(
     request: AgentChatRequest,
     result: dict,
 ) -> AgentChatResponse:
+    settings = get_agent_settings()
     steps = result.get("trace_steps", [])
     agents_used = result.get("agents_to_run", [])
     sources = result.get("sources", [])
@@ -108,6 +109,14 @@ def _response_from_result(
         trace_summary=trace_summary,
         full_trace={
             "request_id": request.request_id,
+            "intelligence": {
+                "router_mode": settings.AGENT_ROUTER_MODE,
+                "query_rewrite_enabled": settings.AGENT_QUERY_REWRITE_ENABLED,
+                "memory_filters_enabled": settings.AGENT_MEMORY_FILTERS_ENABLED,
+                "specialist_llm_enabled": settings.AGENT_SPECIALIST_LLM_ENABLED,
+                "model_name": settings.GEMINI_MODEL,
+                "prompt_version": settings.AGENT_PROMPT_VERSION,
+            },
             "steps": steps,
             "agent_results": result.get("agent_results", {}),
             "retrieval_plan": [

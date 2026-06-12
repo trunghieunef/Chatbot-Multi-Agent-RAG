@@ -851,7 +851,7 @@ git commit -m "feat: add optional llm specialist synthesis"
 - Test: `backend/tests/test_agent_evaluation.py`
 - Test: `backend/tests/test_agent_graph_core.py`
 
-- [ ] **Step 1: Write failing safety metadata test**
+- [x] **Step 1: Write failing safety metadata test**
 
 In `backend/tests/test_agent_evaluation.py`:
 
@@ -866,7 +866,7 @@ async def test_trace_records_intelligence_feature_modes():
     assert "specialist_llm_enabled" in metadata
 ```
 
-- [ ] **Step 2: Add intelligence metadata to full trace**
+- [x] **Step 2: Add intelligence metadata to full trace**
 
 In `agent_service/graph/workflow.py`:
 
@@ -888,7 +888,7 @@ Include it under:
 "intelligence": intelligence_metadata
 ```
 
-- [ ] **Step 3: Strengthen claim validation**
+- [x] **Step 3: Strengthen claim validation**
 
 In `agent_service/graph/nodes.py`, update safety validation:
 
@@ -910,7 +910,7 @@ def _invalid_claim_ratio(claims: list[dict], valid_ids: set[str]) -> float:
 
 If ratio is above `0.30`, add `agent_answer_missing_valid_evidence` and use deterministic fallback content for that agent.
 
-- [ ] **Step 4: Verify safety and eval tests**
+- [x] **Step 4: Verify safety and eval tests**
 
 ```powershell
 python -m pytest backend\tests\test_agent_evaluation.py backend\tests\test_agent_graph_core.py -q
@@ -918,7 +918,7 @@ python -m pytest backend\tests\test_agent_evaluation.py backend\tests\test_agent
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add agent_service\graph\nodes.py agent_service\graph\workflow.py backend\tests\test_agent_evaluation.py backend\tests\test_agent_graph_core.py
