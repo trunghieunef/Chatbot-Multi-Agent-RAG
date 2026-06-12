@@ -21,6 +21,7 @@ from agent_service.graph.retrieval_planner import (
     build_retrieval_plan,
     execute_retrieval_plan,
 )
+from agent_service.graph.query_understanding import build_query_understanding
 from agent_service.graph.router import _strip_accents, route_request
 from agent_service.graph.state import AgentGraphState
 from agent_service.tools.readiness import build_readiness_snapshot
@@ -183,6 +184,21 @@ async def router_node(state: AgentGraphState) -> AgentGraphState:
             "router",
             start_time,
             decision.model_dump(mode="json"),
+        ),
+    }
+
+
+async def query_understanding_node(state: AgentGraphState) -> AgentGraphState:
+    start_time = time.perf_counter()
+    understanding = await build_query_understanding(state)
+    return {
+        "query_understanding": understanding.model_dump(mode="python"),
+        "warnings": [*state.get("warnings", []), *understanding.warnings],
+        "trace_steps": _append_trace(
+            state,
+            "query_understanding",
+            start_time,
+            understanding.model_dump(mode="json"),
         ),
     }
 

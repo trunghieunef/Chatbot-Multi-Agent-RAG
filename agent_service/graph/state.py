@@ -20,6 +20,7 @@ class AgentGraphState(TypedDict, total=False):
     intent: str
     agents_to_run: list[str]
     routing_filters: dict[str, Any]
+    query_understanding: dict[str, Any]
     readiness: dict[str, Any]
     retrieval_plan: list[RetrievalTask]
     retrieval_results: dict[str, RetrievalResult]

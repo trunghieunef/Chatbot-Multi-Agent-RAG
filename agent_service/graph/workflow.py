@@ -9,6 +9,7 @@ from agent_service.contracts import AgentChatRequest, AgentChatResponse, TraceSu
 from agent_service.graph.nodes import (
     context_builder,
     memory_proposal_node,
+    query_understanding_node,
     readiness_checker,
     retrieval_planner_node,
     router_node,
@@ -24,6 +25,7 @@ def build_agent_graph():
     workflow.add_node("context_builder", context_builder)
     workflow.add_node("readiness_checker", readiness_checker)
     workflow.add_node("router", router_node)
+    workflow.add_node("query_understanding", query_understanding_node)
     workflow.add_node("retrieval_planner", retrieval_planner_node)
     workflow.add_node("specialist_agents", specialist_agents_node)
     workflow.add_node("synthesizer", synthesizer_node)
@@ -33,7 +35,8 @@ def build_agent_graph():
     workflow.set_entry_point("context_builder")
     workflow.add_edge("context_builder", "readiness_checker")
     workflow.add_edge("readiness_checker", "router")
-    workflow.add_edge("router", "retrieval_planner")
+    workflow.add_edge("router", "query_understanding")
+    workflow.add_edge("query_understanding", "retrieval_planner")
     workflow.add_edge("retrieval_planner", "specialist_agents")
     workflow.add_edge("specialist_agents", "synthesizer")
     workflow.add_edge("synthesizer", "safety_validator")
@@ -128,6 +131,7 @@ def _response_from_result(
                 for key, value in result.get("evidence_by_id", {}).items()
             },
             "evidence_for_agent": result.get("evidence_for_agent", {}),
+            "query_understanding": result.get("query_understanding", {}),
         },
         memory_proposals=result.get("memory_proposals", []),
         readiness=result.get("readiness", {}),

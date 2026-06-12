@@ -110,8 +110,9 @@ def build_retrieval_plan(state: AgentGraphState) -> list[RetrievalTask]:
     request = state["request"]
     agents = list(state.get("agents_to_run", []))
     caps = readiness_capabilities(state.get("readiness", {}))
-    query = request.message
-    listing_filters = _extract_filters(query)
+    understanding = state.get("query_understanding") or {}
+    query = understanding.get("rewritten_query") or request.message
+    listing_filters = understanding.get("filters") or _extract_filters(request.message)
     plan: list[RetrievalTask] = []
 
     if "property_search" in agents and caps["property"]["semantic_index_ready"]:
