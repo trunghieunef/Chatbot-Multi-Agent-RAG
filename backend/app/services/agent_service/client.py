@@ -6,8 +6,15 @@ from app.config import get_settings
 from app.services.agent_service.contracts import AgentChatRequest, AgentChatResponse
 
 
+TRANSIENT_ERRORS = (httpx.ConnectTimeout, httpx.ReadTimeout, httpx.ConnectError)
+
+
 class AgentServiceError(RuntimeError):
     """Raised when the internal Agent Service cannot return a valid response."""
+
+    def __init__(self, message: str, *, error_type: str = "unknown") -> None:
+        super().__init__(message)
+        self.error_type = error_type
 
 
 class AgentServiceClient:
@@ -24,6 +31,18 @@ class AgentServiceClient:
         self.timeout_seconds = timeout_seconds
         self.transport = transport
 
+    async def _post_chat(
+        self,
+        client: httpx.AsyncClient,
+        body: AgentChatRequest,
+        headers: dict[str, str],
+    ) -> httpx.Response:
+        return await client.post(
+            f"{self.base_url}/internal/agent/chat",
+            json=body.model_dump(mode="json"),
+            headers=headers,
+        )
+
     async def chat(self, body: AgentChatRequest) -> AgentChatResponse:
         headers = {"X-Internal-Agent-Key": self.internal_key}
         timeout = httpx.Timeout(self.timeout_seconds)
@@ -32,26 +51,69 @@ class AgentServiceClient:
                 timeout=timeout,
                 transport=self.transport,
             ) as client:
-                response = await client.post(
-                    f"{self.base_url}/internal/agent/chat",
-                    json=body.model_dump(mode="json"),
-                    headers=headers,
-                )
+                try:
+                    response = await self._post_chat(client, body, headers)
+                except TRANSIENT_ERRORS:
+                    response = await self._post_chat(client, body, headers)
                 response.raise_for_status()
                 return AgentChatResponse.model_validate(response.json())
         except httpx.HTTPStatusError as exc:
             status_code = exc.response.status_code
             raise AgentServiceError(
-                f"Agent Service request failed: HTTP {status_code}"
+                f"Agent Service request failed: HTTP {status_code}",
+                error_type="http_status",
+            ) from None
+        except httpx.HTTPError as exc:
+            error_type = exc.__class__.__name__
+            safe_type = (
+                "transient_network"
+                if isinstance(exc, TRANSIENT_ERRORS)
+                else "network"
+            )
+            raise AgentServiceError(
+                f"Agent Service request failed: {error_type}",
+                error_type=safe_type,
+            ) from None
+        except ValueError as exc:
+            raise AgentServiceError(
+                "Agent Service request failed: invalid response",
+                error_type="invalid_response",
+            ) from None
+
+    async def evaluate(self, body: dict) -> dict:
+        headers = {"X-Internal-Agent-Key": self.internal_key}
+        timeout = httpx.Timeout(self.timeout_seconds)
+        try:
+            async with httpx.AsyncClient(
+                timeout=timeout,
+                transport=self.transport,
+            ) as client:
+                response = await client.post(
+                    f"{self.base_url}/internal/agent/evaluate",
+                    json=body,
+                    headers=headers,
+                )
+                response.raise_for_status()
+                data = response.json()
+                if not isinstance(data, dict):
+                    raise ValueError("invalid response")
+                return data
+        except httpx.HTTPStatusError as exc:
+            status_code = exc.response.status_code
+            raise AgentServiceError(
+                f"Agent Service request failed: HTTP {status_code}",
+                error_type="http_status",
             ) from None
         except httpx.HTTPError as exc:
             error_type = exc.__class__.__name__
             raise AgentServiceError(
-                f"Agent Service request failed: {error_type}"
+                f"Agent Service request failed: {error_type}",
+                error_type="network",
             ) from None
         except ValueError as exc:
             raise AgentServiceError(
-                "Agent Service request failed: invalid response"
+                "Agent Service request failed: invalid response",
+                error_type="invalid_response",
             ) from None
 
 
