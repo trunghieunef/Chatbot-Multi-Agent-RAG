@@ -1,4 +1,4 @@
-This is XeTeX, Version 3.141592653-2.6-0.999998 (TeX Live 2026) (preloaded format=xelatex 2026.5.28)  10 JUN 2026 11:08
+This is XeTeX, Version 3.141592653-2.6-0.999998 (TeX Live 2026) (preloaded format=xelatex 2026.5.28)  13 JUN 2026 00:18
 entering extended mode
  restricted \write18 enabled.
  file:line:error style messages enabled.
@@ -694,159 +694,112 @@ Underfull \hbox (badness 1769) in paragraph at lines 50--51
 []|\TU/TimesNewRoman(0)/m/n/13 Hierarchical Navigable Small World (thuật toán
  []
 
-[11]) (./contents/07-chuong1.tex
-Chương 1.
+[11]) (./contents/00-gioithieu.tex
+
+Package hyperref Warning: The anchor of a bookmark and its parent's must not
+(hyperref)                be the same. Added a new anchor on input line 8.
+
 [12
 
-]
-Overfull \hbox (7.1339pt too wide) in paragraph at lines 42--43
-\TU/TimesNewRoman(0)/m/n/13 based và Gemini-based) và 4 agent chuyên biệt: Property Search, Market Analysis,
- []
+] [13] [14] [15] [16] [17]) (./contents/07-chuong1.tex
+Chương 1.
+[18
 
-[13]
-Overfull \hbox (31.94891pt too wide) in paragraph at lines 51--52
-[]\TU/TimesNewRoman(0)/m/n/13 Crawler sử dụng Playwright với cơ chế stealth để thu thập dữ liệu từ batdongsan.com.vn
- []
-
-[14]
-Overfull \hbox (9.30478pt too wide) in paragraph at lines 68--69
-\TU/TimesNewRoman(0)/m/n/13 AgentRetrievalEvent cho tracing; Prometheus metrics cho giám sát; ChatFeedback
- []
-
-
-Overfull \hbox (53.0053pt too wide) in paragraph at lines 78--79
-[]\TU/TimesNewRoman(0)/b/n/13 Thị trường: \TU/TimesNewRoman(0)/m/n/13 Bất động sản Việt Nam. Dữ liệu được thu thập từ nguồn chính là batdongsan.com.vn
- []
-
-[15]
-Overfull \hbox (14.37764pt too wide) in paragraph at lines 97--98
-[]\TU/TimesNewRoman(0)/b/n/13 Data Pipeline: \TU/TimesNewRoman(0)/m/n/13 Apache Airflow (lập lịch), Playwright (crawler), Nominatim/Goong
- []
-
-
-Overfull \hbox (35.32382pt too wide) in paragraph at lines 105--106
-[]\TU/TimesNewRoman(0)/m/n/13 URL slugs: tiếng Việt không dấu (\TU/CourierNew(0)/m/n/13 /nha-dat-ban\TU/TimesNewRoman(0)/m/n/13 , \TU/CourierNew(0)/m/n/13 /thi-truong\TU/TimesNewRoman(0)/m/n/13 , \TU/CourierNew(0)/m/n/13 /dang-nhap\TU/TimesNewRoman(0)/m/n/13 ). 
- []
-
-
-Overfull \hbox (7.32271pt too wide) in paragraph at lines 116--117
-\TU/TimesNewRoman(0)/m/n/13 lớp rõ ràng: models (ORM) $\OMS/cmsy/m/n/12 !$ \TU/TimesNewRoman(0)/m/n/13 schemas (Pydantic validation) $\OMS/cmsy/m/n/12 !$ \TU/TimesNewRoman(0)/m/n/13 routers (API endpoints)
- []
-
-[16]
-Overfull \hbox (13.22748pt too wide) in paragraph at lines 126--127
-\TU/TimesNewRoman(0)/m/n/13 integration test (API endpoints, database operations) và end-to-end test (chatbot pipeline,
- []
-
-
-Overfull \hbox (3.79074pt too wide) in paragraph at lines 142--143
-[]\TU/TimesNewRoman(0)/b/n/13 Về mặt vận hành: \TU/TimesNewRoman(0)/m/n/13 Thiết lập hệ thống observability toàn diện (AgentTrace, Prometheus
- []
-
-[17]
-Overfull \hbox (3.25856pt too wide) in paragraph at lines 156--157
-\TU/TimesNewRoman(0)/m/n/13 AgentTrace observability, cảnh báo Slack/Email); lập lịch pipeline với Apache Airflow
- []
-
-[18]) (./contents/08-chuong2.tex
-Chương 2.
-[19
-
-] [20] [21] [22]
-Overfull \hbox (34.38742pt too wide) in paragraph at lines 114--115
+] [19] [20] [21]
+Overfull \hbox (34.38742pt too wide) in paragraph at lines 108--109
 []\TU/TimesNewRoman(0)/b/n/13 Specialist Agents \TU/TimesNewRoman(0)/m/n/13 – Chạy song song các agent được chọn (property_search, market_analysis,
  []
 
 
-Overfull \hbox (52.10313pt too wide) in paragraph at lines 129--130
+Overfull \hbox (52.10313pt too wide) in paragraph at lines 123--124
 []\TU/TimesNewRoman(0)/m/n/13 Một số preference key được auto-apply khi confidence $\OMS/cmsy/m/n/12 ^^U \OT1/cmr/m/n/12 0\OML/cmm/m/it/12 :\OT1/cmr/m/n/12 8$ \TU/TimesNewRoman(0)/m/n/13 (preferred_city, preferred_district,
  []
 
-[23]
-Overfull \hbox (7.22865pt too wide) in paragraph at lines 157--158
+[22]
+Overfull \hbox (7.22865pt too wide) in paragraph at lines 151--152
 \TU/TimesNewRoman(0)/m/n/13 tìm kiếm k-NN hiệu quả với tham số $\OML/cmm/m/it/12 m \OT1/cmr/m/n/12 = 16$ \TU/TimesNewRoman(0)/m/n/13 (số kết nối mỗi node) và $\OML/cmm/m/it/12 ef[]construction \OT1/cmr/m/n/12 =
  []
 
-[24] [25]
-Overfull \hbox (5.88438pt too wide) in paragraph at lines 203--204
+[23] [24]
+Overfull \hbox (5.88438pt too wide) in paragraph at lines 197--198
 []\TU/TimesNewRoman(0)/b/n/13 Dependency injection: \TU/TimesNewRoman(0)/m/n/13 Cơ chế Depends() cho phép tái sử dụng logic (database session,
  []
 
 
-Overfull \hbox (9.3862pt too wide) in paragraph at lines 211--212
+Overfull \hbox (9.3862pt too wide) in paragraph at lines 205--206
 []\TU/TimesNewRoman(0)/m/n/13 Next.js là React framework hỗ trợ Server-Side Rendering (SSR), Static Site Generation
  []
 
-[26]
-Overfull \hbox (12.06586pt too wide) in paragraph at lines 233--234
+[25]
+Overfull \hbox (12.06586pt too wide) in paragraph at lines 227--228
 \TU/TimesNewRoman(0)/m/n/13 được tạo trực tiếp trong model definition qua \TU/CourierNew(0)/m/n/13 Index() \TU/TimesNewRoman(0)/m/n/13 với postgresql_using=”hnsw”và
  []
 
-[27]
-Overfull \hbox (120.34854pt too wide) in paragraph at lines 248--249
+[26]
+Overfull \hbox (120.34854pt too wide) in paragraph at lines 242--243
 []\TU/TimesNewRoman(0)/m/n/13 Trong đồ án, LangGraph được sử dụng trong Agent Service (\TU/CourierNew(0)/m/n/13 agent_service/graph/workflow.py\TU/TimesNewRoman(0)/m/n/13 )
  []
 
 
-Overfull \hbox (94.02594pt too wide) in paragraph at lines 248--249
+Overfull \hbox (94.02594pt too wide) in paragraph at lines 242--243
 \TU/TimesNewRoman(0)/m/n/13 với StateGraph được compile và chạy qua \TU/CourierNew(0)/m/n/13 chat_graph.ainvoke()\TU/TimesNewRoman(0)/m/n/13 . State object (\TU/CourierNew(0)/m/n/13 AgentGraphState\TU/TimesNewRoman(0)/m/n/13 )
  []
 
 
-Overfull \hbox (108.68776pt too wide) in paragraph at lines 259--260
+Overfull \hbox (108.68776pt too wide) in paragraph at lines 253--254
 \TU/TimesNewRoman(0)/m/n/13 chính cho các specialist agents (qua GeminiClient wrapper trong \TU/CourierNew(0)/m/n/13 agent_service/llm/gemini.py\TU/TimesNewRoman(0)/m/n/13 ).
  []
 
-[28]
-Overfull \hbox (107.31143pt too wide) in paragraph at lines 272--273
+[27]
+Overfull \hbox (107.31143pt too wide) in paragraph at lines 266--267
 []\TU/TimesNewRoman(0)/b/n/13 Không phụ thuộc API: \TU/TimesNewRoman(0)/m/n/13 Là mô hình mã nguồn mở, chạy local qua thư viện \TU/CourierNew(0)/m/n/13 sentence-transformers\TU/TimesNewRoman(0)/m/n/13 ,
  []
 
 
-Overfull \hbox (16.88171pt too wide) in paragraph at lines 274--275
+Overfull \hbox (16.88171pt too wide) in paragraph at lines 268--269
 []\TU/TimesNewRoman(0)/b/n/13 Multi-granularity: \TU/TimesNewRoman(0)/m/n/13 BGE-M3 hỗ trợ cả dense embedding (1024 chiều), sparse embedding
  []
 
 
-Overfull \hbox (14.47072pt too wide) in paragraph at lines 284--285
+Overfull \hbox (14.47072pt too wide) in paragraph at lines 278--279
 \TU/TimesNewRoman(0)/m/n/13 documents, nhận relevance score cho từng cặp. Kết quả được lọc theo RERANK_TOP_N
  []
 
-[29]
-Overfull \hbox (33.41417pt too wide) in paragraph at lines 285--286
+[28]
+Overfull \hbox (33.41417pt too wide) in paragraph at lines 279--280
 []\TU/TimesNewRoman(0)/b/n/13 Cấu hình linh hoạt: \TU/TimesNewRoman(0)/m/n/13 Reranking có thể bật/tắt qua biến môi trường (RERANK_PROVIDER),
  []
 
-[30]
-Overfull \hbox (15.1277pt too wide) in paragraph at lines 317--318
+[29]
+Overfull \hbox (15.1277pt too wide) in paragraph at lines 311--312
 []\TU/TimesNewRoman(0)/m/n/13 Playwright là thư viện tự động hóa trình duyệt do Microsoft phát triển, hỗ trợ Chromium,
  []
 
 
-Overfull \hbox (27.66019pt too wide) in paragraph at lines 317--318
+Overfull \hbox (27.66019pt too wide) in paragraph at lines 311--312
 \TU/TimesNewRoman(0)/m/n/13 Firefox và WebKit. Trong đồ án, Playwright được sử dụng để crawl dữ liệu từ batdongsan.com.vn: 
  []
 
 
-Overfull \hbox (72.89874pt too wide) in paragraph at lines 322--323
+Overfull \hbox (72.89874pt too wide) in paragraph at lines 316--317
 \TU/TimesNewRoman(0)/m/n/13 nội dung: \TU/CourierNew(0)/m/n/13 crawler/sale/ \TU/TimesNewRoman(0)/m/n/13 (tin bán), \TU/CourierNew(0)/m/n/13 crawler/rent/ \TU/TimesNewRoman(0)/m/n/13 (tin cho thuê), \TU/CourierNew(0)/m/n/13 crawler/projects/
  []
 
 
-Overfull \hbox (4.23723pt too wide) in paragraph at lines 324--325
+Overfull \hbox (4.23723pt too wide) in paragraph at lines 318--319
 []\TU/TimesNewRoman(0)/b/n/13 Core infrastructure: \TU/CourierNew(0)/m/n/13 crawler/core/ \TU/TimesNewRoman(0)/m/n/13 chứa các thành phần dùng chung: csv_writer
  []
 
-[31]
-Overfull \hbox (57.8749pt too wide) in paragraph at lines 336--337
+[30]
+Overfull \hbox (57.8749pt too wide) in paragraph at lines 330--331
 []\TU/TimesNewRoman(0)/b/n/13 Prometheus: \TU/TimesNewRoman(0)/m/n/13 Hệ thống giám sát và thu thập metrics, tích hợp qua endpoint \TU/CourierNew(0)/m/n/13 /api/v1/metrics
  []
 
-[32]) (./contents/09-chuong3.tex
-Chương 3.
-[33
+[31]) (./contents/08-chuong2.tex
+Chương 2.
+[32
 
-] [34]
+] [33]
 Overfull \hbox (11.41751pt too wide) in paragraph at lines 78--79
 []\TU/TimesNewRoman(0)/m/n/13 Tự động trích xuất bộ lọc có cấu trúc từ câu hỏi tiếng Việt: loại giao dịch (mua/thuê),
  []
@@ -856,12 +809,12 @@ Overfull \hbox (55.00565pt too wide) in paragraph at lines 78--79
 \TU/CourierNew(0)/m/n/13 sale, property_type: apartment, district: Quận 7, max_price:
  []
 
-[35] [36]
+[34] [35]
 Overfull \hbox (55.6522pt too wide) in paragraph at lines 119--120
 []\TU/TimesNewRoman(0)/b/n/13 Crawl tin đăng hàng ngày: \TU/TimesNewRoman(0)/m/n/13 Tự động thu thập tin bán và cho thuê mới từ batdongsan.com.vn
  []
 
-[37]
+[36]
 Underfull \hbox (badness 10000) in paragraph at lines 172--173
 []\TU/TimesNewRoman(0)/m/n/13 CORS whitelist qua biến môi trường
  []
@@ -887,11 +840,19 @@ Underfull \hbox (badness 1365) in paragraph at lines 189--190
  []
 
 
+ignored: Infinite glue shrinkage found in box being split [37]
 ignored: Infinite glue shrinkage found in box being split [38]
-ignored: Infinite glue shrinkage found in box being split [39]
 File: figures/architecturepng.png Graphic file (type bmp)
 <figures/architecturepng.png>
- [40] [41]
+
+Overfull \hbox (198.20003pt too wide) in paragraph at lines 214--215
+ [][] 
+ []
+
+[39]
+Overfull \vbox (158.47429pt too high) has occurred while \output is active []
+
+ [40]
 Overfull \hbox (8.16211pt too wide) in paragraph at lines 233--234
 []\TU/TimesNewRoman(0)/b/n/13 Tailwind CSS v4: \TU/TimesNewRoman(0)/m/n/13 Utility-first CSS framework đảm bảo giao diện nhất quán, responsive
  []
@@ -911,7 +872,7 @@ Overfull \hbox (69.39053pt too wide) in paragraph at lines 247--248
 \TU/TimesNewRoman(0)/m/n/13 chat (ChatMessageRequest, ChatMessageResponse), auth (UserRegisterRequest, TokenResponse),
  []
 
-[42] [43]
+[41] [42] [43]
 Overfull \hbox (18.56274pt too wide) in paragraph at lines 300--301
 []\TU/TimesNewRoman(0)/m/n/13 Agent Service nhận AgentChatRequest (query, session_id, user_id, conversation_history)
  []
@@ -926,7 +887,7 @@ Overfull \hbox (47.21281pt too wide) in paragraph at lines 302--303
 []\TU/TimesNewRoman(0)/m/n/13 Khi Agent Service không được kích hoạt (CHATBOT_AGENT_SERVICE_ENABLED=false)
  []
 
-[44]
+
 Overfull \hbox (58.65877pt too wide) in paragraph at lines 312--313
 \TU/TimesNewRoman(0)/m/n/13 các bảng observability (agent_traces, agent_trace_steps, agent_llm_calls, agent_retrieval_events,
  []
@@ -936,7 +897,7 @@ Overfull \hbox (12.10825pt too wide) in paragraph at lines 312--313
 \TU/TimesNewRoman(0)/m/n/13 pipeline_runs, source_readiness, user_preferences, memory_proposals, chat_feedback). 
  []
 
-[45]
+[44]
 Overfull \hbox (4.79904pt too wide) in paragraph at lines 340--341
 \TU/TimesNewRoman(0)/m/n/13 chạy song song để tăng tốc độ. Dữ liệu được ghi ra file CSV UTF-8 BOM và được deduplicate
  []
@@ -951,17 +912,17 @@ Overfull \hbox (16.74107pt too wide) in paragraph at lines 353--354
 \TU/TimesNewRoman(0)/m/n/13 hình BGE-M3. Sử dụng BGEEmbedder class với batch size 16, retry 3 lần với exponential
  []
 
-
+[45]
 Overfull \hbox (30.3763pt too wide) in paragraph at lines 363--364
 \TU/TimesNewRoman(0)/m/n/13 crawl_sale_details $\OMS/cmsy/m/n/12 !$ \TU/TimesNewRoman(0)/m/n/13 ingest_sale (chạy song song với crawl_rent_urls $\OMS/cmsy/m/n/12 !$ \TU/TimesNewRoman(0)/m/n/13 crawl_rent_details
  []
 
-[46]
+
 Overfull \hbox (72.97809pt too wide) in paragraph at lines 366--367
 []\TU/TimesNewRoman(0)/b/n/13 monthly_legal_kb_dag (Ngày 1, 05:00): \TU/TimesNewRoman(0)/m/n/13 Xử lý lại toàn bộ tài liệu pháp lý từ \TU/CourierNew(0)/m/n/13 data/knowledge/\TU/TimesNewRoman(0)/m/n/13 . 
  []
 
-[47]
+[46]
 Overfull \hbox (44.15761pt too wide) in paragraph at lines 395--396
 []\TU/TimesNewRoman(0)/b/n/13 chat_messages – Tin nhắn: \TU/TimesNewRoman(0)/m/n/13 Mỗi tin nhắn thuộc về một session, có role (user/assistant/system),
  []
@@ -986,11 +947,11 @@ Overfull \hbox (22.19377pt too wide) in paragraph at lines 408--409
 []\TU/TimesNewRoman(0)/b/n/13 agent_trace_steps: \TU/TimesNewRoman(0)/m/n/13 Chi tiết từng bước trong trace: step_name, status, latency, input/output
  []
 
-[48] [49]) (./contents/10-chuong4.tex
-Chương 4.
-[50
+[47] [48]) (./contents/09-chuong3.tex
+Chương 3.
+[49
 
-] [51]
+] [50]
 Overfull \hbox (9.72899pt too wide) in paragraph at lines 90--91
 []\TU/TimesNewRoman(0)/m/n/13 Redis sử dụng image Alpine nhẹ (chỉ khoảng 30MB), phù hợp với môi trường container
  []
@@ -1005,7 +966,7 @@ Overfull \hbox (14.14796pt too wide) in paragraph at lines 114--115
 \TU/TimesNewRoman(0)/m/n/13 trường \TU/CourierNew(0)/m/n/13 PYTHONPATH \TU/TimesNewRoman(0)/m/n/13 được thiết lập để Agent Service có thể import các module từ \TU/CourierNew(0)/m/n/13 backend/
  []
 
-[52]
+[51]
 Overfull \hbox (100.02219pt too wide) in paragraph at lines 141--141
 []    \TU/CourierNew(0)/m/n/13 DATABASE_URL: postgresql+asyncpg://admin:...@postgres:5432/realestate[] 
  []
@@ -1020,7 +981,7 @@ Overfull \hbox (4.44353pt too wide) in paragraph at lines 145--146
 []\TU/TimesNewRoman(0)/m/n/13 Biến \TU/CourierNew(0)/m/n/13 CHATBOT_AGENT_SERVICE_ENABLED \TU/TimesNewRoman(0)/m/n/13 (mặc định: false) cho phép vận hành
  []
 
-[53]
+[52]
 Overfull \hbox (4.4465pt too wide) in paragraph at lines 169--170
 []\TU/CourierNew(0)/m/n/13 NEXT_PUBLIC_API_URL\TU/TimesNewRoman(0)/m/n/13 : URL công khai để client-side gọi API thông qua browser. 
  []
@@ -1040,7 +1001,7 @@ Overfull \hbox (97.17723pt too wide) in paragraph at lines 180--181
 []\TU/TimesNewRoman(0)/b/n/13 Backend & Agent Service $\OMS/cmsy/m/n/12 !$ \TU/TimesNewRoman(0)/b/n/13 Redis: \TU/TimesNewRoman(0)/m/n/13 Cả hai service kết nối đến Redis qua \TU/CourierNew(0)/m/n/13 redis://redis:6379/0\TU/TimesNewRoman(0)/m/n/13 . 
  []
 
-[54]
+[53]
 Overfull \hbox (115.62473pt too wide) in paragraph at lines 215--215
 []\TU/CourierNew(0)/m/n/13 DATABASE_URL=postgresql+asyncpg://admin:<password>@postgres:5432/realestate[] 
  []
@@ -1050,7 +1011,7 @@ Overfull \hbox (61.01584pt too wide) in paragraph at lines 215--215
 []\TU/CourierNew(0)/m/n/13 CHATBOT_AGENT_SERVICE_ENABLED=false  # true de su dung Agent Service[] 
  []
 
-[55]
+[54]
 Overfull \hbox (6.94017pt too wide) in paragraph at lines 238--239
 \TU/TimesNewRoman(0)/m/n/13 Khi phát triển, chỉ cần chạy PostgreSQL và Redis qua Docker, còn Backend và Frontend
  []
@@ -1060,36 +1021,21 @@ Overfull \hbox (58.96573pt too wide) in paragraph at lines 238--239
 \TU/TimesNewRoman(0)/m/n/13 chạy trực tiếp trên máy host để thuận tiện cho việc debug. Backend: \TU/CourierNew(0)/m/n/13 uvicorn app.main:app
  []
 
-[56]
+[55]
 Overfull \hbox (46.3316pt too wide) in paragraph at lines 265--266
 []\TU/TimesNewRoman(0)/b/n/13 Agent Service health: \TU/CourierNew(0)/m/n/13 GET http://localhost:8100/internal/agent/health
  []
 
-[57] [58]) (./contents/10-ketluan.tex
+[56] [57]) (./contents/10-ketluan.tex
 
 Package hyperref Warning: The anchor of a bookmark and its parent's must not
 (hyperref)                be the same. Added a new anchor on input line 8.
 
+[58
 
-Overfull \hbox (17.0255pt too wide) in paragraph at lines 17--18
-[]\TU/TimesNewRoman(0)/b/n/13 Triển khai kiến trúc chatbot hai lớp \TU/TimesNewRoman(0)/m/n/13 với pipeline nội bộ (backend/app/services/chatbot/)
- []
-
-
-Overfull \hbox (37.88498pt too wide) in paragraph at lines 25--26
-[]\TU/TimesNewRoman(0)/b/n/13 Xây dựng hệ thống observability toàn diện \TU/TimesNewRoman(0)/m/n/13 với agent tracing (AgentTrace, AgentTraceStep,
- []
-
-
-Overfull \hbox (27.65367pt too wide) in paragraph at lines 25--26
-\TU/TimesNewRoman(0)/m/n/13 AgentLLMCall, AgentRetrievalEvent), chat feedback, memory proposals, source readiness
- []
-
-[59
-
-]
-Overfull \hbox (13.3778pt too wide) in paragraph at lines 27--28
-\TU/TimesNewRoman(0)/m/n/13 agent service, hybrid search, RAG, data pipeline, legal KB, crawler, memory/preferences
+] [59]
+Overfull \hbox (2.33083pt too wide) in paragraph at lines 50--51
+[]\TU/TimesNewRoman(0)/m/n/13 Về tìm kiếm, cần thử nghiệm các mô hình véc-tơ tiếng Việt chuyên biệt như PhoBERT
  []
 
 [60]) (./contents/11-phuluc.tex [61
@@ -1225,15 +1171,15 @@ LaTeX Font Warning: Size substitutions with differences
 (Font)              up to 1.0pt have occurred.
 
 Package rerunfilecheck Info: File `main.out' has not changed.
-(rerunfilecheck)             Checksum: 6F6CAEA1D274DCEF365EFC72F32E7589;9727.
+(rerunfilecheck)             Checksum: EB44198583CE81751F4F31EA6B0E8082;9860.
  ) 
 Here is how much of TeX's memory you used:
  17737 strings out of 467983
- 337893 string characters out of 5425473
- 1104319 words of memory out of 5000000
+ 337910 string characters out of 5425473
+ 1104474 words of memory out of 5000000
  46319 multiletter control sequences out of 15000+600000
  637736 words of font info for 140 fonts, out of 8000000 for 9000
  1348 hyphenation exceptions out of 8191
- 78i,9n,96p,635b,1788s stack positions out of 10000i,1000n,20000p,200000b,200000s
+ 78i,9n,96p,1990b,1788s stack positions out of 10000i,1000n,20000p,200000b,200000s
 
 Output written on main.pdf (74 pages).

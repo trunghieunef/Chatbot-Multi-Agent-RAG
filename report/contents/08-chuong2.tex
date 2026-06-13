@@ -1,339 +1,428 @@
+﻿% ============================================================
+% CHƯƠNG 2: PHÂN TÍCH THIẾT KẾ HỆ THỐNG
 % ============================================================
-% CHƯƠNG 2: CƠ SỞ LÝ THUYẾT
-% ============================================================
-\chapter{CƠ SỞ LÝ THUYẾT}
+\chapter{PHÂN TÍCH THIẾT KẾ HỆ THỐNG}
 
-Chương này trình bày các khái niệm nền tảng và công nghệ được sử dụng trong đồ án. Phần đầu giới thiệu tổng quan về lĩnh vực nghiên cứu -- nền tảng bất động sản trực tuyến và ứng dụng của chatbot trong lĩnh vực này. Phần tiếp theo đi sâu vào các khái niệm cốt lõi: Retrieval-Augmented Generation (RAG), hệ đa tác tử (Multi-Agent System), vector embedding, hybrid search và reranking. Phần cuối cùng giới thiệu chi tiết từng công nghệ được sử dụng trong hệ thống, từ frontend, backend, cơ sở dữ liệu đến AI/ML và data pipeline.
+Chương này trình bày toàn bộ quá trình phân tích và thiết kế hệ thống. Nội dung bao gồm: phân tích yêu cầu chức năng và phi chức năng, thiết kế kiến trúc tổng thể theo mô hình dịch vụ vi mô, thiết kế chi tiết các mô-đun thành phần (giao diện người dùng, máy chủ dịch vụ, dịch vụ tác tử, đường ống dữ liệu), thiết kế cơ sở dữ liệu quan hệ kết hợp véc-tơ, thiết kế giao diện người dùng, quy trình triển khai với Docker và kết quả kiểm thử hệ thống.
 
-\section{Tổng quan về lĩnh vực nghiên cứu}
+\section{Phân tích yêu cầu}
 
-\subsection{Nền tảng bất động sản trực tuyến}
+\subsection{Yêu cầu chức năng}
 
-Các nền tảng bất động sản trực tuyến đóng vai trò trung gian kết nối người mua, người bán và nhà đầu tư. Tại Việt Nam, batdongsan.com.vn là cổng thông tin bất động sản lớn nhất với hàng chục nghìn tin đăng mới mỗi ngày, bao gồm cả tin bán và cho thuê với đa dạng loại hình: căn hộ chung cư, nhà riêng, nhà mặt phố, đất nền, biệt thự và nhà phố thương mại (shophouse). Các nền tảng này thường cung cấp chức năng đăng tin, tìm kiếm theo bộ lọc cơ bản (giá, diện tích, khu vực) và hiển thị thông tin chi tiết của từng bất động sản.
+Hệ thống phục vụ ba nhóm đối tượng chính: người dùng cuối (người mua, người thuê, nhà đầu tư), quản trị viên hệ thống, và bản thân hệ thống (các tác vụ tự động). Dưới đây là các nhóm chức năng được phân tích chi tiết.
 
-Tuy nhiên, các nền tảng hiện tại còn tồn tại nhiều hạn chế:
+\subsubsection{Nhóm chức năng dành cho người dùng cuối}
 
-\begin{itemize}
-    \item \textbf{Tìm kiếm dựa trên từ khóa chính xác:} Hệ thống chỉ khớp chính xác từ khóa người dùng nhập với nội dung tin đăng, không hiểu được ngữ nghĩa và ngữ cảnh của truy vấn. Ví dụ, truy vấn ``căn hộ thoáng mát, view đẹp'' không thể được xử lý hiệu quả bằng SQL WHERE thông thường.
-
-    \item \textbf{Thiếu tư vấn tổng hợp:} Người dùng phải tự tổng hợp thông tin từ nhiều tin đăng khác nhau để đưa ra quyết định. Không có cơ chế tự động phân tích xu hướng thị trường, so sánh giá giữa các khu vực, hay đánh giá tiềm năng đầu tư.
-
-    \item \textbf{Không có hỗ trợ pháp lý:} Các vấn đề pháp lý (sổ đỏ, quy hoạch, thủ tục sang tên, thuế phí) là mối quan tâm hàng đầu của người mua nhưng không được các nền tảng đề cập đến một cách có hệ thống.
-
-    \item \textbf{Dữ liệu không được tổ chức cho AI:} Dữ liệu trên các nền tảng được thiết kế để hiển thị cho con người đọc, không được cấu trúc và đánh chỉ mục để phục vụ các hệ thống truy xuất thông tin (information retrieval) và sinh văn bản (text generation).
-\end{itemize}
-
-\subsection{Chatbot và trợ lý ảo trong bất động sản}
-
-Chatbot trong lĩnh vực bất động sản có tiềm năng tự động hóa quy trình tư vấn, giảm tải cho nhân viên môi giới và cung cấp dịch vụ 24/7 cho khách hàng. Sự phát triển của các mô hình ngôn ngữ lớn (Large Language Models -- LLMs) như GPT-4, Google Gemini, Claude đã mở ra khả năng xây dựng các chatbot thông minh, có khả năng hiểu ngôn ngữ tự nhiên và sinh phản hồi mạch lạc.
-
-Tuy nhiên, LLM thuần túy có hai hạn chế lớn khi áp dụng vào lĩnh vực bất động sản:
+Đây là nhóm chức năng cốt lõi, quyết định trải nghiệm của người dùng khi tương tác với nền tảng:
 
 \begin{enumerate}
-    \item \textbf{Hallucination (Ảo giác):} LLM có thể sinh ra thông tin không chính xác về giá cả, vị trí, hoặc tình trạng pháp lý của bất động sản -- những thông tin đòi hỏi độ chính xác tuyệt đối trong giao dịch thực tế.
-
-    \item \textbf{Thông tin lỗi thời:} LLM được huấn luyện trên dữ liệu có thời điểm cắt (knowledge cutoff) nhất định, không thể cập nhật theo biến động hàng ngày của thị trường bất động sản.
-\end{enumerate}
-
-Để khắc phục, các hệ thống chatbot hiện đại kết hợp LLM với kỹ thuật Retrieval-Augmented Generation (RAG) -- cho phép mô hình truy xuất thông tin từ cơ sở dữ liệu ngoài trước khi sinh phản hồi. Cách tiếp cận này đảm bảo phản hồi dựa trên dữ liệu thực tế, có thể kiểm chứng và luôn được cập nhật.
-
-\section{Các khái niệm cơ bản}
-
-\subsection{Retrieval-Augmented Generation (RAG)}
-
-RAG là kỹ thuật kết hợp giữa truy xuất thông tin (Information Retrieval) và sinh văn bản (Text Generation), được đề xuất bởi Lewis et al. (2020). Quy trình RAG gồm ba bước chính:
-
-\begin{enumerate}
-    \item \textbf{Truy xuất (Retrieve):} Khi nhận được câu hỏi của người dùng, hệ thống chuyển câu hỏi thành vector embedding (sử dụng cùng mô hình embedding với dữ liệu) và tìm kiếm $k$ đoạn văn bản (chunks) có độ tương đồng cao nhất trong cơ sở dữ liệu vector. Phép đo tương đồng thường dùng là cosine similarity:
-
-    \begin{equation}
-        \text{sim}(\mathbf{q}, \mathbf{d}_i) = \frac{\mathbf{q} \cdot \mathbf{d}_i}{\|\mathbf{q}\| \|\mathbf{d}_i\|}
-    \end{equation}
-
-    trong đó $\mathbf{q}$ là vector embedding của câu truy vấn, $\mathbf{d}_i$ là vector embedding của chunk thứ $i$.
-
-    \item \textbf{Tăng cường (Augment):} Các chunks được truy xuất sẽ được đưa vào prompt của LLM như ngữ cảnh bổ sung (context). Prompt thường có cấu trúc: system instruction + retrieved context + user query. Việc này giúp LLM có thông tin thực tế để dựa vào khi sinh câu trả lời.
-
-    \item \textbf{Sinh (Generate):} LLM sinh câu trả lời dựa trên câu hỏi gốc và ngữ cảnh được cung cấp, kèm theo trích dẫn nguồn (citations) cho phép người dùng kiểm chứng thông tin.
-\end{enumerate}
-
-\textbf{Ưu điểm của RAG:}
-
-\begin{itemize}
-    \item \textbf{Giảm thiểu ảo giác:} Phản hồi được neo (grounded) vào dữ liệu thực tế thay vì chỉ dựa vào kiến thức nội tại của LLM.
-    \item \textbf{Thông tin cập nhật:} Cơ sở dữ liệu vector có thể được cập nhật liên tục mà không cần fine-tune lại LLM.
-    \item \textbf{Kiểm chứng được:} Mỗi phản hồi đi kèm danh sách nguồn tham khảo, cho phép người dùng xác minh.
-    \item \textbf{Domain-specific:} Có thể dễ dàng áp dụng cho lĩnh vực chuyên biệt (bất động sản, y tế, pháp luật) bằng cách xây dựng kho dữ liệu riêng.
-\end{itemize}
-
-\textbf{Các biến thể RAG trong đồ án:}
-
-\begin{itemize}
-    \item \textbf{Simple RAG:} Truy xuất đơn giản -- query embedding $\rightarrow$ vector search $\rightarrow$ LLM generation. Được sử dụng làm fallback trong chatbot pipeline.
-    \item \textbf{Agent-based RAG:} Mỗi agent chuyên biệt thực hiện truy xuất riêng cho domain của mình (property, market, legal, investment), sau đó kết quả được tổng hợp.
-    \item \textbf{Multi-step RAG (Agent Service):} Sử dụng retrieval planner để lập kế hoạch truy xuất qua nhiều bước, mỗi bước có thể truy xuất từ các nguồn khác nhau.
-\end{itemize}
-
-\subsection{Multi-Agent System (Hệ đa tác tử)}
-
-Hệ đa tác tử (Multi-Agent System -- MAS) là kiến trúc trong đó nhiều agent (tác tử) chuyên biệt cùng phối hợp để giải quyết một nhiệm vụ phức tạp. Mỗi agent đảm nhận một vai trò riêng, có system prompt riêng, và có thể truy cập các công cụ (tools) khác nhau. Kiến trúc này phù hợp với bài toán tư vấn bất động sản vì một truy vấn của người dùng thường liên quan đến nhiều khía cạnh: tìm kiếm, thị trường, pháp lý và đầu tư.
-
-Trong đồ án, hệ thống multi-agent được triển khai theo hai lớp:
-
-\subsubsection*{Lớp 1: Pipeline nội bộ (backend/app/services/chatbot/)}
-
-Đây là pipeline chính phục vụ người dùng cuối, hoạt động theo cơ chế:
-
-\begin{enumerate}
-    \item \textbf{Router} -- Phân loại ý định người dùng. Hỗ trợ hai phương thức:
+    \item \textbf{Xác thực và quản lý tài khoản:}
     \begin{itemize}
-        \item \textit{Keyword-based routing:} Sử dụng biểu thức chính quy (regex) và từ khóa tiếng Việt đã chuẩn hóa (không dấu) để nhận diện ý định. Ví dụ: các từ khóa ``phap ly'', ``so do'', ``cong chung'' kích hoạt legal\_advisor; ``dau tu'', ``loi nhuan'', ``sinh loi'' kích hoạt investment\_advisor. Phương thức này hoạt động không cần API key, đảm bảo tính sẵn sàng của hệ thống.
-        \item \textit{Gemini-based routing:} Khi GEMINI\_API\_KEY được cấu hình, sử dụng Google Gemini 2.0 Flash để phân loại ý định với độ chính xác cao hơn. Router gửi prompt chứa danh sách intent có thể và yêu cầu Gemini trả về JSON với intent và target agents.
+        \item Đăng ký tài khoản mới với email và mật khẩu. Mật khẩu được hash bằng bcrypt trước khi lưu trữ.
+        \item Đăng nhập bằng email/mật khẩu, hệ thống trả về JWT token có thời hạn 24 giờ. Token được lưu ở client (localStorage) và gửi kèm trong Authorization header cho các request tiếp theo.
+        \item Người dùng chưa đăng nhập (anonymous) vẫn có thể sử dụng chatbot với giới hạn 20 lượt/ngày. Người dùng đã xác thực được nâng lên 200 lượt/ngày.
+        \item Hồ sơ người dùng bao gồm: họ tên, email, số điện thoại, ảnh đại diện, quyền (is\_admin, is\_superuser).
     \end{itemize}
 
-    \item \textbf{Orchestrator} -- Nhận kết quả routing, chọn các agent tương ứng và gọi chúng song song qua \texttt{asyncio.gather()}. Sau khi tất cả agent hoàn thành, orchestrator tổng hợp kết quả: ghép nội dung, gộp danh sách nguồn, loại bỏ suggested actions trùng lặp.
-
-    \item \textbf{4 Agent chuyên biệt} -- Mỗi agent nhận query, routing decision và database session, thực hiện truy xuất riêng và trả về AgentResult:
+    \item \textbf{Duyệt và tìm kiếm bất động sản:}
     \begin{itemize}
-        \item \textbf{Property Search Agent (agents/property.py):} Trích xuất bộ lọc từ truy vấn (giá, diện tích, khu vực, loại hình) bằng \texttt{extract\_search\_filters()}, thực hiện hybrid search trên bảng listings, định dạng kết quả thành danh sách bất động sản kèm giải thích.
-        \item \textbf{Market Analysis Agent (agents/market.py):} Truy vấn thống kê thị trường (giá trung bình, số lượng tin, phân bố) từ bảng listings, cung cấp phân tích xu hướng theo khu vực và loại hình.
-        \item \textbf{Legal Advisor Agent (agents/legal.py):} Tìm kiếm trong legal knowledge base (articles có category liên quan đến pháp lý) để cung cấp thông tin về thủ tục, quy định và lưu ý pháp lý.
-        \item \textbf{Investment Advisor Agent (agents/investment.py):} Phân tích khả năng sinh lời dựa trên giá, vị trí và xu hướng thị trường; đưa ra đánh giá sơ bộ về tiềm năng đầu tư.
+        \item \textbf{Danh sách bất động sản bán:} Hiển thị dưới dạng lưới thẻ (card grid) với phân trang (pagination). Mỗi thẻ hiển thị: tiêu đề, giá, diện tích, địa chỉ (quận, thành phố), số phòng ngủ, loại tin (VIP/thường).
+        \item \textbf{Danh sách bất động sản cho thuê:} Tương tự như trang bán nhưng dành riêng cho tin cho thuê.
+        \item \textbf{Bộ lọc nâng cao:} Người dùng có thể lọc theo 10+ tiêu chí: loại tin (bán/cho thuê), loại hình bất động sản (căn hộ, nhà riêng, đất nền, biệt thự,\dots), thành phố, quận/huyện, khoảng giá (từ -- đến), diện tích (từ -- đến), số phòng ngủ, số phòng tắm, hướng nhà.
+        \item \textbf{Tìm kiếm theo từ khóa:} Hỗ trợ tìm kiếm full-text trên các trường tiêu đề, mô tả, địa chỉ, quận, thành phố.
+        \item \textbf{Sắp xếp kết quả:} Theo giá tăng dần/giảm dần, diện tích tăng dần/giảm dần, mới nhất.
+    \end{itemize}
+
+    \item \textbf{Xem chi tiết bất động sản:}
+    \begin{itemize}
+        \item Trang chi tiết hiển thị đầy đủ thông tin của một bất động sản: tiêu đề, mô tả chi tiết, giá (dạng số + text), đơn giá theo m\textsuperscript{2}, diện tích (dạng số + text), địa chỉ đầy đủ (phường/xã, quận/huyện, tỉnh/thành phố), tọa độ địa lý (latitude, longitude).
+        \item Thông số kỹ thuật: số phòng ngủ, số phòng tắm, số tầng, hướng nhà, hướng ban công, mặt tiền, đường vào.
+        \item Thông tin pháp lý và nội thất: tình trạng pháp lý (sổ đỏ, sổ hồng,\dots), tình trạng nội thất (đầy đủ, cơ bản, bàn giao thô).
+        \item Thông tin liên hệ: tên và số điện thoại người đăng.
+        \item \textbf{Bất động sản tương tự:} Hệ thống tự động gợi ý các bất động sản có đặc điểm tương đồng (cùng khu vực, cùng phân khúc giá, cùng loại hình).
+    \end{itemize}
+
+    \item \textbf{Thống kê và phân tích thị trường:}
+    \begin{itemize}
+        \item \textbf{Tổng quan thị trường:} Hiển thị các chỉ số chính: tổng số tin đăng đang hoạt động, giá trung bình, diện tích trung bình, số lượng tin bán và cho thuê, số thành phố và quận/huyện có dữ liệu.
+        \item \textbf{Top khu vực:} Bảng xếp hạng các thành phố/quận có nhiều tin đăng nhất, có thể lọc theo loại tin.
+        \item \textbf{Thống kê giá theo quận:} Với mỗi quận trong một thành phố, hiển thị số lượng tin, giá trung bình, giá thấp nhất, giá cao nhất và đơn giá trung bình/m\textsuperscript{2}.
+        \item \textbf{Phân bố loại hình:} Thống kê số lượng tin theo từng loại hình bất động sản (căn hộ, nhà riêng, đất nền,\dots).
+    \end{itemize}
+
+    \item \textbf{Tương tác với chatbot tư vấn:}
+    \begin{itemize}
+        \item \textbf{Chat widget nổi:} Luôn hiển thị ở góc phải dưới màn hình, có thể mở rộng/thu gọn. Người dùng có thể đặt câu hỏi bất kỳ lúc nào.
+        \item \textbf{Hội thoại đa lượt:} Hệ thống lưu trữ toàn bộ lịch sử hội thoại theo phiên (session). Người dùng có thể xem lại các phiên chat trước đó.
+        \item \textbf{Phản hồi có trích dẫn nguồn:} Mỗi câu trả lời của chatbot đều kèm danh sách nguồn tham khảo (tên bất động sản, đường dẫn, điểm liên quan), cho phép người dùng kiểm chứng thông tin.
+        \item \textbf{Gợi ý câu hỏi tiếp theo:} Sau mỗi phản hồi, chatbot đề xuất 2--3 câu hỏi liên quan để người dùng tiếp tục khai thác.
+        \item \textbf{Đánh giá chất lượng:} Người dùng có thể đánh giá phản hồi (thích/không thích) và để lại nhận xét, giúp cải thiện chất lượng hệ thống.
+        \item \textbf{Cá nhân hóa:} Hệ thống ghi nhớ sở thích của người dùng (khu vực ưa thích, ngân sách, loại hình) và sử dụng chúng để cá nhân hóa phản hồi trong các phiên sau.
     \end{itemize}
 \end{enumerate}
 
-\subsubsection*{Lớp 2: Agent Service (agent\_service/)}
+\subsubsection{Nhóm chức năng chatbot đa tác tử}
 
-Microservice riêng biệt chạy trên cổng 8100, sử dụng LangGraph StateGraph để điều phối multi-agent workflow với 8 node tuần tự:
-
-\begin{enumerate}
-    \item \textbf{Context Builder} -- Xây dựng ngữ cảnh hội thoại từ lịch sử chat và user preferences.
-    \item \textbf{Readiness Checker} -- Kiểm tra trạng thái sẵn sàng của các nguồn dữ liệu (listings, projects, articles, legal\_kb) qua bảng source\_readiness.
-    \item \textbf{Router} -- Phân loại ý định và chọn target agents.
-    \item \textbf{Retrieval Planner} -- Lập kế hoạch truy xuất đa bước: xác định cần truy vấn những nguồn nào, với bộ lọc gì, độ ưu tiên ra sao.
-    \item \textbf{Specialist Agents} -- Chạy song song các agent được chọn (property\_search, market\_analysis, legal\_advisor, investment\_advisor), mỗi agent sử dụng LLM (Gemini) kết hợp với tools (retrieval, market\_stats).
-    \item \textbf{Synthesizer} -- Tổng hợp kết quả từ các specialist agents thành phản hồi cuối cùng, đảm bảo tính mạch lạc và đầy đủ.
-    \item \textbf{Safety Validator} -- Kiểm tra phản hồi về các tiêu chí: groundedness (có căn cứ), helpfulness (hữu ích), safety (an toàn), citation\_quality (chất lượng trích dẫn).
-    \item \textbf{Memory Proposals} -- Trích xuất sở thích người dùng từ hội thoại (ví dụ: ``thích căn hộ Quận 7'', ``ngân sách dưới 3 tỷ'') và tạo MemoryProposal để lưu vào hệ thống.
-\end{enumerate}
-
-\subsubsection*{Cơ chế ghi nhớ người dùng (Memory System)}
-
-Hệ thống tích hợp cơ chế ghi nhớ thông qua hai bảng trong cơ sở dữ liệu:
-
-\begin{itemize}
-    \item \textbf{UserPreference:} Lưu trữ sở thích đã được xác nhận của người dùng dưới dạng key-value JSON (ví dụ: \texttt{preferred\_city = "Ho Chi Minh"}, \texttt{budget\_max = 3.0}). Các preference có độ tin cậy (confidence score) và nguồn gốc (source: user, agent\_proposal, system).
-    \item \textbf{MemoryProposal:} Lưu trữ các đề xuất sở thích được agent trích xuất từ hội thoại nhưng chưa được xác nhận. Mỗi proposal có trạng thái (pending, accepted, rejected) và có thể yêu cầu người dùng xác nhận.
-\end{itemize}
-
-Một số preference key được auto-apply khi confidence $\ge 0.8$ (preferred\_city, preferred\_district, preferred\_property\_type, budget\_max, budget\_min). Các key khác cần người dùng xác nhận thông qua API \texttt{POST /preferences/memory-proposals/\{id\}/accept}.
-
-\subsection{Vector Embedding và Tìm kiếm ngữ nghĩa}
-
-\subsubsection*{Vector Embedding}
-
-Vector embedding là kỹ thuật chuyển đổi văn bản thành một vector số thực $d$-chiều trong không gian Euclidean, sao cho các văn bản có ngữ nghĩa tương đồng sẽ nằm gần nhau trong không gian này. Khoảng cách giữa hai vector thường được đo bằng cosine similarity hoặc Euclidean distance (L2).
-
-Đồ án sử dụng mô hình \textbf{BGE-M3} (BAAI/bge-m3) -- một mô hình embedding đa ngôn ngữ mã nguồn mở, hỗ trợ hơn 100 ngôn ngữ bao gồm tiếng Việt. Các đặc điểm kỹ thuật của BGE-M3 trong đồ án:
-
-\begin{itemize}
-    \item \textbf{Không gian embedding:} 1024 chiều.
-    \item \textbf{Normalize embeddings:} True (chuẩn hóa về unit vector để dùng cosine similarity hiệu quả).
-    \item \textbf{Max sequence length:} 8192 tokens.
-    \item \textbf{Batch size:} 16 văn bản mỗi lần encode.
-    \item \textbf{Retry policy:} 3 lần thử với exponential backoff.
-    \item \textbf{Device:} Tự động chọn CPU/GPU dựa trên cấu hình.
-\end{itemize}
-
-Mô hình được sử dụng cho hai mục đích: (1) tạo embedding cho toàn bộ dữ liệu (listings, projects, articles, legal docs) trong quá trình indexing, và (2) tạo embedding cho câu truy vấn của người dùng trong quá trình tìm kiếm. Cùng một mô hình được dùng cho cả indexing và querying để đảm bảo tính nhất quán của không gian vector.
-
-\subsubsection*{Tìm kiếm ngữ nghĩa (Semantic Search)}
-
-Tìm kiếm ngữ nghĩa sử dụng vector embedding để tìm các đoạn văn bản có nội dung tương đồng với câu truy vấn, ngay cả khi không có từ khóa chung. Đồ án sử dụng \textbf{pgvector} -- extension của PostgreSQL -- để lưu trữ và tìm kiếm vector. Cụ thể:
-
-\begin{itemize}
-    \item \textbf{Kiểu dữ liệu:} \texttt{VECTOR(1024)} -- lưu vector 1024 chiều.
-    \item \textbf{Độ đo:} Cosine distance (\texttt{<=>} operator trong pgvector).
-    \item \textbf{Chỉ mục:} HNSW (Hierarchical Navigable Small World) -- cấu trúc chỉ mục xấp xỉ cho tìm kiếm k-NN hiệu quả với tham số $m = 16$ (số kết nối mỗi node) và $ef\_construction = 64$ (kích thước danh sách động khi xây dựng).
-\end{itemize}
-
-\subsection{Hybrid Search và Reranking}
-
-\subsubsection*{Hybrid Search (Tìm kiếm lai)}
-
-Hybrid Search kết hợp hai phương pháp tìm kiếm bổ trợ:
+Đây là nhóm chức năng cốt lõi tạo nên sự khác biệt của hệ thống so với các nền tảng bất động sản truyền thống:
 
 \begin{enumerate}
-    \item \textbf{Structured Filtering (SQL WHERE):} Áp dụng các bộ lọc có cấu trúc trên các trường quan hệ -- listing\_type (sale/rent), property\_type, city, district, price (min/max), area (min/max), bedrooms. Điều này đảm bảo kết quả chính xác về mặt thuộc tính.
-
-    \item \textbf{Semantic Search (pgvector kNN):} Sử dụng vector embedding để tìm các chunks có nội dung tương đồng ngữ nghĩa với câu truy vấn. Điều này cho phép tìm thấy các bất động sản phù hợp với mô tả mềm (``view đẹp'', ``gần trường học'', ``khu an ninh'').
-\end{enumerate}
-
-Hai phương pháp được kết hợp trong cùng một truy vấn SQL: đầu tiên lọc theo điều kiện WHERE trên bảng listings, sau đó join với bảng chunks và sắp xếp theo cosine distance trên cột embedding. Kết quả cuối cùng là danh sách $k$ bất động sản vừa thỏa mãn bộ lọc cứng, vừa có nội dung mô tả phù hợp ngữ nghĩa.
-
-\subsubsection*{Reranking (Xếp hạng lại)}
-
-Sau khi có tập kết quả ứng viên từ hybrid search, kỹ thuật reranking được áp dụng để sắp xếp lại theo độ liên quan thực tế. Đồ án sử dụng \textbf{Cohere Rerank Multilingual v3.0} -- mô hình Cross-Encoder chuyên dụng:
-
-\begin{itemize}
-    \item \textbf{Nguyên lý:} Không giống như Bi-Encoder (mã hóa query và document riêng biệt rồi so sánh), Cross-Encoder xử lý cặp (query, document) đồng thời qua cùng một mạng, cho phép mô hình học được mối tương tác tinh tế giữa chúng. Điều này cho độ chính xác cao hơn đáng kể, đặc biệt với các truy vấn phức tạp.
-
-    \item \textbf{Cách sử dụng trong đồ án:} Gọi Cohere API với query gốc và danh sách documents (nội dung các chunks đã truy xuất), nhận về relevance score cho từng cặp. Kết quả được sắp xếp lại theo score giảm dần và lấy top\_n = 5 kết quả tốt nhất. Reranking được áp dụng tùy chọn (khi COHERE\_API\_KEY được cấu hình).
-\end{itemize}
-
-\subsubsection*{Redis Caching}
-
-Để giảm độ trễ cho các truy vấn lặp lại, hệ thống tích hợp Redis caching ở hai cấp độ:
-
-\begin{itemize}
-    \item \textbf{Embedding cache:} Cache vector embedding của câu truy vấn (key là hash của query text + model name + dimension). Điều này đặc biệt hữu ích khi nhiều agent cùng truy xuất với cùng một query.
-    \item \textbf{Search result cache:} Cache kết quả hybrid search (key là hash của query + filters). Thời gian sống (TTL) mặc định được cấu hình để cân bằng giữa freshness và hiệu năng.
-\end{itemize}
-
-\section{Các công nghệ sử dụng}
-
-\subsection{FastAPI}
-
-FastAPI là web framework Python hiện đại, được xây dựng trên nền tảng Starlette (ASGI) và Pydantic. Các đặc điểm chính:
-
-\begin{itemize}
-    \item \textbf{Hiệu năng cao:} FastAPI là một trong những Python framework nhanh nhất, ngang hàng với Node.js và Go, nhờ kiến trúc bất đồng bộ (async/await) và ASGI.
-    \item \textbf{Async database:} Tích hợp SQLAlchemy 2.0 async với asyncpg driver, cho phép xử lý database I/O không chặn (non-blocking). Connection pool được cấu hình với pool\_size=20 và max\_overflow=10.
-    \item \textbf{Validation tự động:} Pydantic v2 cung cấp validation dữ liệu đầu vào/đầu ra với type hints, tự động sinh JSON Schema và tài liệu OpenAPI.
-    \item \textbf{Dependency injection:} Cơ chế Depends() cho phép tái sử dụng logic (database session, authentication, rate limiting) một cách sạch sẽ.
-    \item \textbf{Tài liệu tương tác:} Swagger UI (/docs) và ReDoc được sinh tự động từ code.
-\end{itemize}
-
-Trong đồ án, FastAPI được sử dụng cho cả Backend API (cổng 8000) và Agent Service (cổng 8100).
-
-\subsection{Next.js}
-
-Next.js là React framework hỗ trợ Server-Side Rendering (SSR), Static Site Generation (SSG), Incremental Static Regeneration (ISR) và App Router (từ phiên bản 13+). Đồ án sử dụng Next.js 16 với React 19:
-
-\begin{itemize}
-    \item \textbf{App Router:} Tổ chức trang theo cấu trúc thư mục \texttt{app/}, mỗi thư mục là một route segment. Hỗ trợ layouts lồng nhau, loading states, error boundaries.
-    \item \textbf{Server Components:} Mặc định các component là React Server Components (RSC), giảm lượng JavaScript gửi về client.
-    \item \textbf{Tailwind CSS v4:} Utility-first CSS framework cho phép xây dựng giao diện nhanh, nhất quán, không cần viết CSS thủ công.
-    \item \textbf{SSR cho SEO:} Các trang danh sách và chi tiết bất động sản được render phía server, đảm bảo nội dung có sẵn cho crawler của công cụ tìm kiếm.
-    \item \textbf{API client:} File \texttt{lib/api.ts} định nghĩa typed API client với các hàm gọi backend FastAPI, sử dụng fetch API với JWT token trong Authorization header.
-\end{itemize}
-
-\subsection{PostgreSQL + pgvector}
-
-PostgreSQL là hệ quản trị cơ sở dữ liệu quan hệ mã nguồn mở, được sử dụng làm cơ sở dữ liệu chính của hệ thống. Extension \textbf{pgvector} bổ sung khả năng lưu trữ và tìm kiếm vector, biến PostgreSQL thành vector database:
-
-\begin{itemize}
-    \item \textbf{Kiểu dữ liệu VECTOR:} Lưu vector $d$-chiều (trong đồ án: 1024) dưới dạng chuỗi bytes tối ưu.
-    \item \textbf{Phép toán tương đồng:} Hỗ trợ 3 độ đo khoảng cách:
+    \item \textbf{Phân loại ý định người dùng (Intent Routing):}
     \begin{itemize}
-        \item \texttt{<->} -- Euclidean distance (L2).
-        \item \texttt{<\#>} -- Negative inner product.
-        \item \texttt{<=>} -- Cosine distance (được sử dụng trong đồ án).
+        \item Hệ thống tự động phân tích câu hỏi tiếng Việt để xác định người dùng đang cần: tìm kiếm bất động sản, phân tích thị trường, tư vấn pháp lý, hay tư vấn đầu tư.
+        \item \textbf{Hai cơ chế routing:} (1) Keyword-based -- sử dụng regex và từ khóa tiếng Việt không dấu để nhận diện ý định, hoạt động không cần API key; (2) Gemini-based -- sử dụng Google Gemini 2.0 Flash để phân loại với độ chính xác cao hơn, tự động kích hoạt khi có GEMINI\_API\_KEY.
+        \item Router có thể chọn nhiều agent cùng lúc nếu câu hỏi liên quan đến nhiều lĩnh vực (ví dụ: ``căn hộ Quận 7 dưới 3 tỷ, thủ tục pháp lý thế nào'' sẽ kích hoạt cả Property Search và Legal Advisor).
     \end{itemize}
-    \item \textbf{HNSW Index:} Chỉ mục xấp xỉ cho tìm kiếm k-NN nhanh. Trong đồ án, HNSW index được tạo trực tiếp trong model definition qua \texttt{Index()} với postgresql\_using="hnsw" và postgresql\_ops=\{"embedding": "vector\_cosine\_ops"\}.
-    \item \textbf{Ưu điểm so với dedicated vector DB:} Dữ liệu quan hệ (listings, users, chats) và dữ liệu vector (chunks, embeddings) nằm trong cùng một hệ thống, cho phép JOIN, filter, và transaction ACID trên cả hai loại dữ liệu. Giảm độ phức tạp vận hành (chỉ cần quản lý một database).
-\end{itemize}
 
-\subsection{LangGraph}
+    \item \textbf{Tìm kiếm bất động sản thông minh (Property Search):}
+    \begin{itemize}
+        \item Tự động trích xuất bộ lọc có cấu trúc từ câu hỏi tiếng Việt: loại giao dịch (mua/thuê), loại hình (căn hộ, nhà,\dots), thành phố, quận, khoảng giá, diện tích. Ví dụ: ``tìm căn hộ Quận 7 dưới 5 tỷ, 2 phòng ngủ'' được parse thành \texttt{\{listing\_type: sale, property\_type: apartment, district: Quận 7, max\_price: 5, bedrooms: 2\}}.
+        \item Thực hiện hybrid search kết hợp SQL filtering và pgvector semantic search. Kết quả được xếp hạng lại qua Cohere Rerank (nếu có API key) và trả về kèm giải thích lý do từng bất động sản phù hợp.
+    \end{itemize}
 
-LangGraph là thư viện của LangChain cho phép xây dựng các ứng dụng multi-agent có trạng thái (stateful) dưới dạng đồ thị có hướng (Directed Graph). Các khái niệm chính:
+    \item \textbf{Phân tích thị trường (Market Analysis):}
+    \begin{itemize}
+        \item Cung cấp số liệu thống kê thị trường theo thời gian thực: giá trung bình, giá/m\textsuperscript{2}, số lượng tin đăng, xu hướng biến động theo khu vực và loại hình.
+        \item So sánh giữa các khu vực: giá trung bình tại Quận 7 so với Quận 2, giá căn hộ so với nhà riêng trong cùng khu vực.
+    \end{itemize}
 
-\begin{itemize}
-    \item \textbf{StateGraph:} Đồ thị trạng thái trong đó mỗi node nhận state object, xử lý và trả về state đã cập nhật. State được định nghĩa bởi TypedDict hoặc Pydantic model.
-    \item \textbf{Nodes:} Các hàm xử lý (có thể là sync hoặc async) đại diện cho một bước trong pipeline. Trong đồ án, Agent Service có 8 nodes.
-    \item \textbf{Edges:} Kết nối có hướng giữa các nodes, xác định luồng xử lý. Có hai loại: normal edge (luôn đi từ A đến B) và conditional edge (chọn node tiếp theo dựa trên state).
-    \item \textbf{Checkpointing:} Lưu trạng thái sau mỗi bước, cho phép resume từ điểm dừng và debug.
-\end{itemize}
+    \item \textbf{Tư vấn pháp lý (Legal Advisor):}
+    \begin{itemize}
+        \item Cung cấp thông tin về các vấn đề pháp lý thường gặp trong giao dịch bất động sản: sổ đỏ/sổ hồng, thủ tục sang tên, công chứng hợp đồng, các loại thuế và phí, quy hoạch, điều kiện vay ngân hàng.
+        \item Thông tin được truy xuất từ Legal Knowledge Base -- kho tài liệu pháp lý được xử lý và lập chỉ mục định kỳ hàng tháng.
+    \end{itemize}
 
-Trong đồ án, LangGraph được sử dụng trong Agent Service (\texttt{agent\_service/graph/workflow.py}) với StateGraph được compile và chạy qua \texttt{chat\_graph.ainvoke()}. State object (\texttt{AgentGraphState}) theo dõi toàn bộ quá trình xử lý: request gốc, intent, retrieval plan, kết quả từng agent, final response, sources, trace steps, warnings.
+    \item \textbf{Tư vấn đầu tư (Investment Advisor):}
+    \begin{itemize}
+        \item Phân tích tiềm năng đầu tư dựa trên các yếu tố: vị trí, giá, xu hướng thị trường, tiện ích xung quanh, quy hoạch hạ tầng.
+        \item Đánh giá sơ bộ về thanh khoản, khả năng cho thuê lại, tỷ suất sinh lời kỳ vọng và biên an toàn tài chính.
+    \end{itemize}
 
-Pipeline nội bộ trong backend (\texttt{chatbot/orchestrator.py}) không sử dụng LangGraph mà dùng cơ chế đơn giản hơn: router chọn agents, \texttt{asyncio.gather()} chạy song song, và combine kết quả.
+    \item \textbf{Tổng hợp và phản hồi (Synthesis):}
+    \begin{itemize}
+        \item Khi nhiều agent cùng được kích hoạt, orchestrator gọi chúng song song và tổng hợp kết quả thành một phản hồi duy nhất, mạch lạc, tránh trùng lặp.
+        \item Mỗi phản hồi đều được kiểm tra an toàn (safety validation) trước khi gửi đến người dùng.
+    \end{itemize}
 
-\subsection{Google Gemini}
-
-Google Gemini 2.0 Flash là mô hình ngôn ngữ lớn đa năng của Google, hỗ trợ đa ngôn ngữ (bao gồm tiếng Việt) với khả năng sinh văn bản, phân loại và tạo embedding. Trong đồ án, Gemini được sử dụng cho ba nhiệm vụ:
-
-\begin{enumerate}
-    \item \textbf{Intent Router (Gemini-based routing):} Khi GEMINI\_API\_KEY được cấu hình, router sử dụng Gemini để phân loại ý định người dùng thay vì keyword matching. Prompt yêu cầu Gemini phân tích query và trả về JSON với intent và danh sách target agents phù hợp. Điều này cho độ chính xác cao hơn với các truy vấn phức tạp hoặc mơ hồ.
-
-    \item \textbf{LLM cho Agent Service:} Trong Agent Service, Gemini được sử dụng làm LLM chính cho các specialist agents (qua GeminiClient wrapper trong \texttt{agent\_service/llm/gemini.py}). Mỗi agent nhận system prompt mô tả vai trò, context từ retrieval, và sinh phản hồi chuyên biệt.
-
-    \item \textbf{LLM Judge:} Gemini được sử dụng để đánh giá chất lượng phản hồi của chatbot qua 5 tiêu chí: groundedness (tính có căn cứ), helpfulness (tính hữu ích), citation\_quality (chất lượng trích dẫn), safety (an toàn), và trace\_completeness (tính đầy đủ của trace). Prompt judge được viết bằng tiếng Việt và yêu cầu output JSON.
+    \item \textbf{Ghi nhớ và cá nhân hóa (Memory System):}
+    \begin{itemize}
+        \item Chatbot tự động trích xuất sở thích người dùng từ hội thoại (ví dụ: ``Tôi thích căn hộ ở Quận 7, ngân sách khoảng 3 tỷ'') và lưu dưới dạng MemoryProposal.
+        \item Các sở thích có độ tin cậy cao ($\ge 80\%$) được tự động áp dụng. Các sở thích khác cần người dùng xác nhận.
+        \item Sở thích đã xác nhận được sử dụng để cá nhân hóa phản hồi trong các phiên chat sau.
+    \end{itemize}
 \end{enumerate}
 
-\textbf{Cơ chế fallback:} Khi GEMINI\_API\_KEY không được cấu hình, hệ thống tự động chuyển sang keyword-based routing cho intent classification. Các agent trong pipeline nội bộ có thể hoạt động không cần LLM (dùng template-based response từ dữ liệu truy xuất). Điều này đảm bảo hệ thống luôn hoạt động được ngay cả khi không có kết nối đến Gemini API.
+\subsubsection{Nhóm chức năng quản trị và tự động hóa}
 
-\subsection{BGE-M3 Embedding}
+\begin{enumerate}
+    \item \textbf{Thu thập dữ liệu tự động:}
+    \begin{itemize}
+        \item \textbf{Crawl tin đăng hàng ngày:} Tự động thu thập tin bán và cho thuê mới từ batdongsan.com.vn vào 02:00 giờ Hồ Chí Minh. Cơ chế watermark đảm bảo chỉ crawl dữ liệu mới, tránh trùng lặp.
+        \item \textbf{Crawl dự án hàng tuần:} Thu thập thông tin dự án bất động sản (chủ đầu tư, quy mô, vị trí, tiện ích) vào Chủ nhật hàng tuần.
+        \item \textbf{Crawl tin tức hàng tuần:} Thu thập bài viết phân tích thị trường, tin tức bất động sản.
+        \item \textbf{Cập nhật kiến thức pháp lý hàng tháng:} Xử lý lại toàn bộ tài liệu pháp lý, bao gồm cả HTML và PDF.
+    \end{itemize}
 
-BGE-M3 (BAAI/bge-m3) là mô hình embedding đa ngôn ngữ mã nguồn mở từ BAAI (Beijing Academy of Artificial Intelligence), hỗ trợ hơn 100 ngôn ngữ bao gồm tiếng Việt. Đây là mô hình embedding chính của đồ án, được chọn vì các lý do:
+    \item \textbf{Xử lý dữ liệu (ETL Pipeline):}
+    \begin{itemize}
+        \item \textbf{Làm sạch:} Chuẩn hóa giá (tỷ, triệu, triệu/tháng), diện tích (m\textsuperscript{2}), phân loại loại hình bất động sản, chuẩn hóa địa chỉ.
+        \item \textbf{Làm giàu:} Geocoding -- chuyển địa chỉ thành tọa độ (latitude, longitude) qua Nominatim hoặc Goong API. Intent tagging -- tự động gán nhãn nhu cầu (``gần trường học'', ``view đẹp'', ``an ninh'',\dots) dựa trên nội dung mô tả.
+        \item \textbf{Chunking:} Chia văn bản thành các đoạn ngữ nghĩa (chunks) với 4 loại: overview (tổng quan), description (mô tả chi tiết), location (vị trí), intent\_tags (nhu cầu). Mỗi chunk được thiết kế để có thể đứng độc lập về mặt ngữ nghĩa.
+        \item \textbf{Embedding:} Tạo vector embedding 1024 chiều cho từng chunk sử dụng mô hình BGE-M3 (BAAI/bge-m3) với batch size 16 và retry policy 3 lần.
+        \item \textbf{Nạp dữ liệu:} Upsert vào PostgreSQL: bảng listings cho dữ liệu quan hệ, bảng chunks cho dữ liệu vector. Sử dụng cơ chế batch processing để tối ưu hiệu năng.
+    \end{itemize}
 
+    \item \textbf{Quản trị và giám sát hệ thống:}
+    \begin{itemize}
+        \item \textbf{Admin Dashboard:} Giao diện quản trị với các tab: Pipeline Readiness (trạng thái các nguồn dữ liệu), Agent Traces (lịch sử xử lý của agent với latency và status), Chat Feedback (phản hồi người dùng), Memory Proposals (các đề xuất đang chờ xác nhận).
+        \item \textbf{Observability:} Hệ thống tracing toàn diện cho phép theo dõi toàn bộ luồng xử lý của từng request chatbot: intent, agents được chọn, thời gian xử lý từng bước, kết quả retrieval, LLM calls, errors.
+        \item \textbf{Monitoring:} Prometheus metrics endpoint cung cấp các chỉ số: số lượng request chat, thời gian phản hồi, số lượng pipeline runs, tỷ lệ lỗi.
+        \item \textbf{Alerting:} Cơ chế cảnh báo qua Slack và email khi pipeline thất bại hoặc hiệu năng bất thường.
+    \end{itemize}
+\end{enumerate}
+
+\subsection{Yêu cầu phi chức năng}
+
+Bảng \ref{tab:nfr} tổng hợp các yêu cầu phi chức năng của hệ thống.
+
+\begin{longtable}{|p{4cm}|p{9.5cm}|}
+    \hline
+    \textbf{Tiêu chí} & \textbf{Yêu cầu chi tiết} \\
+    \hline
+    Hiệu năng & 
+    \begin{itemize}
+        \item API listings phản hồi $<500$ms với bộ lọc cơ bản, $<1000$ms với bộ lọc phức tạp
+        \item Chatbot pipeline hoàn thành $<5$s cho truy vấn thông thường, $<15$s cho truy vấn phức tạp có multi-agent
+        \item Trang web tải trong $<3$s (First Contentful Paint) trên kết nối 4G
+    \end{itemize} \\
+    \hline
+    Khả năng mở rộng &
+    \begin{itemize}
+        \item Kiến trúc microservices: mỗi service có thể scale độc lập
+        \item Database connection pool: 20 connections + 10 overflow
+        \item Redis caching giảm tải database cho truy vấn lặp lại
+        \item Airflow DAGs hỗ trợ parallel task execution
+    \end{itemize} \\
+    \hline
+    Bảo mật &
+    \begin{itemize}
+        \item Xác thực JWT với HS256, token hết hạn sau 24h
+        \item Mật khẩu hash bằng bcrypt với salt
+        \item Chống SQL injection qua SQLAlchemy ORM (parameterized queries)
+        \item Chống XSS qua Next.js auto-escaping
+        \item CORS whitelist qua biến môi trường CORS\_ORIGINS
+        \item Internal API giữa backend và agent service bảo vệ bằng internal key
+    \end{itemize} \\
+    \hline
+    Độ tin cậy &
+    \begin{itemize}
+        \item Fallback mechanism 3 cấp: multi-agent pipeline $\rightarrow$ simple RAG $\rightarrow$ thông báo an toàn
+        \item Retry policy cho embedding: 3 lần với exponential backoff
+        \item Retry policy cho Airflow tasks: 3 lần, 5--30 phút
+        \item Health check endpoints cho tất cả services
+        \item Database health check trước khi khởi động service
+    \end{itemize} \\
+    \hline
+    Khả năng bảo trì &
+    \begin{itemize}
+        \item Mã nguồn phân chia module rõ ràng theo domain
+        \item Docstring tiếng Anh cho tất cả hàm/class
+        \item Type hints đầy đủ (Python) và TypeScript (frontend)
+        \item Hơn 55 file test bao phủ toàn bộ module
+        \item ESLint cho frontend, compileall cho Python
+    \end{itemize} \\
+    \hline
+    Tương thích ngôn ngữ &
+    \begin{itemize}
+        \item Giao diện người dùng: 100\% tiếng Việt
+        \item Chatbot: hiểu và phản hồi bằng tiếng Việt
+        \item Embedding: BGE-M3 tối ưu cho hơn 100 ngôn ngữ bao gồm tiếng Việt
+        \item URL slugs: tiếng Việt không dấu
+    \end{itemize} \\
+    \hline
+    \caption{Các yêu cầu phi chức năng của hệ thống}
+    \label{tab:nfr}
+\end{longtable}
+
+\section{Thiết kế kiến trúc hệ thống}
+
+\subsection{Kiến trúc tổng thể}
+
+Hệ thống được thiết kế theo kiến trúc microservices, trong đó mỗi service đảm nhận một trách nhiệm riêng biệt và giao tiếp với nhau qua REST API. Hình~\ref{fig:architecture} thể hiện kiến trúc tổng thể của toàn bộ hệ thống với 5 tầng chính.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[angle=90,width=0.95\textheight]{figures/architecturepng.png}
+    \caption{Kiến trúc tổng thể hệ thống Nền tảng Tư vấn Bất động sản Tích hợp Chatbot}
+    \label{fig:architecture}
+\end{figure}
+
+\subsubsection{Tầng Người dùng (User Layer)}
+
+Người dùng tương tác với hệ thống qua trình duyệt web (desktop và mobile). Có hai nhóm người dùng chính:
 \begin{itemize}
-    \item \textbf{Chất lượng cao cho tiếng Việt:} BGE-M3 được huấn luyện trên corpus đa ngôn ngữ lớn, cho chất lượng embedding tốt với văn bản tiếng Việt -- vượt trội so với Gemini Embedding trong các thử nghiệm nội bộ.
-    \item \textbf{Không phụ thuộc API:} Là mô hình mã nguồn mở, chạy local qua thư viện \texttt{sentence-transformers}, không giới hạn về số lượng request hay chi phí API. Điều này đặc biệt quan trọng khi cần tạo embedding cho hàng trăm nghìn chunks.
-    \item \textbf{Hỗ trợ batch processing:} BGEEmbedder trong đồ án (\texttt{rag/embeddings.py}) hỗ trợ encode theo batch (batch\_size=16), chạy async qua \texttt{asyncio.to\_thread()} để không chặn event loop.
-    \item \textbf{Multi-granularity:} BGE-M3 hỗ trợ cả dense embedding (1024 chiều), sparse embedding (lexical), và multi-vector -- mặc dù đồ án hiện chỉ sử dụng dense embedding.
+    \item \textbf{Người dùng cuối:} Truy cập các trang duyệt bất động sản, xem thống kê thị trường và tương tác với chatbot tư vấn.
+    \item \textbf{Quản trị viên:} Truy cập admin dashboard để giám sát pipeline, theo dõi agent traces và quản lý phản hồi người dùng.
 \end{itemize}
 
-\subsection{Cohere Rerank}
+\subsubsection{Tầng Frontend -- Next.js (Port 3000)}
 
-Cohere Rerank Multilingual v3.0 là mô hình Cross-Encoder chuyên dụng cho bài toán xếp hạng lại kết quả truy xuất. So với cách tiếp cận Bi-Encoder (tạo embedding riêng cho query và document):
-
+Frontend được xây dựng với Next.js 16 và React 19, sử dụng App Router để tổ chức các trang. Các đặc điểm thiết kế chính:
 \begin{itemize}
-    \item \textbf{Kiến trúc Cross-Encoder:} Xử lý cặp (query, document) đồng thời qua cùng một mạng transformer, cho phép mô hình học được mối tương tác tinh tế giữa chúng. Điều này cho độ chính xác cao hơn đáng kể so với so sánh cosine similarity của Bi-Encoder.
-    \item \textbf{Đa ngôn ngữ:} Hỗ trợ tiếng Việt và nhiều ngôn ngữ khác, phù hợp với dữ liệu bất động sản tiếng Việt.
-    \item \textbf{Sử dụng trong đồ án:} Gọi qua HTTP API (httpx client), gửi query và danh sách documents, nhận relevance score cho từng cặp. Kết quả được lọc theo RERANK\_TOP\_N (mặc định: 5).
-    \item \textbf{Cấu hình linh hoạt:} Reranking có thể bật/tắt qua biến môi trường (RERANK\_PROVIDER), cho phép hệ thống hoạt động không cần Cohere API key.
+    \item \textbf{Server-Side Rendering (SSR):} Các trang danh sách và chi tiết bất động sản được render phía server, đảm bảo SEO và thời gian tải nhanh.
+    \item \textbf{React Server Components (RSC):} Mặc định sử dụng Server Components để giảm JavaScript gửi về client.
+    \item \textbf{Tailwind CSS v4:} Utility-first CSS framework đảm bảo giao diện nhất quán, responsive trên mọi thiết bị.
+    \item \textbf{Typed API Client:} File \texttt{lib/api.ts} cung cấp các hàm gọi backend với TypeScript type safety, tự động gắn JWT token vào header.
+    \item \textbf{Chat Widget:} Thành phần nổi (floating) luôn hiển thị, cho phép người dùng tương tác với chatbot ở bất kỳ trang nào.
 \end{itemize}
 
-\subsection{Redis}
+Frontend chỉ giao tiếp trực tiếp với Backend API qua REST. Frontend không được phép gọi trực tiếp Agent Service -- đây là nguyên tắc thiết kế quan trọng để đảm bảo bảo mật và khả năng bảo trì.
 
-Redis (Remote Dictionary Server) là cơ sở dữ liệu key-value in-memory, được sử dụng làm cache trong đồ án:
+\subsubsection{Tầng Backend API -- FastAPI (Port 8000)}
+
+Backend API là cổng giao tiếp chính của toàn bộ hệ thống, đảm nhận mọi request từ frontend. Backend được tổ chức thành 4 lớp:
+
+\begin{enumerate}
+    \item \textbf{Lớp Models (ORM):} Định nghĩa 14+ bảng dữ liệu với SQLAlchemy 2.0 async. Mỗi model ánh xạ trực tiếp đến một bảng trong PostgreSQL. Các mối quan hệ (relationships) được định nghĩa rõ ràng: Listing $\rightarrow$ Chunk (polymorphic), User $\rightarrow$ ChatSession $\rightarrow$ ChatMessage, User $\rightarrow$ UserPreference.
+
+    \item \textbf{Lớp Schemas (Pydantic):} Định nghĩa contract cho request/response. Pydantic v2 tự động validate dữ liệu đầu vào, sinh JSON Schema và tài liệu OpenAPI. Các schema được thiết kế tách biệt cho từng nghiệp vụ: listing (ListingCard, ListingDetail, PaginatedResponse), chat (ChatMessageRequest, ChatMessageResponse), auth (UserRegisterRequest, TokenResponse), admin (TraceSummary, PipelineReadinessItem).
+
+    \item \textbf{Lớp Routers (API Endpoints):} Xử lý HTTP request, gọi services tương ứng và trả về response. Backend có 7 router modules, mỗi router phụ trách một nhóm chức năng: listings, market, chat, auth, preferences, admin, metrics. Các router sử dụng dependency injection (Depends) để nhận database session và xác thực người dùng.
+
+    \item \textbf{Lớp Services (Business Logic):} Chứa toàn bộ logic nghiệp vụ, được chia thành 3 nhóm chính:
+    \begin{itemize}
+        \item \textbf{Chatbot Pipeline (\texttt{services/chatbot/}):} Pipeline multi-agent nội bộ với router (phân loại ý định), orchestrator (điều phối và tổng hợp), 4 agent chuyên biệt, context builder (xây dựng ngữ cảnh hội thoại), memory manager (quản lý ghi nhớ người dùng).
+        \item \textbf{RAG Services (\texttt{services/rag/}):} Các dịch vụ truy xuất thông tin: hybrid search (kết hợp SQL + vector + rerank + cache), embeddings (BGE-M3 wrapper với batch processing và retry), cache (Redis caching cho embedding và kết quả tìm kiếm).
+        \item \textbf{Agent Service Client (\texttt{services/agent\_service/}):} HTTP client giao tiếp với Agent Service qua internal API, sử dụng internal key authentication.
+    \end{itemize}
+\end{enumerate}
+
+\subsubsection{Tầng Agent Service -- FastAPI + LangGraph (Port 8100)}
+
+Agent Service là microservice riêng biệt, được thiết kế để xử lý các tác vụ AI/ML phức tạp mà không ảnh hưởng đến hiệu năng của Backend API chính. Service này sử dụng LangGraph để điều phối multi-agent workflow.
+
+\textbf{LangGraph StateGraph Workflow:}
+
+Agent Service triển khai một quy trình 8 bước dưới dạng StateGraph:
+
+\begin{enumerate}
+    \item \textbf{Context Builder:} Xây dựng ngữ cảnh hội thoại từ lịch sử chat (ChatMessage) và sở thích người dùng (UserPreference). Ngữ cảnh này được đưa vào prompt của tất cả các bước sau.
+    
+    \item \textbf{Readiness Checker:} Kiểm tra trạng thái sẵn sàng của các nguồn dữ liệu (listings, projects, articles, legal\_kb) qua bảng source\_readiness. Nếu một nguồn chưa sẵn sàng, hệ thống sẽ cảnh báo và điều chỉnh chiến lược truy xuất.
+
+    \item \textbf{Router:} Phân loại ý định người dùng và chọn danh sách agent cần kích hoạt. Router sử dụng Gemini 2.0 Flash với prompt được thiết kế riêng cho domain bất động sản tiếng Việt.
+
+    \item \textbf{Retrieval Planner:} Lập kế hoạch truy xuất đa bước -- xác định cần truy vấn những nguồn dữ liệu nào (listings, projects, articles), với bộ lọc gì, độ ưu tiên ra sao. Kế hoạch được cấu trúc dưới dạng danh sách các RetrievalTask.
+
+    \item \textbf{Specialist Agents (chạy song song):} Các agent chuyên biệt được thực thi đồng thời:
+    \begin{itemize}
+        \item \textbf{Property Search Agent:} Thực hiện hybrid search trên listings, trích xuất bộ lọc từ query, định dạng kết quả.
+        \item \textbf{Market Analysis Agent:} Truy vấn thống kê thị trường, phân tích xu hướng.
+        \item \textbf{Legal Advisor Agent:} Tìm kiếm trong legal knowledge base.
+        \item \textbf{Investment Advisor Agent:} Phân tích tiềm năng đầu tư.
+    \end{itemize}
+    Mỗi agent nhận system prompt mô tả vai trò, context từ retrieval planner, và sử dụng Gemini để sinh phản hồi chuyên biệt.
+
+    \item \textbf{Synthesizer:} Tổng hợp kết quả từ các specialist agents thành một phản hồi cuối cùng mạch lạc. Synthesizer được hướng dẫn ưu tiên thông tin có độ tin cậy cao, loại bỏ trùng lặp và đảm bảo tính đầy đủ.
+
+    \item \textbf{Safety Validator:} Kiểm tra phản hồi cuối cùng về 5 tiêu chí: groundedness (có căn cứ từ nguồn), helpfulness (hữu ích cho người dùng), citation\_quality (chất lượng trích dẫn), safety (an toàn, không đưa ra khẳng định pháp lý/tài chính tuyệt đối), trace\_completeness (đầy đủ thông tin tracing).
+
+    \item \textbf{Memory Proposals:} Trích xuất sở thích tiềm năng của người dùng từ nội dung hội thoại và tạo MemoryProposal. Ví dụ: nếu người dùng nhiều lần hỏi về căn hộ Quận 7, hệ thống sẽ đề xuất lưu \texttt{preferred\_district = "Quận 7"}.
+\end{enumerate}
+
+\textbf{Cơ chế đánh giá chất lượng (LLM Judge):}
+
+Sau mỗi phản hồi, hệ thống có thể kích hoạt LLM Judge (Gemini) để đánh giá chất lượng. Judge chấm điểm theo 5 metrics (thang 0.0--1.0) và cung cấp rationale cho từng điểm. Kết quả đánh giá được lưu vào agent\_traces để phân tích và cải thiện hệ thống.
+
+\textbf{Tương tác giữa Backend và Agent Service:}
 
 \begin{itemize}
-    \item \textbf{Embedding cache:} Lưu vector embedding của query để tránh encode lại. Key format: \texttt{embedding:\{provider\}:\{model\}:\{dimension\}:\{hash\}}.
-    \item \textbf{Search cache:} Lưu kết quả hybrid search để phục vụ truy vấn lặp lại. Sử dụng JSON serialization qua \texttt{JsonCache} class.
-    \item \textbf{Session store:} Lưu trữ session state tạm thời cho chat.
-    \item \textbf{Health check:} Docker healthcheck sử dụng \texttt{redis-cli ping}.
+    \item Backend gọi Agent Service qua HTTP client với internal key authentication.
+    \item Agent Service nhận AgentChatRequest (query, session\_id, user\_id, conversation\_history) và trả về AgentChatResponse (final\_response, agents\_used, sources, suggested\_actions, trace\_summary, full\_trace).
+    \item Backend lưu kết quả vào ChatMessage, AgentTrace và các bảng liên quan trước khi trả về frontend.
+    \item Khi Agent Service không được kích hoạt (CHATBOT\_AGENT\_SERVICE\_ENABLED=false) hoặc không khả dụng, Backend tự động fallback sang pipeline nội bộ.
 \end{itemize}
 
-\subsection{Apache Airflow}
+\subsubsection{Tầng Dữ liệu -- PostgreSQL + pgvector \& Redis}
 
-Apache Airflow là nền tảng quản lý workflow mã nguồn mở, cho phép định nghĩa, lập lịch và giám sát các pipeline dữ liệu dưới dạng DAG (Directed Acyclic Graph). Trong đồ án, Airflow quản lý 4 DAGs:
+\textbf{PostgreSQL 16 + pgvector (Port 5432):}
+
+PostgreSQL được chọn làm cơ sở dữ liệu chính nhờ khả năng lưu trữ đồng thời dữ liệu quan hệ và dữ liệu vector thông qua extension pgvector. Điều này giúp giảm độ phức tạp vận hành so với việc sử dụng một relational database và một vector database riêng biệt.
 
 \begin{itemize}
-    \item \textbf{daily\_listings\_dag:} Chạy hàng ngày lúc 02:00 (giờ Hồ Chí Minh). Gồm 8 tasks: crawl\_sale\_urls $\rightarrow$ crawl\_sale\_details $\rightarrow$ ingest\_sale (cùng lúc với crawl\_rent\_urls $\rightarrow$ crawl\_rent\_details $\rightarrow$ ingest\_rent) $\rightarrow$ mark\_active $\rightarrow$ chunk\_and\_embed. Sử dụng watermark (\texttt{--since}) để chỉ crawl tin mới.
-
-    \item \textbf{weekly\_projects\_dag:} Chạy hàng tuần vào Chủ nhật 03:00. Crawl thông tin dự án bất động sản (tên, chủ đầu tư, vị trí, quy mô, tiện ích) và nạp vào bảng projects.
-
-    \item \textbf{weekly\_news\_dag:} Chạy hàng tuần vào Chủ nhật 04:00. Crawl tin tức và bài viết phân tích thị trường, nạp vào bảng articles.
-
-    \item \textbf{monthly\_legal\_kb\_dag:} Chạy hàng tháng vào ngày 1 lúc 05:00. Xử lý lại toàn bộ tài liệu pháp lý từ thư mục \texttt{data/knowledge/}, bao gồm cả HTML và PDF, tạo chunks và embedding mới.
+    \item \textbf{Dữ liệu quan hệ:} 14+ bảng bao gồm listings (bất động sản), users (người dùng), chat\_sessions và chat\_messages (hội thoại), projects (dự án), articles (bài viết), cùng các bảng observability (agent\_traces, agent\_trace\_steps, agent\_llm\_calls, agent\_retrieval\_events, pipeline\_runs, source\_readiness, user\_preferences, memory\_proposals, chat\_feedback).
+    \item \textbf{Dữ liệu vector:} Bảng chunks lưu vector embedding 1024 chiều, phục vụ tìm kiếm ngữ nghĩa. HNSW index với tham số $m=16$ và $ef\_construction=64$ đảm bảo tốc độ tìm kiếm k-NN nhanh trên tập dữ liệu lớn.
+    \item \textbf{Thiết kế polymorphic cho chunks:} Cột parent\_type và parent\_id cho phép một bảng chunks duy nhất phục vụ nhiều loại dữ liệu nguồn (listings, projects, articles), thay vì phải tạo bảng chunks riêng cho từng loại.
 \end{itemize}
 
-Mỗi DAG được cấu hình retry 3 lần với exponential backoff (5 phút $\rightarrow$ 10 phút $\rightarrow$ 20 phút, tối đa 30 phút). Cơ chế cảnh báo qua Slack và email được tích hợp khi task thất bại. Metrics được ghi vào bảng pipeline\_runs để theo dõi hiệu suất.
+\textbf{Redis 7 (Port 6379):}
 
-\subsection{Playwright}
+Redis được sử dụng làm cache ở hai cấp độ:
+\begin{itemize}
+    \item \textbf{Embedding Cache:} Lưu vector embedding của câu truy vấn, tránh phải encode lại. Key có dạng \texttt{embedding:\{provider\}:\{model\}:\{dim\}:\{hash\}}, cho phép cache hoạt động chính xác ngay cả khi thay đổi model.
+    \item \textbf{Search Result Cache:} Lưu kết quả hybrid search cho các truy vấn lặp lại, giảm tải đáng kể cho PostgreSQL.
+\end{itemize}
 
-Playwright là thư viện tự động hóa trình duyệt do Microsoft phát triển, hỗ trợ Chromium, Firefox và WebKit. Trong đồ án, Playwright được sử dụng để crawl dữ liệu từ batdongsan.com.vn:
+\subsubsection{Tầng Data Pipeline \& Tự động hóa}
+
+Đây là tầng vận hành ngầm, đảm bảo dữ liệu luôn được cập nhật và sẵn sàng cho các tầng phía trên.
+
+\textbf{Crawlers (Playwright + Stealth):}
+
+Hệ thống crawler được tổ chức thành 5 module, mỗi module phụ trách một loại nội dung:
+\begin{itemize}
+    \item \texttt{crawler/core/}: Các thành phần dùng chung -- CSV writer (với dedup), base parser, listing detail parser.
+    \item \texttt{crawler/sale/}: Crawl tin bán (2 bước: crawl URLs $\rightarrow$ crawl details).
+    \item \texttt{crawler/rent/}: Crawl tin cho thuê (tương tự).
+    \item \texttt{crawler/projects/}: Crawl thông tin dự án bất động sản.
+    \item \texttt{crawler/news/}: Crawl tin tức và bài viết phân tích.
+\end{itemize}
+
+Crawler sử dụng Playwright với chế độ stealth để tránh bị phát hiện, hỗ trợ 4 workers chạy song song để tăng tốc độ. Dữ liệu được ghi ra file CSV UTF-8 BOM và được deduplicate dựa trên product\_id.
+
+\textbf{Data Pipeline (ETL + Embedding):}
+
+Pipeline xử lý dữ liệu gồm 5 bước chính, được thiết kế để chạy độc lập hoặc theo chuỗi:
+
+\begin{enumerate}
+    \item \textbf{Clean (\texttt{clean.py}):} Parse và chuẩn hóa dữ liệu thô từ CSV. Các công việc chính: tách giá trị số từ text giá (``4,68 tỷ'' $\rightarrow$ 4.68, unit: billion), tách diện tích (``75 m\textsuperscript{2}'' $\rightarrow$ 75), phân loại loại hình bất động sản, chuẩn hóa địa chỉ.
+    
+    \item \textbf{Enrich (\texttt{enrich.py}):} Làm giàu dữ liệu với hai tác vụ: (1) Geocoding -- gọi Nominatim/Goong API để chuyển địa chỉ text thành tọa độ (latitude, longitude); (2) Intent Tagging -- phân tích nội dung mô tả để gán nhãn nhu cầu (``gần trường học'', ``view đẹp'', ``an ninh'', ``pháp lý rõ'',\dots).
+    
+    \item \textbf{Chunk (\texttt{chunk.py}):} Chia văn bản thành các đoạn ngữ nghĩa. Mỗi listing được chunk thành 4 loại: overview (tổng quan -- tiêu đề, giá, diện tích, khu vực, pháp lý, nội thất), description (mô tả chi tiết), location (địa chỉ, quận, thành phố), intent\_tags (nhu cầu phù hợp). Thiết kế này đảm bảo mỗi chunk có thể đứng độc lập và được truy xuất chính xác theo ngữ cảnh.
+    
+    \item \textbf{Embed (\texttt{embed.py}):} Tạo vector embedding 1024 chiều cho từng chunk bằng mô hình BGE-M3. Sử dụng BGEEmbedder class với batch size 16, retry 3 lần với exponential backoff, chạy async qua \texttt{asyncio.to\_thread()} để không chặn event loop.
+    
+    \item \textbf{Load (\texttt{load\_db.py} + ingestors/):} Upsert dữ liệu đã xử lý vào PostgreSQL. Các ingestor module chuyên biệt cho từng loại dữ liệu (listings, projects, news, legal\_kb) đảm bảo logic nạp phù hợp với schema của từng bảng.
+\end{enumerate}
+
+\textbf{Apache Airflow Scheduler:}
+
+Toàn bộ pipeline được lập lịch và giám sát bởi Apache Airflow với 4 DAGs:
 
 \begin{itemize}
-    \item \textbf{Stealth mode:} Cấu hình trình duyệt với các kỹ thuật chống phát hiện (stealth) để tránh bị chặn bởi cơ chế anti-bot của website.
-    \item \textbf{Parallel workers:} Sử dụng đa luồng (4 workers) để crawl song song nhiều trang, tăng tốc độ thu thập dữ liệu.
-    \item \textbf{Phân chia module:} Crawler được tổ chức thành các module riêng biệt cho từng loại nội dung: \texttt{crawler/sale/} (tin bán), \texttt{crawler/rent/} (tin cho thuê), \texttt{crawler/projects/} (dự án), \texttt{crawler/news/} (tin tức). Mỗi module có hai bước: crawl URL và crawl chi tiết.
-    \item \textbf{CSV output:} Dữ liệu được ghi vào file CSV với encoding UTF-8 BOM, hỗ trợ deduplication qua product\_id và merge các file tạm.
-    \item \textbf{Core infrastructure:} \texttt{crawler/core/} chứa các thành phần dùng chung: csv\_writer (ghi CSV với dedup), parser (parse thông tin cơ bản), listing\_detail\_parser (parse chi tiết listing với đầy đủ trường).
+    \item \textbf{daily\_listings\_dag (02:00 HCM):} Quy trình đầy đủ cho tin đăng: crawl\_sale\_urls $\rightarrow$ crawl\_sale\_details $\rightarrow$ ingest\_sale (chạy song song với crawl\_rent\_urls $\rightarrow$ crawl\_rent\_details $\rightarrow$ ingest\_rent) $\rightarrow$ mark\_active $\rightarrow$ chunk\_and\_embed. Sử dụng watermark để chỉ xử lý dữ liệu mới.
+    \item \textbf{weekly\_projects\_dag (Chủ nhật 03:00):} Crawl và nạp dự án bất động sản.
+    \item \textbf{weekly\_news\_dag (Chủ nhật 04:00):} Crawl và nạp tin tức thị trường.
+    \item \textbf{monthly\_legal\_kb\_dag (Ngày 1, 05:00):} Xử lý lại toàn bộ tài liệu pháp lý từ \texttt{data/knowledge/}.
 \end{itemize}
 
-\subsection{Các thư viện và công cụ khác}
+Mỗi DAG được cấu hình retry 3 lần với exponential backoff (5--30 phút), cảnh báo qua Slack và email khi thất bại, và ghi metrics vào bảng pipeline\_runs.
+
+\section{Thiết kế cơ sở dữ liệu}
+
+\subsection{Mô hình quan hệ}
+
+Hệ thống sử dụng PostgreSQL 16 với extension pgvector. Mô hình dữ liệu được thiết kế xoay quanh 3 nhóm bảng chính:
+
+\subsubsection{Nhóm bảng nghiệp vụ (Business Tables)}
+
+Đây là nhóm bảng lưu trữ dữ liệu cốt lõi của hệ thống:
 
 \begin{itemize}
-    \item \textbf{SQLAlchemy 2.0:} ORM cho Python với hỗ trợ async/await qua asyncpg driver. Được sử dụng để định nghĩa models, thực hiện truy vấn và quản lý schema.
-    \item \textbf{Pydantic v2:} Thư viện validation dữ liệu sử dụng type hints. Được sử dụng cho request/response schemas trong FastAPI và internal contracts giữa các service.
-    \item \textbf{bcrypt:} Thư viện hash mật khẩu với salt, được sử dụng trong authentication flow.
-    \item \textbf{PyJWT:} Thư viện tạo và xác thực JSON Web Token, với thuật toán HS256 và thời hạn 24 giờ.
-    \item \textbf{HTTPX:} HTTP client bất đồng bộ, được sử dụng để gọi Cohere Rerank API và internal Agent Service API.
-    \item \textbf{Docker \& Docker Compose:} Containerization cho toàn bộ hệ thống với 5 service, health checks, và volume mounts.
-    \item \textbf{Prometheus:} Hệ thống giám sát và thu thập metrics, tích hợp qua endpoint \texttt{/api/v1/metrics} với các counter cho chat requests, retrieval latency và pipeline runs.
+    \item \textbf{listings -- Bảng bất động sản:} Bảng quan trọng nhất với hơn 30 trường dữ liệu, lưu toàn bộ thông tin của một tin đăng. Khóa chính là id (INTEGER, auto-increment). Mỗi listing có product\_id duy nhất từ nguồn crawl để deduplicate. Các chỉ mục (indexes) được tạo trên các trường thường xuyên dùng trong bộ lọc: listing\_type, city, district, property\_type, price, area, bedrooms, post\_date, is\_active.
+
+    \item \textbf{projects -- Bảng dự án:} Lưu thông tin dự án bất động sản: tên, chủ đầu tư, vị trí, quy mô (tổng số căn), khoảng giá, khoảng diện tích, trạng thái (sắp mở bán, đang bán, đã bàn giao), loại hình, tiện ích (mảng ARRAY), mô tả.
+
+    \item \textbf{articles -- Bảng bài viết:} Lưu tin tức và kiến thức pháp lý: tiêu đề, nội dung, danh mục, nguồn, ngày đăng, URL gốc, metadata.
+
+    \item \textbf{users -- Bảng người dùng:} Lưu thông tin tài khoản: email (unique), mật khẩu đã hash, họ tên, số điện thoại, avatar, trạng thái hoạt động, quyền (admin/superuser).
 \end{itemize}
+
+\subsubsection{Nhóm bảng hội thoại (Chat Tables)}
+
+\begin{itemize}
+    \item \textbf{chat\_sessions -- Phiên hội thoại:} Mỗi phiên có id UUID, liên kết đến user (có thể NULL cho anonymous), tiêu đề tự động sinh từ tin nhắn đầu tiên.
+    \item \textbf{chat\_messages -- Tin nhắn:} Mỗi tin nhắn thuộc về một session, có role (user/assistant/system), nội dung, agent đã xử lý, và metadata JSONB (chứa sources, citations, search context).
+\end{itemize}
+
+\subsubsection{Nhóm bảng vector và tìm kiếm (Vector \& Retrieval Tables)}
+
+\begin{itemize}
+    \item \textbf{chunks -- Đoạn văn bản đã embedding:} Thiết kế polymorphic với parent\_type (listing/project/article) và parent\_id. Mỗi chunk có chunk\_type xác định loại nội dung (overview/description/location/intent\_tags/legal), text là nội dung văn bản, embedding là VECTOR(1024). HNSW index trên cột embedding với cosine distance operator đảm bảo tìm kiếm k-NN nhanh.
+\end{itemize}
+
+\subsubsection{Nhóm bảng observability \& vận hành (Observability Tables)}
+
+\begin{itemize}
+    \item \textbf{agent\_traces:} Lưu vết xử lý của mỗi request chatbot: intent, danh sách agents đã dùng, trace\_summary, full\_trace (JSONB), latency, status, graph\_version, prompt\_version, model\_name.
+    \item \textbf{agent\_trace\_steps:} Chi tiết từng bước trong trace: step\_name, status, latency, input/output JSON.
+    \item \textbf{agent\_llm\_calls:} Log mỗi lần gọi LLM: node\_name, model\_name, latency, token estimates.
+    \item \textbf{agent\_retrieval\_events:} Log mỗi sự kiện truy xuất.
+    \item \textbf{pipeline\_runs:} Log mỗi lần chạy Airflow DAG: dag\_id, run\_id, status, thời gian, metrics.
+    \item \textbf{source\_readiness:} Trạng thái sẵn sàng của từng nguồn dữ liệu.
+    \item \textbf{user\_preferences:} Sở thích người dùng dạng key-value JSONB.
+    \item \textbf{memory\_proposals:} Đề xuất sở thích từ agent.
+    \item \textbf{chat\_feedback:} Phản hồi của người dùng về chất lượng chat.
+\end{itemize}
+
+\subsection{Chiến lược indexing}
+
+\begin{itemize}
+    \item \textbf{Index cho listings:} Các B-tree index trên listing\_type, city, district, property\_type, price, area, bedrooms, post\_date, is\_active giúp tối ưu các truy vấn lọc và sắp xếp phổ biến. Composite index ngầm được PostgreSQL sử dụng khi nhiều điều kiện AND.
+    \item \textbf{Index cho chunks:} HNSW index trên cột embedding với vector\_cosine\_ops. Đây là loại index xấp xỉ (approximate nearest neighbor) cho phép tìm kiếm k-NN trong không gian 1024 chiều với độ phức tạp $O(\log N)$ thay vì $O(N)$ của full scan. Tham số $m=16$ (số kết nối mỗi node trong đồ thị HNSW) và $ef\_construction=64$ (kích thước dynamic candidate list) được chọn sau thử nghiệm để cân bằng giữa tốc độ build index và chất lượng tìm kiếm.
+    \item \textbf{Index cho polymorphic queries:} Composite index trên (parent\_type, parent\_id) của bảng chunks giúp truy vấn nhanh tất cả chunks thuộc về một listing/project/article.
+\end{itemize}
+
+\section{Thiết kế giao diện người dùng}
 
 \newpage
