@@ -19,6 +19,7 @@ from agent_service.contracts import (
     StructuredWarning,
 )
 from agent_service.config import get_agent_settings
+from agent_service.graph.blackboard import append_blackboard_entry
 from agent_service.graph.committee import build_committee_review
 from agent_service.graph.investment_model import (
     build_investment_case,
@@ -401,6 +402,40 @@ async def _run_one_specialist(
     return agent, result
 
 
+def _blackboard_from_agent_results(
+    state: AgentGraphState,
+    agent_results: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    update: dict[str, Any] = {
+        "agent_blackboard": state.get("agent_blackboard", {"entries": []})
+    }
+    working_state = {**state, **update}
+    for agent, result in agent_results.items():
+        evidence_ids = [str(value) for value in result.get("evidence_ids_used", [])]
+        confidence = str(result.get("confidence") or "medium")
+        if confidence not in {"low", "medium", "high"}:
+            confidence = "medium"
+        update = append_blackboard_entry(
+            {**working_state, **update},
+            author=agent,
+            entry_type="specialist_result",
+            content={
+                "status": result.get("status"),
+                "content": result.get("content", ""),
+                "missing_evidence": result.get("missing_evidence", []),
+                "warnings": [
+                    warning.code if hasattr(warning, "code") else warning
+                    for warning in result.get("warnings", [])
+                ],
+            },
+            evidence_ids=evidence_ids,
+            confidence=confidence,
+            step_name="specialist_agents",
+        )
+        working_state = {**working_state, **update}
+    return update
+
+
 async def specialist_agents_node(state: AgentGraphState) -> AgentGraphState:
     start_time = time.perf_counter()
     request = state["request"]
@@ -445,13 +480,20 @@ async def specialist_agents_node(state: AgentGraphState) -> AgentGraphState:
         )
 
     agent_results = dict(await asyncio.gather(*specialist_tasks)) if specialist_tasks else {}
+    blackboard_update = _blackboard_from_agent_results(state, agent_results)
     return {
         "agent_results": agent_results,
+        **blackboard_update,
         "trace_steps": _append_trace(
             state,
             "specialist_agents",
             start_time,
-            {"agents_completed": list(agent_results)},
+            {
+                "agents_completed": list(agent_results),
+                "blackboard_entries": len(
+                    blackboard_update.get("agent_blackboard", {}).get("entries", [])
+                ),
+            },
         ),
     }
 
