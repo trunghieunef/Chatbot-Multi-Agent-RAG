@@ -13,7 +13,7 @@ class FakeDB:
     def add(self, obj):
         self.added.append(obj)
 
-    async def execute(self, query):
+    async def execute(self, query, params=None):
         return type("CountResult", (), {"scalar": lambda self: 0})()
 
     async def flush(self):
@@ -98,3 +98,4 @@ def test_send_message_does_not_call_simple_rag(monkeypatch):
     assert response.agent_used == "multi_agent_error"
     assert response.sources == []
     assert response.suggested_actions
+

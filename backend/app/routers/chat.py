@@ -4,14 +4,16 @@ Chat API router.
 REST endpoint for chatbot interaction. WebSocket support will be added in Phase 3.
 """
 
-import logging
 import asyncio
+import json
+import logging
 import random
 import uuid
 from datetime import datetime
 from inspect import isawaitable
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -484,6 +486,167 @@ async def submit_feedback(
     db.add(feedback)
     await db.flush()
     return ChatFeedbackResponse(id=feedback.id)
+def _format_sse(event: dict) -> str:
+    event_name = str(event.get("event") or "message")
+    payload = json.dumps(event, ensure_ascii=False, default=str)
+    return f"event: {event_name}\ndata: {payload}\n\n"
+
+
+async def _stream_agent_service_pipeline(
+    message: str,
+    db: AsyncSession,
+    session: ChatSession,
+    user: User | None,
+    request_id: str,
+):
+    yield {"event": "started", "request_id": request_id, "payload": {}}
+    response = await _run_agent_service_pipeline(
+        message,
+        db,
+        session,
+        user,
+        request_id,
+    )
+
+    user_msg = ChatMessage(
+        session_id=session.id,
+        role="user",
+        content=message,
+    )
+    db.add(user_msg)
+    response_text = response.final_response
+    agents_used = response.agents_used
+    agent_used = ", ".join(agents_used) if agents_used else "unknown"
+    sources = _source_dicts(response)
+    suggested_actions = response.suggested_actions
+    trace_summary = _trace_summary_dict(response)
+    memory_hints = await handle_memory_proposals(db, session, user, response)
+
+    CHAT_REQUESTS.labels(agent=agent_used or "unknown").inc()
+    assistant_msg = ChatMessage(
+        session_id=session.id,
+        role="assistant",
+        content=response_text,
+        agent_used=agent_used,
+        metadata_json={
+            "request_id": request_id,
+            "sources": sources,
+            "suggested_actions": suggested_actions,
+            "trace_summary": trace_summary,
+            "agents_used": agents_used,
+            "memory_hints": memory_hints,
+        },
+    )
+    db.add(assistant_msg)
+    await db.flush()
+    await _commit_if_supported(db)
+
+    try:
+        await _resolve(
+            persist_agent_observability(
+                async_session,
+                session,
+                user,
+                response,
+            )
+        )
+    except Exception:
+        logger.exception(
+            "Failed to persist agent observability for request_id=%s",
+            response.request_id,
+        )
+
+    settings = get_settings()
+    full_trace = response.full_trace if isinstance(response.full_trace, dict) else {}
+    if should_schedule_eval(
+        enabled=settings.CHATBOT_EVAL_ENABLED,
+        sample_rate=settings.CHATBOT_EVAL_SAMPLE_RATE,
+        answer=response_text,
+        mode=full_trace.get("mode"),
+    ):
+        try:
+            await schedule_agent_evaluation(
+                session_factory=async_session,
+                chat_session=session,
+                question=message,
+                sources=sources,
+                response=response,
+                sync_for_tests=settings.CHATBOT_EVAL_SYNC_FOR_TESTS,
+            )
+        except Exception:
+            logger.exception(
+                "Failed to schedule agent evaluation for request_id=%s",
+                response.request_id,
+            )
+
+    payload = response.model_dump(mode="json")
+    payload["session_id"] = str(session.id)
+    payload["memory_hints"] = memory_hints
+    yield {
+        "event": "final",
+        "request_id": request_id,
+        "payload": payload,
+    }
+
+
+@router.post("/stream")
+async def stream_message(
+    body: ChatMessageRequest,
+    request: Request = None,
+    response: Response = None,
+    user: User | None = Depends(get_optional_user),
+    db: AsyncSession = Depends(get_db),
+):
+    request_id = str(uuid.uuid4())
+    request = request or Request({"type": "http", "client": ("direct-test", 0)})
+    response = response or Response()
+    _enforce_chat_abuse_guard(body, user, request, response)
+
+    if body.session_id:
+        result = await db.execute(
+            select(ChatSession).where(ChatSession.id == body.session_id)
+        )
+        session = result.scalar_one_or_none()
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+        verify_session_ownership(session, user)
+    else:
+        session = ChatSession(
+            user_id=user.id if user else None,
+            title=body.message[:80],
+        )
+        db.add(session)
+        await db.flush()
+
+    await enforce_chat_quota(db, user=user, session_id=session.id)
+
+    async def event_generator():
+        try:
+            async for event in _stream_agent_service_pipeline(
+                body.message,
+                db,
+                session,
+                user,
+                request_id,
+            ):
+                yield _format_sse(event)
+        except Exception:
+            logger.exception("Streaming chat failed for request_id=%s", request_id)
+            yield _format_sse(
+                {
+                    "event": "error",
+                    "request_id": request_id,
+                    "payload": {
+                        "code": "stream_pipeline_error",
+                        "message": "Chat stream failed while processing the request.",
+                    },
+                }
+            )
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+    )
 
 
 @router.post("", response_model=ChatMessageResponse)
