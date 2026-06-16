@@ -183,3 +183,77 @@ async def synthesize_final_answer(
         warnings=[],
         used_llm=True,
     )
+
+
+def _compact_value(value: object) -> str:
+    return "missing" if value is None else str(value)
+
+
+def format_investment_scorecard(
+    *,
+    committee_review: dict[str, Any],
+    investment_assumptions: dict[str, dict[str, Any]],
+    investment_metrics: dict[str, dict[str, Any]],
+) -> str:
+    recommendation = committee_review.get("recommendation") or {}
+    perspectives = list(committee_review.get("perspectives") or [])
+    metric_lines: list[str] = []
+    for key in (
+        "price_per_m2",
+        "market_price_delta",
+        "gross_yield",
+        "net_yield",
+        "monthly_cashflow_estimate",
+        "cash_on_cash_return",
+    ):
+        metric = investment_metrics.get(key)
+        if not metric:
+            continue
+        metric_lines.append(
+            f"- {key}: {_compact_value(metric.get('value'))} {metric.get('unit')} "
+            f"(confidence: {metric.get('confidence')})"
+        )
+
+    assumption_lines: list[str] = []
+    for key, assumption in investment_assumptions.items():
+        if (
+            assumption.get("source") in {"default", "estimated"}
+            or assumption.get("value") is None
+        ):
+            assumption_lines.append(
+                f"- {key}={_compact_value(assumption.get('value'))} "
+                f"{assumption.get('unit')} (source: {assumption.get('source')})"
+            )
+
+    perspective_lines = [
+        f"- {item.get('role')}: {item.get('summary')}"
+        for item in perspectives
+        if item.get("summary")
+    ]
+    actions: list[str] = []
+    for item in perspectives:
+        for action in item.get("suggested_actions") or []:
+            if action not in actions:
+                actions.append(str(action))
+    for confirmation in recommendation.get("required_confirmations") or []:
+        action = f"Xac nhan {confirmation}"
+        if action not in actions:
+            actions.append(action)
+
+    return "\n".join(
+        [
+            "Scorecard dau tu",
+            f"- Decision: {recommendation.get('decision')}",
+            f"- Confidence: {recommendation.get('confidence')}",
+            f"- Rationale: {recommendation.get('rationale')}",
+            "Chi so chinh:",
+            *(metric_lines or ["- Chua du chi so tai chinh de ket luan."]),
+            "Gia dinh can xac nhan:",
+            *(assumption_lines or ["- Khong co gia dinh mac dinh can neu them."]),
+            "Goc nhin committee:",
+            *(perspective_lines or ["- Chua co goc nhin committee."]),
+            "Checklist hanh dong:",
+            *(f"- {action}" for action in (actions or ["Xac nhan them du lieu dau vao"])),
+            "Luu y: Phan tich nay khong phai loi khuyen tai chinh.",
+        ]
+    )

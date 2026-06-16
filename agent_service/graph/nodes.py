@@ -35,7 +35,10 @@ from agent_service.graph.retrieval_planner import (
 from agent_service.graph.query_understanding import build_query_understanding
 from agent_service.graph.router import _strip_accents, route_request
 from agent_service.graph.state import AgentGraphState
-from agent_service.graph.synthesis import synthesize_final_answer
+from agent_service.graph.synthesis import (
+    format_investment_scorecard,
+    synthesize_final_answer,
+)
 from agent_service.llm.gemini import GeminiClient
 from agent_service.tools.readiness import build_readiness_snapshot
 
@@ -679,10 +682,23 @@ async def synthesizer_node(state: AgentGraphState) -> AgentGraphState:
     warnings = _dedupe_warnings(warnings)
     final_response = "\n\n".join(parts) or "Chua co du thong tin de tra loi yeu cau nay."
     suggested_actions = ["So sanh lua chon", "Hoi them ve phap ly", "Xem xu huong khu vuc"]
+    has_committee_review = bool(state.get("committee_review"))
+    if has_committee_review:
+        final_response = format_investment_scorecard(
+            committee_review=state.get("committee_review", {}),
+            investment_assumptions=state.get("investment_assumptions", {}),
+            investment_metrics=state.get("investment_metrics", {}),
+        )
+        suggested_actions = [
+            "Xac nhan tien thue ky vong",
+            "Xac nhan ty le vay va lai suat",
+            "Kiem tra phap ly",
+        ]
     settings = get_agent_settings()
     use_llm_synthesis = (
         settings.AGENT_SPECIALIST_LLM_ENABLED
         and not state.get("force_deterministic", False)
+        and not has_committee_review
     )
     llm_client = GeminiClient() if use_llm_synthesis else None
     synthesis = await synthesize_final_answer(
