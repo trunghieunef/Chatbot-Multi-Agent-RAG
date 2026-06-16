@@ -96,7 +96,7 @@ def test_committee_review_consider_is_not_high_confidence_when_defaults_drive_me
                 "warnings": [],
             },
             "monthly_cashflow_estimate": {
-                "value": -0.0101,
+                "value": 0.0101,
                 "unit": "billion_vnd_per_month",
                 "depends_on": [],
                 "formula": "",
@@ -116,5 +116,5 @@ def test_committee_review_consider_is_not_high_confidence_when_defaults_drive_me
         warnings=[],
     )
 
-    assert review["recommendation"]["decision"] in {"consider", "wait"}
-    assert review["recommendation"]["confidence"] in {"low", "medium"}
+    assert review["recommendation"]["decision"] == "consider"
+    assert review["recommendation"]["confidence"] == "medium"
