@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import time
 from typing import Any
 
@@ -15,10 +16,10 @@ from agent_service.agents.specialists import (
 from agent_service.contracts import (
     AgentSource,
     Evidence,
-    MemoryProposal,
     StructuredWarning,
 )
 from agent_service.config import get_agent_settings
+from agent_service.graph.memory_extraction import extract_memory_proposals
 from agent_service.graph.memory_filters import derive_memory_filters
 from agent_service.graph.retrieval_planner import (
     build_retrieval_plan,
@@ -27,6 +28,7 @@ from agent_service.graph.retrieval_planner import (
 from agent_service.graph.query_understanding import build_query_understanding
 from agent_service.graph.router import _strip_accents, route_request
 from agent_service.graph.state import AgentGraphState
+from agent_service.graph.synthesis import synthesize_final_answer
 from agent_service.llm.gemini import GeminiClient
 from agent_service.tools.readiness import build_readiness_snapshot
 
@@ -235,20 +237,33 @@ def _warning(
     )
 
 
+def _compact_conversation_context(request) -> list[dict[str, str]]:
+    compact: list[dict[str, str]] = []
+    for item in request.conversation_context[-6:]:
+        content = (item.content or "").strip()
+        if not content:
+            continue
+        compact.append({"role": item.role, "content": content[:500]})
+    return compact
+
 def context_builder(state: AgentGraphState) -> AgentGraphState:
     start_time = time.perf_counter()
     request = state["request"]
     normalized_query = _strip_accents(request.message)
+    compact_context = _compact_conversation_context(request)
     return {
         "normalized_query": normalized_query,
+        "compact_context": compact_context,
         "trace_steps": _append_trace(
             state,
             "context_builder",
             start_time,
-            {"context_items": len(request.conversation_context)},
+            {
+                "context_items": len(request.conversation_context),
+                "compact_context_items": len(compact_context),
+            },
         ),
     }
-
 
 async def readiness_checker(state: AgentGraphState) -> AgentGraphState:
     started = time.perf_counter()
@@ -327,6 +342,59 @@ async def retrieval_planner_node(state: AgentGraphState) -> AgentGraphState:
     }
 
 
+async def _run_one_specialist(
+    *,
+    agent: str,
+    runner,
+    request,
+    assigned_evidence: list[dict[str, Any]],
+    preferences: dict[str, Any],
+    readiness: dict[str, Any],
+    use_llm_specialists: bool,
+    llm_client: GeminiClient | None,
+    timeout_seconds: float,
+) -> tuple[str, dict[str, Any]]:
+    try:
+        if use_llm_specialists and llm_client is not None:
+            result = await run_llm_or_deterministic_specialist(
+                agent_name=agent,
+                deterministic_runner=runner,
+                query=request.message,
+                evidence=assigned_evidence,
+                preferences=preferences,
+                readiness=readiness,
+                generate_json=llm_client.generate_json,
+                timeout_seconds=timeout_seconds,
+            )
+        else:
+            result = await runner(
+                query=request.message,
+                evidence=assigned_evidence,
+                preferences=preferences,
+                readiness=readiness,
+            )
+    except Exception as exc:
+        result = {
+            "agent_name": agent,
+            "status": "failed",
+            "content": "",
+            "evidence_ids_used": [],
+            "sources": [],
+            "confidence": "low",
+            "warnings": [
+                StructuredWarning(
+                    code="specialist_error",
+                    domain=None,
+                    message=f"Specialist {agent} failed.",
+                    retryable=True,
+                    details={"error": str(exc)},
+                )
+            ],
+            "missing_evidence": [],
+        }
+    return agent, result
+
+
 async def specialist_agents_node(state: AgentGraphState) -> AgentGraphState:
     start_time = time.perf_counter()
     request = state["request"]
@@ -341,12 +409,12 @@ async def specialist_agents_node(state: AgentGraphState) -> AgentGraphState:
         "legal_advisor": run_legal_agent,
         "investment_advisor": run_investment_agent,
     }
-    agent_results = {}
     use_llm_specialists = (
         settings.AGENT_SPECIALIST_LLM_ENABLED
         and not state.get("force_deterministic", False)
     )
     llm_client = GeminiClient() if use_llm_specialists else None
+    specialist_tasks = []
     for agent in state.get("agents_to_run", []):
         runner = runners.get(agent)
         if runner is None:
@@ -356,25 +424,21 @@ async def specialist_agents_node(state: AgentGraphState) -> AgentGraphState:
             for evidence_id in evidence_for_agent.get(agent, [])
             if evidence_id in evidence_by_id
         ]
-        if llm_client is not None:
-            agent_results[agent] = await run_llm_or_deterministic_specialist(
-                agent_name=agent,
-                deterministic_runner=runner,
-                query=request.message,
-                evidence=assigned_evidence,
+        specialist_tasks.append(
+            _run_one_specialist(
+                agent=agent,
+                runner=runner,
+                request=request,
+                assigned_evidence=assigned_evidence,
                 preferences=request.user_preferences,
                 readiness=state.get("readiness", {}),
-                generate_json=llm_client.generate_json,
+                use_llm_specialists=use_llm_specialists,
+                llm_client=llm_client,
                 timeout_seconds=settings.AGENT_SPECIALIST_LLM_TIMEOUT_SECONDS,
             )
-        else:
-            agent_results[agent] = await runner(
-                query=request.message,
-                evidence=assigned_evidence,
-                preferences=request.user_preferences,
-                readiness=state.get("readiness", {}),
-            )
+        )
 
+    agent_results = dict(await asyncio.gather(*specialist_tasks)) if specialist_tasks else {}
     return {
         "agent_results": agent_results,
         "trace_steps": _append_trace(
@@ -384,7 +448,6 @@ async def specialist_agents_node(state: AgentGraphState) -> AgentGraphState:
             {"agents_completed": list(agent_results)},
         ),
     }
-
 
 def _is_evidence_assigned_to_agent(
     *,
@@ -446,7 +509,7 @@ def _collect_valid_used_evidence(
     return valid, warnings, used_ids
 
 
-def synthesizer_node(state: AgentGraphState) -> AgentGraphState:
+async def synthesizer_node(state: AgentGraphState) -> AgentGraphState:
     start_time = time.perf_counter()
     agent_results = state.get("agent_results", {})
     parts: list[str] = []
@@ -479,6 +542,25 @@ def synthesizer_node(state: AgentGraphState) -> AgentGraphState:
     warnings = _dedupe_warnings(warnings)
     final_response = "\n\n".join(parts) or "Chua co du thong tin de tra loi yeu cau nay."
     suggested_actions = ["So sanh lua chon", "Hoi them ve phap ly", "Xem xu huong khu vuc"]
+    settings = get_agent_settings()
+    use_llm_synthesis = (
+        settings.AGENT_SPECIALIST_LLM_ENABLED
+        and not state.get("force_deterministic", False)
+    )
+    llm_client = GeminiClient() if use_llm_synthesis else None
+    synthesis = await synthesize_final_answer(
+        query=state["request"].message,
+        conversation_context=state.get("compact_context", []),
+        agent_results=agent_results,
+        deterministic_response=final_response,
+        default_actions=suggested_actions,
+        generate_json=llm_client.generate_json if llm_client is not None else None,
+        timeout_seconds=settings.AGENT_SPECIALIST_LLM_TIMEOUT_SECONDS,
+        allowed_evidence_ids=set(used_evidence_ids),
+    )
+    final_response = synthesis.final_response
+    suggested_actions = synthesis.suggested_actions
+    warnings = _dedupe_warnings([*warnings, *synthesis.warnings])
     return {
         "final_response": final_response,
         "sources": sources,
@@ -492,10 +574,10 @@ def synthesizer_node(state: AgentGraphState) -> AgentGraphState:
                 "answer_length": len(final_response),
                 "source_count": len(sources),
                 "used_evidence_ids": used_evidence_ids,
+                "used_llm_synthesis": synthesis.used_llm,
             },
         ),
     }
-
 
 def safety_validator_node(state: AgentGraphState) -> AgentGraphState:
     start_time = time.perf_counter()
@@ -579,17 +661,12 @@ def safety_validator_node(state: AgentGraphState) -> AgentGraphState:
 
 def memory_proposal_node(state: AgentGraphState) -> AgentGraphState:
     start_time = time.perf_counter()
-    memory_proposals: list[MemoryProposal] = []
-    if "quan 7" in state.get("normalized_query", ""):
-        memory_proposals.append(
-            MemoryProposal(
-                action="upsert",
-                key="preferred_district",
-                value="Quan 7",
-                confidence=0.8,
-                evidence="User mentioned Quan 7 in the current query.",
-            )
-        )
+    understanding = state.get("query_understanding") or {}
+    filters = understanding.get("filters") or {}
+    memory_proposals = extract_memory_proposals(
+        query=state["request"].message,
+        filters=filters,
+    )
 
     return {
         "memory_proposals": memory_proposals,

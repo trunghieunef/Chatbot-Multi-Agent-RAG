@@ -385,6 +385,48 @@ async def run_legal_agent(
     )
 
 
+def _number(value: Any) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _market_avg_price_per_m2(market_evidence: list[dict[str, Any]]) -> float | None:
+    for item in market_evidence:
+        facts = _evidence_facts(item)
+        if facts.get("metric") == "avg_price_per_m2":
+            return _number(facts.get("value"))
+    return None
+
+
+def _investment_calculations(
+    *,
+    property_evidence: list[dict[str, Any]],
+    market_evidence: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    market_avg = _market_avg_price_per_m2(market_evidence)
+    calculations: list[dict[str, Any]] = []
+    for item in property_evidence:
+        facts = _evidence_facts(item)
+        price_billion = _number(facts.get("price"))
+        area_m2 = _number(facts.get("area"))
+        if price_billion is None or area_m2 in {None, 0}:
+            continue
+        listing_price_per_m2 = round(price_billion * 1000 / area_m2, 2)
+        calculation = {
+            "title": facts.get("title") or "Listing",
+            "listing_price_per_m2_million": listing_price_per_m2,
+        }
+        if market_avg not in {None, 0}:
+            calculation["market_avg_price_per_m2_million"] = market_avg
+            calculation["market_delta_percent"] = round(
+                ((listing_price_per_m2 - market_avg) / market_avg) * 100,
+                2,
+            )
+        calculations.append(calculation)
+    return calculations
+
 async def run_investment_agent(
     *,
     query: str,
@@ -410,6 +452,11 @@ async def run_investment_agent(
         *project_evidence,
         *news_evidence,
     ]
+
+    calculations = _investment_calculations(
+        property_evidence=property_evidence,
+        market_evidence=market_evidence,
+    )
 
     warnings: list[StructuredWarning] = [
         _warning(
@@ -446,6 +493,18 @@ async def run_investment_agent(
         content += "\nDu lieu thi truong lien quan:\n" + "\n".join(
             f"- {_describe_evidence(item)}" for item in market_evidence
         )
+    if calculations:
+        content += "\nTinh toan dau tu co ban:\n" + "\n".join(
+            (
+                f"- {item['title']}: {item['listing_price_per_m2_million']} trieu/m2"
+                + (
+                    f", chenh lech {item['market_delta_percent']}% so voi trung binh khu vuc"
+                    if "market_delta_percent" in item
+                    else ", chua co trung binh khu vuc de so sanh"
+                )
+            )
+            for item in calculations
+        )
     if project_evidence:
         content += "\nBang chung du an lien quan:\n" + "\n".join(
             f"- {_describe_evidence(item)}" for item in project_evidence
@@ -465,3 +524,5 @@ async def run_investment_agent(
         warnings=warnings,
         missing_evidence=missing,
     )
+
+

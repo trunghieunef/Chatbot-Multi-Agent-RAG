@@ -20,6 +20,7 @@ class AgentGraphState(TypedDict, total=False):
     intent: str
     agents_to_run: list[str]
     routing_filters: dict[str, Any]
+    compact_context: list[dict[str, str]]
     query_understanding: dict[str, Any]
     readiness: dict[str, Any]
     retrieval_plan: list[RetrievalTask]
@@ -34,3 +35,4 @@ class AgentGraphState(TypedDict, total=False):
     memory_proposals: list[MemoryProposal]
     trace_steps: list[dict[str, Any]]
     warnings: list[str | StructuredWarning]
+

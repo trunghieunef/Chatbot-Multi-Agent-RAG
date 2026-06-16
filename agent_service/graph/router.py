@@ -151,14 +151,18 @@ def merge_router_decisions(
     )
 
 
-def _router_prompt(query: str) -> str:
+def _router_prompt(
+    query: str,
+    compact_context: list[dict[str, Any]] | None = None,
+) -> str:
+    context = compact_context or []
     return (
         "Ban la bo dinh tuyen intent bat dong san. Tra ve JSON duy nhat voi "
         "intent, agents, confidence, filters, needs_clarification, "
         "clarifying_question, reason. Khong tra loi nguoi dung.\n"
+        f"Conversation context: {context}\n"
         f"Query: {query}"
     )
-
 
 async def route_with_llm(
     state: dict[str, Any],
@@ -169,7 +173,7 @@ async def route_with_llm(
     client = client or GeminiClient()
     try:
         payload = await client.generate_json(
-            _router_prompt(request.message),
+            _router_prompt(request.message, state.get("compact_context", [])),
             timeout_seconds=settings.AGENT_LLM_ROUTER_TIMEOUT_SECONDS,
         )
         decision = RouterDecision.model_validate(payload)
@@ -224,3 +228,4 @@ async def route_request(
         llm,
         confidence_threshold=settings.AGENT_LLM_CONFIDENCE_THRESHOLD,
     )
+

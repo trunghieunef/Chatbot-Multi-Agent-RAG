@@ -208,7 +208,8 @@ def test_safety_validator_accepts_intentional_no_source_warnings(agent, warning)
     assert "final_response_missing_sources" not in codes
 
 
-def test_synthesizer_exposes_only_valid_used_evidence():
+@pytest.mark.asyncio
+async def test_synthesizer_exposes_only_valid_used_evidence():
     valid_source = AgentSource(
         type="listing",
         domain="property",
@@ -271,7 +272,7 @@ def test_synthesizer_exposes_only_valid_used_evidence():
         "warnings": [],
     }
 
-    result = nodes.synthesizer_node(state)
+    result = await nodes.synthesizer_node(state)
 
     assert [source.id for source in result["sources"]] == ["listing:p-1"]
     warning_codes = [
@@ -282,7 +283,8 @@ def test_synthesizer_exposes_only_valid_used_evidence():
     assert result["trace_steps"][-1]["output"]["used_evidence_ids"] == ["ev_valid"]
 
 
-def test_synthesizer_rejects_unassigned_evidence_id():
+@pytest.mark.asyncio
+async def test_synthesizer_rejects_unassigned_evidence_id():
     source = AgentSource(type="article", domain="legal", id="article:1")
     evidence = Evidence(
         evidence_id="ev_legal",
@@ -316,7 +318,7 @@ def test_synthesizer_rejects_unassigned_evidence_id():
         "warnings": [],
     }
 
-    result = nodes.synthesizer_node(state)
+    result = await nodes.synthesizer_node(state)
 
     assert result["sources"] == []
     assert any(
@@ -326,7 +328,8 @@ def test_synthesizer_rejects_unassigned_evidence_id():
     )
 
 
-def test_synthesizer_dedupes_structured_warnings_without_losing_objects():
+@pytest.mark.asyncio
+async def test_synthesizer_dedupes_structured_warnings_without_losing_objects():
     synthesizer = getattr(nodes, "synthesizer_node", None)
     assert callable(synthesizer)
     warning = StructuredWarning(
@@ -352,7 +355,7 @@ def test_synthesizer_dedupes_structured_warnings_without_losing_objects():
         "trace_steps": [],
     }
 
-    result = synthesizer(state)
+    result = await synthesizer(state)
 
     assert result["warnings"] == [warning]
 
@@ -791,3 +794,6 @@ async def test_mixed_property_legal_investment_query_uses_shared_evidence(monkey
         if evidence_id in trace["evidence"]
     }
     assert set(source_ids).issubset(source_identities)
+
+
+

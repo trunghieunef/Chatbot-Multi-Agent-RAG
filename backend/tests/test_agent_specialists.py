@@ -273,7 +273,8 @@ async def test_investment_agent_includes_financial_disclaimer():
     assert "khong phai loi khuyen tai chinh" in result["content"].lower()
 
 
-def test_synthesizer_node_deduplicates_warnings_and_ignores_unvalidated_sources():
+@pytest.mark.asyncio
+async def test_synthesizer_node_deduplicates_warnings_and_ignores_unvalidated_sources():
     state = {
         "request": AgentChatRequest(
             request_id="req-1",
@@ -328,7 +329,7 @@ def test_synthesizer_node_deduplicates_warnings_and_ignores_unvalidated_sources(
         "trace_steps": [],
     }
 
-    result = synthesizer_node(state)
+    result = await synthesizer_node(state)
 
     assert result["warnings"] == [
         "shared_warning",
@@ -336,3 +337,5 @@ def test_synthesizer_node_deduplicates_warnings_and_ignores_unvalidated_sources(
         "project_warning",
     ]
     assert result["sources"] == []
+
+

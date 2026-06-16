@@ -6,6 +6,7 @@ from agent_service.evaluation.judge import judge_answer
 from agent_service.graph.workflow import run_agent_graph
 from agent_service.llm.cost import get_runtime_cost_summary
 from agent_service.security import require_internal_key
+from agent_service.tools.readiness import build_readiness_snapshot
 
 
 app = FastAPI(
@@ -28,8 +29,11 @@ async def health(_: None = Depends(require_internal_key)) -> dict:
 
 @app.get("/internal/agent/readiness")
 async def readiness(_: None = Depends(require_internal_key)) -> dict:
-    return {"status": "ok", "sources": {}}
-
+    sources = await build_readiness_snapshot()
+    status = "ok" if any(
+        source.get("status") == "ready" for source in sources.values()
+    ) else "degraded"
+    return {"status": status, "sources": sources}
 
 @app.post("/internal/agent/chat", response_model=AgentChatResponse)
 async def chat(
@@ -53,3 +57,5 @@ async def evaluate(body: dict, _: None = Depends(require_internal_key)) -> dict:
         prompt_version=body.get("prompt_version") or settings.AGENT_PROMPT_VERSION,
         model_name=body.get("model_name") or settings.GEMINI_JUDGE_MODEL,
     )
+
+

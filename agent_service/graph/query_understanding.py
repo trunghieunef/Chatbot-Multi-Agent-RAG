@@ -41,13 +41,19 @@ def merge_query_filters(deterministic: dict[str, Any], inferred: dict[str, Any])
     return {**validate_filters(inferred), **validate_filters(deterministic)}
 
 
-def _query_understanding_prompt(query: str, max_rewrites: int) -> str:
+def _query_understanding_prompt(
+    query: str,
+    max_rewrites: int,
+    compact_context: list[dict[str, Any]] | None = None,
+) -> str:
+    context = compact_context or []
     return (
         "Phan tich query bat dong san va tra ve JSON voi rewritten_query, "
         "expanded_queries, filters, missing_slots. Khong tra loi nguoi dung. "
-        f"Toi da {max_rewrites} expanded queries.\nQuery: {query}"
+        f"Toi da {max_rewrites} expanded queries.\n"
+        f"Conversation context: {context}\n"
+        f"Query: {query}"
     )
-
 
 async def build_query_understanding(
     state: dict[str, Any],
@@ -70,6 +76,7 @@ async def build_query_understanding(
             _query_understanding_prompt(
                 request.message,
                 settings.AGENT_LLM_MAX_REWRITES,
+                state.get("compact_context", []),
             ),
             timeout_seconds=settings.AGENT_LLM_QUERY_TIMEOUT_SECONDS,
         )
@@ -107,3 +114,5 @@ async def build_query_understanding(
         missing_slots=missing_slots,
         warnings=warnings,
     )
+
+

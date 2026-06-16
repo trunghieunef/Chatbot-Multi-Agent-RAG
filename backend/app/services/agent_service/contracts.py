@@ -136,3 +136,17 @@ class AgentChatResponse(BaseModel):
     memory_proposals: list[MemoryProposal] = Field(default_factory=list)
     readiness: dict[str, Any] = Field(default_factory=dict)
     evaluation_candidate: dict[str, Any] = Field(default_factory=dict)
+
+
+class AgentStreamEvent(BaseModel):
+    event: Literal[
+        "started",
+        "routing",
+        "retrieval",
+        "specialist",
+        "synthesis",
+        "final",
+        "error",
+    ]
+    request_id: str
+    payload: dict = Field(default_factory=dict)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import re
 import time
 import unicodedata
@@ -482,6 +483,138 @@ def _parent_type_for_task(task: RetrievalTask) -> str:
     }[task.domain]
 
 
+async def _execute_single_retrieval_task(
+    *,
+    task: RetrievalTask,
+    request: Any,
+    agents_to_run: list[str],
+) -> tuple[
+    RetrievalTask,
+    RetrievalResult,
+    list[Evidence],
+    list[StructuredWarning],
+    list[dict[str, Any]],
+]:
+    task_started = time.perf_counter()
+    trace_events: list[dict[str, Any]] = [
+        {"event": "retrieval_task_started", "task_id": task.task_id}
+    ]
+    warnings: list[StructuredWarning] = []
+    evidence_items: list[Evidence] = []
+
+    try:
+        if task.domain == "market":
+            from agent_service.tools.market import lookup_market_metrics
+
+            records = await lookup_market_metrics(task.filters)
+            if not records:
+                warning = structured_warning(
+                    code="investment_market_data_missing",
+                    domain="market",
+                    message="Market aggregate evidence is not available for this query.",
+                    retryable=False,
+                    details={"task_id": task.task_id, "filters": task.filters},
+                )
+                warnings.append(warning)
+                result = RetrievalResult(
+                    task_id=task.task_id,
+                    status="skipped",
+                    evidence_ids=[],
+                    duration_ms=round((time.perf_counter() - task_started) * 1000),
+                    warnings=[warning],
+                    skip_reason="investment_market_data_missing",
+                )
+                trace_events.append(
+                    {"event": "retrieval_task_skipped", "task_id": task.task_id}
+                )
+                return task, result, evidence_items, warnings, trace_events
+        else:
+            trace = RetrievalTrace(request_id=request.request_id)
+            records = await _run_hybrid_tool(
+                query=task.query,
+                filters=task.filters,
+                trace=trace,
+                tool_name=task.tool,
+                parent_type=_parent_type_for_task(task),
+                top_k=task.top_k,
+                rerank_to=task.rerank_top_k or task.top_k,
+            )
+    except Exception as exc:
+        warning = structured_warning(
+            code="retrieval_error",
+            domain=task.domain,
+            message=f"Retrieval task {task.task_id} failed.",
+            retryable=True,
+            details={"error": str(exc)},
+        )
+        warnings.append(warning)
+        result = RetrievalResult(
+            task_id=task.task_id,
+            status="failed",
+            evidence_ids=[],
+            duration_ms=round((time.perf_counter() - task_started) * 1000),
+            warnings=[warning],
+            error={"type": exc.__class__.__name__, "message": str(exc)},
+        )
+        trace_events.append({"event": "retrieval_task_failed", "task_id": task.task_id})
+        return task, result, evidence_items, warnings, trace_events
+
+    if not records:
+        warning = structured_warning(
+            code="no_evidence",
+            domain=task.domain,
+            message=f"No evidence found for {task.domain}.",
+            retryable=False,
+            details={"task_id": task.task_id},
+        )
+        warnings.append(warning)
+        result = RetrievalResult(
+            task_id=task.task_id,
+            status="empty",
+            evidence_ids=[],
+            duration_ms=round((time.perf_counter() - task_started) * 1000),
+            warnings=[warning],
+        )
+        trace_events.append({"event": "retrieval_task_empty", "task_id": task.task_id})
+        return task, result, evidence_items, warnings, trace_events
+
+    assigned_to = _assigned_agents_for_task(task, agents_to_run)
+    evidence_ids: list[str] = []
+    for index, record in enumerate(records, start=1):
+        evidence = normalize_record_to_evidence(
+            record=record,
+            task=task,
+            evidence_index=index,
+            assigned_to=assigned_to,
+        )
+        evidence_items.append(evidence)
+        evidence_ids.append(evidence.evidence_id)
+
+    result = RetrievalResult(
+        task_id=task.task_id,
+        status="completed",
+        evidence_ids=evidence_ids,
+        duration_ms=round((time.perf_counter() - task_started) * 1000),
+        warnings=[],
+    )
+    trace_events.append(
+        {
+            "event": "retrieval_task_completed",
+            "task_id": task.task_id,
+            "evidence_ids": evidence_ids,
+        }
+    )
+    trace_events.append(
+        {
+            "event": "evidence_assigned",
+            "task_id": task.task_id,
+            "assigned_to": assigned_to,
+            "evidence_ids": evidence_ids,
+        }
+    )
+    return task, result, evidence_items, warnings, trace_events
+
+
 async def execute_retrieval_plan(
     plan: list[RetrievalTask],
     state: AgentGraphState,
@@ -501,126 +634,25 @@ async def execute_retrieval_plan(
         }
     ]
 
-    for task in plan:
-        task_started = time.perf_counter()
-        trace_events.append({"event": "retrieval_task_started", "task_id": task.task_id})
-        try:
-            if task.domain == "market":
-                from agent_service.tools.market import lookup_market_metrics
-
-                records = await lookup_market_metrics(task.filters)
-                if not records:
-                    warning = structured_warning(
-                        code="investment_market_data_missing",
-                        domain="market",
-                        message="Market aggregate evidence is not available for this query.",
-                        retryable=False,
-                        details={"task_id": task.task_id, "filters": task.filters},
-                    )
-                    warnings.append(warning)
-                    retrieval_results[task.task_id] = RetrievalResult(
-                        task_id=task.task_id,
-                        status="skipped",
-                        evidence_ids=[],
-                        duration_ms=round((time.perf_counter() - task_started) * 1000),
-                        warnings=[warning],
-                        skip_reason="investment_market_data_missing",
-                    )
-                    trace_events.append(
-                        {
-                            "event": "retrieval_task_skipped",
-                            "task_id": task.task_id,
-                        }
-                    )
-                    continue
-            else:
-                trace = RetrievalTrace(request_id=request.request_id)
-                records = await _run_hybrid_tool(
-                    query=task.query,
-                    filters=task.filters,
-                    trace=trace,
-                    tool_name=task.tool,
-                    parent_type=_parent_type_for_task(task),
-                    top_k=task.top_k,
-                    rerank_to=task.rerank_top_k or task.top_k,
-                )
-        except Exception as exc:
-            warning = structured_warning(
-                code="retrieval_error",
-                domain=task.domain,
-                message=f"Retrieval task {task.task_id} failed.",
-                retryable=True,
-                details={"error": str(exc)},
-            )
-            warnings.append(warning)
-            retrieval_results[task.task_id] = RetrievalResult(
-                task_id=task.task_id,
-                status="failed",
-                evidence_ids=[],
-                duration_ms=round((time.perf_counter() - task_started) * 1000),
-                warnings=[warning],
-                error={"type": exc.__class__.__name__, "message": str(exc)},
-            )
-            trace_events.append(
-                {"event": "retrieval_task_failed", "task_id": task.task_id}
-            )
-            continue
-
-        if not records:
-            warning = structured_warning(
-                code="no_evidence",
-                domain=task.domain,
-                message=f"No evidence found for {task.domain}.",
-                retryable=False,
-                details={"task_id": task.task_id},
-            )
-            warnings.append(warning)
-            retrieval_results[task.task_id] = RetrievalResult(
-                task_id=task.task_id,
-                status="empty",
-                evidence_ids=[],
-                duration_ms=round((time.perf_counter() - task_started) * 1000),
-                warnings=[warning],
-            )
-            trace_events.append({"event": "retrieval_task_empty", "task_id": task.task_id})
-            continue
-
-        assigned_to = _assigned_agents_for_task(task, agents_to_run)
-        evidence_ids: list[str] = []
-        for index, record in enumerate(records, start=1):
-            evidence = normalize_record_to_evidence(
-                record=record,
+    task_outputs = await asyncio.gather(
+        *(
+            _execute_single_retrieval_task(
                 task=task,
-                evidence_index=index,
-                assigned_to=assigned_to,
+                request=request,
+                agents_to_run=agents_to_run,
             )
-            evidence_by_id[evidence.evidence_id] = evidence
-            evidence_ids.append(evidence.evidence_id)
-            for agent in assigned_to:
-                evidence_for_agent.setdefault(agent, []).append(evidence.evidence_id)
+            for task in plan
+        )
+    )
 
-        retrieval_results[task.task_id] = RetrievalResult(
-            task_id=task.task_id,
-            status="completed",
-            evidence_ids=evidence_ids,
-            duration_ms=round((time.perf_counter() - task_started) * 1000),
-            warnings=[],
-        )
-        trace_events.append(
-            {
-                "event": "retrieval_task_completed",
-                "task_id": task.task_id,
-                "evidence_ids": evidence_ids,
-            }
-        )
-        trace_events.append(
-            {
-                "event": "evidence_assigned",
-                "task_id": task.task_id,
-                "assigned_to": assigned_to,
-                "evidence_ids": evidence_ids,
-            }
-        )
+    for task, result, evidence_items, task_warnings, task_events in task_outputs:
+        retrieval_results[task.task_id] = result
+        warnings.extend(task_warnings)
+        trace_events.extend(task_events)
+        for evidence in evidence_items:
+            evidence_by_id[evidence.evidence_id] = evidence
+            for agent in evidence.assigned_to:
+                evidence_for_agent.setdefault(agent, []).append(evidence.evidence_id)
 
     return {
         "retrieval_plan": plan,
@@ -631,3 +663,4 @@ async def execute_retrieval_plan(
         "warnings": [*state.get("warnings", []), *warnings],
         "retrieval_duration_ms": round((time.perf_counter() - started_all) * 1000),
     }
+
