@@ -29,6 +29,11 @@ class AgentGraphState(TypedDict, total=False):
     evidence_for_agent: dict[str, list[str]]
     evidence: dict[str, list[dict[str, Any]]]
     agent_results: dict[str, dict[str, Any]]
+    agent_blackboard: dict[str, Any]
+    investment_case: dict[str, Any]
+    investment_assumptions: dict[str, Any]
+    investment_metrics: dict[str, Any]
+    committee_review: dict[str, Any]
     final_response: str
     sources: list[AgentSource]
     suggested_actions: list[str]
