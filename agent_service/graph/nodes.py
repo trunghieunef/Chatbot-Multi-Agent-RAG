@@ -19,6 +19,11 @@ from agent_service.contracts import (
     StructuredWarning,
 )
 from agent_service.config import get_agent_settings
+from agent_service.graph.investment_model import (
+    build_investment_case,
+    calculate_investment_metrics,
+    resolve_investment_assumptions,
+)
 from agent_service.graph.memory_extraction import extract_memory_proposals
 from agent_service.graph.memory_filters import derive_memory_filters
 from agent_service.graph.retrieval_planner import (
@@ -448,6 +453,51 @@ async def specialist_agents_node(state: AgentGraphState) -> AgentGraphState:
             {"agents_completed": list(agent_results)},
         ),
     }
+
+
+def investment_model_node(state: AgentGraphState) -> AgentGraphState:
+    start_time = time.perf_counter()
+    if "investment_advisor" not in state.get("agents_to_run", []):
+        return {
+            "trace_steps": _append_trace(
+                state,
+                "investment_model",
+                start_time,
+                {"skipped": True, "reason": "investment_advisor_not_selected"},
+            )
+        }
+
+    understanding = state.get("query_understanding") or {}
+    user_inputs = dict(understanding.get("filters") or {})
+    case = build_investment_case(
+        evidence_by_id=state.get("evidence_by_id", {}),
+        evidence_for_agent=state.get("evidence_for_agent", {}),
+    )
+    assumptions = resolve_investment_assumptions(
+        case=case,
+        user_inputs=user_inputs,
+        preferences=state["request"].user_preferences,
+    )
+    metrics = calculate_investment_metrics(
+        case=case,
+        assumptions=assumptions,
+    )
+    return {
+        "investment_case": case,
+        "investment_assumptions": assumptions,
+        "investment_metrics": metrics,
+        "trace_steps": _append_trace(
+            state,
+            "investment_model",
+            start_time,
+            {
+                "case_scope": case.get("case_scope"),
+                "metric_keys": list(metrics),
+                "missing_evidence": case.get("missing_evidence", []),
+            },
+        ),
+    }
+
 
 def _is_evidence_assigned_to_agent(
     *,

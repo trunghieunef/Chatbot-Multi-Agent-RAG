@@ -8,6 +8,7 @@ from agent_service.config import get_agent_settings
 from agent_service.contracts import AgentChatRequest, AgentChatResponse, TraceSummary
 from agent_service.graph.nodes import (
     context_builder,
+    investment_model_node,
     memory_proposal_node,
     query_understanding_node,
     readiness_checker,
@@ -20,6 +21,14 @@ from agent_service.graph.nodes import (
 from agent_service.graph.state import AgentGraphState
 
 
+def _route_after_specialists(state: AgentGraphState) -> str:
+    return (
+        "investment_model"
+        if "investment_advisor" in state.get("agents_to_run", [])
+        else "synthesizer"
+    )
+
+
 def build_agent_graph():
     workflow = StateGraph(AgentGraphState)
     workflow.add_node("context_builder", context_builder)
@@ -28,6 +37,7 @@ def build_agent_graph():
     workflow.add_node("query_understanding", query_understanding_node)
     workflow.add_node("retrieval_planner", retrieval_planner_node)
     workflow.add_node("specialist_agents", specialist_agents_node)
+    workflow.add_node("investment_model", investment_model_node)
     workflow.add_node("synthesizer", synthesizer_node)
     workflow.add_node("safety_validator", safety_validator_node)
     workflow.add_node("memory_proposals", memory_proposal_node)
@@ -38,7 +48,15 @@ def build_agent_graph():
     workflow.add_edge("router", "query_understanding")
     workflow.add_edge("query_understanding", "retrieval_planner")
     workflow.add_edge("retrieval_planner", "specialist_agents")
-    workflow.add_edge("specialist_agents", "synthesizer")
+    workflow.add_conditional_edges(
+        "specialist_agents",
+        _route_after_specialists,
+        {
+            "investment_model": "investment_model",
+            "synthesizer": "synthesizer",
+        },
+    )
+    workflow.add_edge("investment_model", "synthesizer")
     workflow.add_edge("synthesizer", "safety_validator")
     workflow.add_edge("safety_validator", "memory_proposals")
     workflow.add_edge("memory_proposals", END)
