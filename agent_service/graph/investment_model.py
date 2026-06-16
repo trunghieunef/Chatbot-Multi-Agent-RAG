@@ -39,6 +39,8 @@ def _summary_from_evidence(items: list[Evidence]) -> dict[str, Any]:
     first = items[0]
     facts = dict(first.facts)
     facts["evidence_ids"] = [item.evidence_id for item in items]
+    facts["primary_evidence_id"] = first.evidence_id
+    facts["primary_evidence_ids"] = [first.evidence_id]
     facts["items"] = [
         {
             "evidence_id": item.evidence_id,

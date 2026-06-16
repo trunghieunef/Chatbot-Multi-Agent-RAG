@@ -132,6 +132,8 @@ def test_build_investment_case_preserves_items_for_multi_evidence_summary():
     )
 
     assert case["market_summary"]["evidence_ids"] == ["ev_market_1", "ev_market_2"]
+    assert case["market_summary"]["primary_evidence_id"] == "ev_market_1"
+    assert case["market_summary"]["primary_evidence_ids"] == ["ev_market_1"]
     assert len(case["market_summary"]["items"]) == 2
     assert case["market_summary"]["items"][0] == {
         "evidence_id": "ev_market_1",
