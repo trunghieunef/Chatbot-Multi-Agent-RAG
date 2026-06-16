@@ -19,6 +19,7 @@ from agent_service.contracts import (
     StructuredWarning,
 )
 from agent_service.config import get_agent_settings
+from agent_service.graph.committee import build_committee_review
 from agent_service.graph.investment_model import (
     build_investment_case,
     calculate_investment_metrics,
@@ -494,6 +495,38 @@ def investment_model_node(state: AgentGraphState) -> AgentGraphState:
                 "case_scope": case.get("case_scope"),
                 "metric_keys": list(metrics),
                 "missing_evidence": case.get("missing_evidence", []),
+            },
+        ),
+    }
+
+
+def committee_review_node(state: AgentGraphState) -> AgentGraphState:
+    start_time = time.perf_counter()
+    if "investment_advisor" not in state.get("agents_to_run", []):
+        return {
+            "trace_steps": _append_trace(
+                state,
+                "committee_review",
+                start_time,
+                {"skipped": True, "reason": "investment_advisor_not_selected"},
+            )
+        }
+    review = build_committee_review(
+        investment_case=state.get("investment_case", {}),
+        investment_assumptions=state.get("investment_assumptions", {}),
+        investment_metrics=state.get("investment_metrics", {}),
+        agent_blackboard=state.get("agent_blackboard", {}),
+        warnings=state.get("warnings", []),
+    )
+    return {
+        "committee_review": review,
+        "trace_steps": _append_trace(
+            state,
+            "committee_review",
+            start_time,
+            {
+                "perspective_count": len(review.get("perspectives", [])),
+                "decision": (review.get("recommendation") or {}).get("decision"),
             },
         ),
     }

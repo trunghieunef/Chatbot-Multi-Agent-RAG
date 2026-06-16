@@ -74,5 +74,7 @@ async def test_investment_graph_runs_investment_model_step(monkeypatch):
 
     step_names = [step["step_name"] for step in response.full_trace["steps"]]
     assert "investment_model" in step_names
+    assert "committee_review" in step_names
     assert step_names.index("investment_model") > step_names.index("specialist_agents")
-    assert step_names.index("investment_model") < step_names.index("synthesizer")
+    assert step_names.index("committee_review") > step_names.index("investment_model")
+    assert step_names.index("committee_review") < step_names.index("synthesizer")

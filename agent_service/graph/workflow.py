@@ -7,6 +7,7 @@ from langgraph.graph import END, StateGraph
 from agent_service.config import get_agent_settings
 from agent_service.contracts import AgentChatRequest, AgentChatResponse, TraceSummary
 from agent_service.graph.nodes import (
+    committee_review_node,
     context_builder,
     investment_model_node,
     memory_proposal_node,
@@ -38,6 +39,7 @@ def build_agent_graph():
     workflow.add_node("retrieval_planner", retrieval_planner_node)
     workflow.add_node("specialist_agents", specialist_agents_node)
     workflow.add_node("investment_model", investment_model_node)
+    workflow.add_node("committee_review", committee_review_node)
     workflow.add_node("synthesizer", synthesizer_node)
     workflow.add_node("safety_validator", safety_validator_node)
     workflow.add_node("memory_proposals", memory_proposal_node)
@@ -56,7 +58,8 @@ def build_agent_graph():
             "synthesizer": "synthesizer",
         },
     )
-    workflow.add_edge("investment_model", "synthesizer")
+    workflow.add_edge("investment_model", "committee_review")
+    workflow.add_edge("committee_review", "synthesizer")
     workflow.add_edge("synthesizer", "safety_validator")
     workflow.add_edge("safety_validator", "memory_proposals")
     workflow.add_edge("memory_proposals", END)
