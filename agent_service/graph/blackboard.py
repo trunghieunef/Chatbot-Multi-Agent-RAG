@@ -43,7 +43,7 @@ def append_blackboard_entry(
     clean_evidence_ids = [
         evidence_id
         for evidence_id in evidence_ids
-        if evidence_id in valid_ids and evidence_id not in []
+        if evidence_id in valid_ids
     ]
     entry = BlackboardEntry(
         id=_next_entry_id(entries, author),
