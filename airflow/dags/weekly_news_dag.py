@@ -30,11 +30,19 @@ DEFAULT_ARGS = {
 }
 
 
-def _crawl_news(**_):
+def _crawl_news_urls(**_):
+    output = str(REPO_ROOT / "data/raw/news_urls.csv")
     run_crawler(
-        module="crawler.news.crawl_articles",
+        module="crawler.news.crawl_urls",
+        args={"--pages": ["1", "10"], "--output": output, "--workers": "2"},
+    )
+
+
+def _crawl_news_details(**_):
+    run_crawler(
+        module="crawler.news.crawl_details",
         args={
-            "--pages": ["1", "10"],
+            "--input": str(REPO_ROOT / "data/raw/news_urls.csv"),
             "--output": str(REPO_ROOT / "data/raw/news_articles.csv"),
             "--workers": "2",
         },
@@ -57,6 +65,7 @@ with DAG(
     on_failure_callback=record_failure,
     tags=["realestate", "news"],
 ) as dag:
-    crawl = PythonOperator(task_id="crawl_news", python_callable=_crawl_news)
+    crawl_urls = PythonOperator(task_id="crawl_news_urls", python_callable=_crawl_news_urls)
+    crawl_details = PythonOperator(task_id="crawl_news_details", python_callable=_crawl_news_details)
     ingest = PythonOperator(task_id="ingest_news", python_callable=_ingest_news)
-    crawl >> ingest
+    crawl_urls >> crawl_details >> ingest

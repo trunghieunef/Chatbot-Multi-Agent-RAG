@@ -21,6 +21,22 @@ from data_pipeline.clean import row_to_project
 from data_pipeline.embed import BGEEmbedder
 
 
+PROJECT_COLUMNS = Project.__table__.columns
+PROJECT_COLUMN_KEYS = set(PROJECT_COLUMNS.keys())
+
+
+def public_project_data(project_data: dict[str, Any]) -> dict[str, Any]:
+    data: dict[str, Any] = {}
+    for key, value in project_data.items():
+        if key not in PROJECT_COLUMN_KEYS:
+            continue
+        max_length = getattr(PROJECT_COLUMNS[key].type, "length", None)
+        if isinstance(value, str) and max_length:
+            value = value[:max_length]
+        data[key] = value
+    return data
+
+
 def build_project_chunks(project: dict) -> list[dict[str, Any]]:
     """Build semantic chunks for a project: overview, description, amenities."""
     chunks: list[dict[str, Any]] = []
@@ -84,7 +100,7 @@ async def publish_project_batch(projects_data: list[dict[str, Any]]) -> list[Pro
     persisted: list[Project] = []
     async with async_session() as session:
         for project_data in projects_data:
-            project = await upsert_project(session, project_data)
+            project = await upsert_project(session, public_project_data(project_data))
             persisted.append(project)
         await session.commit()
     return persisted

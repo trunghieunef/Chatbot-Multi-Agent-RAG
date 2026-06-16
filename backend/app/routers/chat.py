@@ -63,6 +63,7 @@ from app.services.chatbot.session_guard import verify_session_ownership
 
 router = APIRouter(prefix="/chat", tags=["Chat"])
 logger = logging.getLogger(__name__)
+AGENT_USED_STORAGE_MAX_LENGTH = 50
 
 _anon_abuse_guard = ChatAbuseGuard(
     max_requests=get_settings().CHAT_ABUSE_GUARD_ANON_MAX_REQUESTS,
@@ -76,6 +77,14 @@ _auth_abuse_guard = ChatAbuseGuard(
 
 def is_agent_service_enabled() -> bool:
     return get_settings().CHATBOT_AGENT_SERVICE_ENABLED
+
+
+def agent_used_for_storage(agent_used: str, agents_used: list[str]) -> str:
+    if len(agent_used) <= AGENT_USED_STORAGE_MAX_LENGTH:
+        return agent_used
+    if len(agents_used) > 1:
+        return "multi_agent"
+    return agent_used[:AGENT_USED_STORAGE_MAX_LENGTH]
 
 
 def should_schedule_eval(
@@ -533,6 +542,7 @@ async def send_message(
     response_text = agent_response.final_response
     agents_used = agent_response.agents_used
     agent_used = ", ".join(agents_used) if agents_used else "unknown"
+    stored_agent_used = agent_used_for_storage(agent_used, agents_used)
     sources = _source_dicts(agent_response)
     suggested_actions = agent_response.suggested_actions
     trace_summary = _trace_summary_dict(agent_response)
@@ -544,7 +554,7 @@ async def send_message(
         session_id=session.id,
         role="assistant",
         content=response_text,
-        agent_used=agent_used,
+        agent_used=stored_agent_used,
         metadata_json={
             "request_id": request_id,
             "sources": sources,

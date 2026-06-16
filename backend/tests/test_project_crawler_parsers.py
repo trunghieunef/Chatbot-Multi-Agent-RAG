@@ -23,6 +23,8 @@ def test_project_listing_only_extracts_urls_from_main_left_container():
           <a href="/du-an-can-ho-chung-cu">Category link should be ignored</a>
         </nav>
         <section class="re__project-main-left">
+          <a href="/du-an-bat-dong-san">All projects index should be ignored</a>
+          <a href="/du-an-can-ho-chung-cu">Category link inside content should be ignored</a>
           <a href="/du-an-can-ho-chung-cu-quan-7/the-peak-garden-pj3029">
             The Peak Garden
           </a>
@@ -92,6 +94,28 @@ def test_project_detail_page_preserves_input_slug():
     )
 
     assert record["slug"] == "url-slug"
+
+
+def test_project_detail_page_rejects_shell_domain_heading():
+    class PageStub:
+        def content(self):
+            return """
+            <html>
+              <head><title>batdongsan.com.vn</title></head>
+              <body>
+                <h1>batdongsan.com.vn</h1>
+                <p>Vui lòng chờ trong giây lát...</p>
+              </body>
+            </html>
+            """
+
+    record = crawl_details.parse_detail_page(
+        PageStub(),
+        url="https://batdongsan.com.vn/du-an-shophouse-gia-lam/malibu-walk-pj6756",
+        slug="malibu-walk-pj6756",
+    )
+
+    assert record is None
 
 
 def test_project_detail_extracts_live_detail_sections():
@@ -168,3 +192,32 @@ def test_project_detail_extracts_live_detail_sections():
         '["https://file4.batdongsan.com.vn/project-1.jpg", '
         '"https://file4.batdongsan.com.vn/project-2.jpg"]'
     )
+
+
+def test_project_detail_infers_fields_from_live_description():
+    html = """
+    <html>
+      <body>
+        <div class="project-main-container">
+          <h1 class="re__project-name">Malibu Walk</h1>
+          <div class="re__project-address">Xã Đa Tốn, Huyện Gia Lâm, Hà Nội.</div>
+          <div class="re__prj-tag-info re__project-open">Đang mở bán</div>
+        </div>
+        <div class="js__prj-detail-content re__detail-content re__project-editor">
+          <p>Malibu Walk là tuyến phố đi bộ và shophouse thương mại cao cấp nằm tại tâm điểm phân khu Masteri Waterfront thuộc Khu đô thị Vinhomes Ocean Park 1 (Gia Lâm, Hà Nội) được phát triển bởi Masterise Homes.</p>
+          <p>Với tổng diện tích khoảng 7,3ha, Malibu Walk được định hướng trở thành tâm điểm thương mại - dịch vụ - giải trí cao cấp.</p>
+          <p>Malibu Walk gồm 3 dãy shophouse cao 5 tầng với số lượng 60 căn.</p>
+        </div>
+      </body>
+    </html>
+    """
+
+    record = crawl_details.parse_project_detail(
+        html,
+        url="https://batdongsan.com.vn/du-an-shophouse-gia-lam/malibu-walk-pj6756",
+    )
+
+    assert record["developer"] == "Masterise Homes"
+    assert record["area_range"] == "7,3ha"
+    assert record["total_units"] == "60"
+    assert record["project_type"] == "Shophouse"

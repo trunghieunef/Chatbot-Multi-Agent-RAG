@@ -8,10 +8,84 @@ location extraction, and a high-level row_to_listing converter.
 import json
 import re
 import unicodedata
-from datetime import date
+from datetime import date, datetime
 
 
 PRICE_RE = re.compile(r"([\d.,]+)", re.IGNORECASE)
+
+
+def _normalize_for_match(value: str) -> str:
+    """Lowercase and strip Vietnamese accents for robust substring matching."""
+    normalized = unicodedata.normalize("NFD", value or "")
+    without_marks = "".join(
+        ch for ch in normalized if unicodedata.category(ch) != "Mn"
+    )
+    return without_marks.replace("đ", "d").replace("Đ", "d").lower()
+
+
+def _address_parts(row: dict) -> list[str]:
+    address = row.get("address", "") or ""
+    return [p.strip() for p in address.split(",") if p.strip()]
+
+
+def _is_breadcrumb_address(parts: list[str]) -> bool:
+    if len(parts) < 4:
+        return False
+    return _normalize_for_match(parts[0]) in {"ban", "cho thue"}
+
+
+def _breadcrumb_property_text(row: dict) -> str:
+    parts = _address_parts(row)
+    if not _is_breadcrumb_address(parts):
+        return ""
+    return " ".join(parts[3:])
+
+
+def _starts_with_any(value: str, prefixes: tuple[str, ...]) -> bool:
+    normalized = _normalize_for_match(value).strip()
+    return any(
+        normalized == prefix or normalized.startswith(f"{prefix} ")
+        for prefix in prefixes
+    )
+
+
+def _is_ward_part(value: str) -> bool:
+    return _starts_with_any(value, ("phuong", "xa", "thi tran"))
+
+
+def _is_district_part(value: str) -> bool:
+    return _starts_with_any(value, ("quan", "huyen", "thanh pho", "tp", "thi xa"))
+
+
+def extract_address_and_location(row: dict) -> tuple[str, str, str, str]:
+    """Extract non-admin address plus ward, district, city from address field."""
+    parts = _address_parts(row)
+    if not parts:
+        return "", "", "", ""
+
+    if _is_breadcrumb_address(parts):
+        clean_address = ", ".join(parts[3:])
+        return clean_address, "", parts[2], parts[1]
+
+    city = parts[-1]
+    district = ""
+    ward = ""
+    admin_indexes = {len(parts) - 1}
+
+    for index in range(len(parts) - 2, -1, -1):
+        part = parts[index]
+        if not district and _is_district_part(part):
+            district = part
+            admin_indexes.add(index)
+            continue
+        if not ward and _is_ward_part(part):
+            ward = part
+            admin_indexes.add(index)
+
+    clean_address = ", ".join(
+        part for index, part in enumerate(parts) if index not in admin_indexes
+    )
+    return clean_address, ward, district, city
 
 
 def parse_price_billion(text: str) -> float | None:
@@ -72,46 +146,47 @@ def determine_listing_type(row: dict) -> str:
 
 def determine_property_type(row: dict) -> str:
     """Classify property type from title."""
-    title = (row.get("title", "") + " " + row.get("property_type", "")).lower()
-    if "căn hộ" in title or "chung cư" in title:
-        return "Căn hộ chung cư"
-    if "nhà riêng" in title or "nhà phố" in title:
-        return "Nhà riêng"
-    if "biệt thự" in title:
-        return "Biệt thự"
-    if "đất" in title or "đất nền" in title:
-        return "Đất nền"
-    if "shophouse" in title or "nhà phố thương mại" in title:
+    text = _normalize_for_match(
+        " ".join(
+            [
+                row.get("title", "") or "",
+                row.get("property_type", "") or "",
+                _breadcrumb_property_text(row),
+            ]
+        )
+    )
+    if "shophouse" in text or "nha pho thuong mai" in text:
         return "Shophouse"
-    if "văn phòng" in title:
+    if "căn hộ" in text or "chung cư" in text:
+        return "Căn hộ chung cư"
+    if "can ho" in text or "chung cu" in text or "condotel" in text:
+        return "Căn hộ chung cư"
+    if "biet thu" in text or "lien ke" in text:
+        return "Biệt thự"
+    if "van phong" in text:
         return "Văn phòng"
-    if "kho" in title or "nhà xưởng" in title:
+    if "kho" in text or "nha xuong" in text:
         return "Kho/Nhà xưởng"
+    if "cua hang" in text or "ki ot" in text:
+        return "Cửa hàng/Ki ốt"
+    if "nha tro" in text or "phong tro" in text:
+        return "Nhà trọ/Phòng trọ"
+    if "dat" in text or "dat nen" in text:
+        return "Đất nền"
+    if "nha rieng" in text or "nha mat pho" in text or "nha pho" in text:
+        return "Nhà riêng"
     return row.get("property_type", "Khác") or "Khác"
 
 
 def extract_location(row: dict) -> tuple[str, str, str]:
     """Extract ward, district, city from address field."""
-    address = row.get("address", "") or ""
-    parts = [p.strip() for p in address.split(",") if p.strip()]
-
-    city = ""
-    district = ""
-    ward = ""
-
-    if len(parts) >= 1:
-        city = parts[-1]
-    if len(parts) >= 2:
-        district = parts[-2]
-    if len(parts) >= 3:
-        ward = parts[-3]
-
+    _, ward, district, city = extract_address_and_location(row)
     return ward, district, city
 
 
 def row_to_listing(row: dict) -> dict:
     """Convert a CSV row dict to a Listing model constructor kwargs."""
-    ward, district, city = extract_location(row)
+    clean_address, ward, district, city = extract_address_and_location(row)
     listing_type = determine_listing_type(row)
 
     price_text = row.get("price_text", "") or ""
@@ -141,7 +216,7 @@ def row_to_listing(row: dict) -> dict:
         "road_width": row.get("road_width", "") or None,
         "legal_status": row.get("legal", "") or None,
         "furniture": row.get("furniture", "") or None,
-        "address": row.get("address", "") or None,
+        "address": clean_address or None,
         "ward": ward or None,
         "district": district or None,
         "city": city or None,
@@ -197,13 +272,22 @@ def row_to_project(row: dict) -> dict:
 
 
 def _parse_iso_date(value: str) -> date | None:
-    """Return a ``date`` from an ISO ``YYYY-MM-DD`` string, or ``None`` if unparseable."""
+    """Return a ``date`` from common crawler date strings, or ``None``."""
     if not value:
         return None
-    try:
-        return date.fromisoformat(value.strip())
-    except ValueError:
-        return None
+    cleaned = value.strip()
+    for fmt in (
+        "%Y-%m-%d",
+        "%Y-%m-%d %H:%M",
+        "%Y-%m-%dT%H:%M",
+        "%d/%m/%Y",
+        "%d/%m/%Y %H:%M",
+    ):
+        try:
+            return datetime.strptime(cleaned, fmt).date()
+        except ValueError:
+            continue
+    return None
 
 
 def row_to_article(row: dict) -> dict:

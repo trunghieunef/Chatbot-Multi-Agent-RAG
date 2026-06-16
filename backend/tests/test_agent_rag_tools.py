@@ -108,6 +108,51 @@ async def test_search_listings_accepts_task_limits(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_lookup_market_metrics_passes_district_filter(monkeypatch):
+    from agent_service.tools import market
+
+    called = {}
+
+    async def fake_district_price_overview(city, listing_type, property_type=None, district=None):
+        called.update(
+            {
+                "city": city,
+                "listing_type": listing_type,
+                "property_type": property_type,
+                "district": district,
+            }
+        )
+        return [
+            {
+                "district": "Quận 7",
+                "avg_price_per_m2": 64,
+                "avg_price": 4.8,
+                "period": "2026-03",
+                "source": "market_price_snapshots",
+            }
+        ]
+
+    monkeypatch.setattr(market, "district_price_overview", fake_district_price_overview)
+
+    results = await market.lookup_market_metrics(
+        {
+            "city": "Hồ Chí Minh",
+            "district": "Quận 7",
+            "property_type": "Căn hộ",
+        }
+    )
+
+    assert called == {
+        "city": "Hồ Chí Minh",
+        "listing_type": "sale",
+        "property_type": "Căn hộ",
+        "district": "Quận 7",
+    }
+    assert results[0]["period"] == "2026-03"
+    assert results[0]["record"]["source"] == "market_price_snapshots"
+
+
+@pytest.mark.asyncio
 async def test_count_source_returns_not_ready_for_unsupported_source():
     result = await count_source("unsupported")
 

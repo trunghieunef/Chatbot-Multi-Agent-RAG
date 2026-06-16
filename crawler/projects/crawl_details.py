@@ -107,6 +107,46 @@ def _extract_value_from_description(description: str, label: str) -> str:
     return _clean_text(value)
 
 
+def _infer_developer(description: str) -> str:
+    match = re.search(
+        r"(?:được\s+)?phát\s+triển\s+bởi\s+([^.,;]+)",
+        description,
+        flags=re.IGNORECASE,
+    )
+    return _clean_text(match.group(1)) if match else ""
+
+
+def _infer_area_range(description: str) -> str:
+    match = re.search(
+        r"tổng\s+diện\s+tích\s+(?:khoảng\s+)?([\d.,]+\s*(?:ha|m²|m2))",
+        description,
+        flags=re.IGNORECASE,
+    )
+    return _clean_text(match.group(1)) if match else ""
+
+
+def _infer_total_units(description: str) -> str:
+    match = re.search(
+        r"(?:số\s+lượng|gồm)[^\d]{0,40}([\d.]+)\s*căn",
+        description,
+        flags=re.IGNORECASE,
+    )
+    return re.sub(r"\D+", "", match.group(1)) if match else ""
+
+
+def _infer_project_type(description: str, url: str) -> str:
+    lowered = f"{url} {description}".lower()
+    if "shophouse" in lowered:
+        return "Shophouse"
+    if "biệt thự" in lowered or "biet-thu" in lowered:
+        return "Biệt thự"
+    if "liền kề" in lowered or "lien-ke" in lowered:
+        return "Liền kề"
+    if "căn hộ" in lowered or "can-ho" in lowered:
+        return "Căn hộ"
+    return ""
+
+
 def _project_attr_map(soup: BeautifulSoup) -> dict[str, str]:
     attrs: dict[str, str] = {}
     for row in soup.select(".re__project-attr tr"):
@@ -204,9 +244,100 @@ def _project_images(soup: BeautifulSoup, *, base_url: str) -> list[str]:
     return urls
 
 
+def _is_shell_name(value: str) -> bool:
+    lowered = _label_key(value)
+    return (
+        not lowered
+        or lowered in {"batdongsan.com.vn", "batdongsan", "propertyguru"}
+        or "batdongsan.com.vn" in lowered
+        or "just a moment" in lowered
+        or "access denied" in lowered
+        or "vui long cho" in lowered
+    )
+
+
+def _iter_json_ld_objects(soup: BeautifulSoup):
+    for script in soup.select('script[type="application/ld+json"]'):
+        raw = script.string or script.get_text(strip=True)
+        if not raw:
+            continue
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+
+        stack = [payload]
+        while stack:
+            item = stack.pop()
+            if isinstance(item, list):
+                stack.extend(item)
+            elif isinstance(item, dict):
+                yield item
+                graph = item.get("@graph")
+                if isinstance(graph, list):
+                    stack.extend(graph)
+
+
+def _project_name_from_json_ld(soup: BeautifulSoup) -> str:
+    ignored_types = {"organization", "website", "webpage", "breadcrumblist"}
+    for item in _iter_json_ld_objects(soup):
+        raw_type = item.get("@type", "")
+        types = raw_type if isinstance(raw_type, list) else [raw_type]
+        normalized_types = {_label_key(str(value)) for value in types}
+        if normalized_types & ignored_types:
+            continue
+        name = _clean_text(str(item.get("name", "")))
+        if name and not _is_shell_name(name):
+            return name
+    return ""
+
+
+def _project_name_from_meta(soup: BeautifulSoup) -> str:
+    for selector in (
+        'meta[property="og:title"]',
+        'meta[name="twitter:title"]',
+        "title",
+    ):
+        node = soup.select_one(selector)
+        if not node:
+            continue
+        value = node.get("content") if node.name == "meta" else node.get_text(" ", strip=True)
+        value = _clean_text(value or "")
+        if "|" in value:
+            value = _clean_text(value.split("|", 1)[0])
+        if value and not _is_shell_name(value):
+            return value
+    return ""
+
+
+def _has_project_detail_signal(row: dict[str, str]) -> bool:
+    fields = (
+        "developer",
+        "location",
+        "total_units",
+        "price_range",
+        "area_range",
+        "scale",
+        "status",
+        "project_type",
+        "legal",
+        "description",
+    )
+    if any(_clean_text(row.get(field, "")) for field in fields):
+        return True
+    return row.get("image_urls") not in {"", "[]", None}
+
+
 def parse_project_detail(html: str, *, url: str) -> dict[str, str]:
     soup = BeautifulSoup(html, "html.parser")
-    name = _text(soup, "h1.re__project-name") or _text(soup, "h1") or _text(soup, "[data-testid='project-title']")
+    name = (
+        _text(soup, "h1.re__project-name")
+        or _text(soup, "[data-testid='project-title']")
+        or _text(soup, ".project-title")
+        or _project_name_from_json_ld(soup)
+        or _project_name_from_meta(soup)
+        or _text(soup, "h1")
+    )
     attr_map = _project_attr_map(soup)
     location = _project_address(soup)
     location = _clean_text(location.replace("Xem bản đồ", ""))
@@ -229,6 +360,21 @@ def parse_project_detail(html: str, *, url: str) -> dict[str, str]:
         or _lookup(box_map, "Pháp lý")
         or _extract_value_from_description(description, "Pháp lý")
     )
+    if not total_units:
+        total_units = _infer_total_units(description)
+    if not area_range:
+        area_range = _infer_area_range(description)
+    if not project_type:
+        project_type = _infer_project_type(description, url)
+    developer = (
+        _lookup(attr_map, "Chá»§ Ä‘áº§u tÆ°", "ChÃ¡Â»Â§ Ã„â€˜Ã¡ÂºÂ§u tÃ†Â°")
+        or _text(soup, ".developer, [data-testid='developer']")
+        or _infer_developer(description)
+    )
+    if not developer:
+        developer = attr_map.get("chá»§ Ä‘áº§u tÆ°", "")
+    if not developer:
+        developer = attr_map.get("chu dau tu", "")
     return {
         "slug": slugify(name) or url.rstrip("/").split("/")[-1],
         "name": name,
@@ -244,6 +390,7 @@ def parse_project_detail(html: str, *, url: str) -> dict[str, str]:
         "description": description,
         "amenities": json.dumps(amenities, ensure_ascii=False),
         "developer": _lookup(attr_map, "Chủ đầu tư", "Chá»§ Ä‘áº§u tÆ°") or _text(soup, ".developer, [data-testid='developer']"),
+        "developer": developer,
         "total_units": total_units,
         "area_range": area_range,
         "scale": _lookup(box_map, "Quy mô") or _lookup(attr_map, "Quy mô"),
@@ -259,7 +406,9 @@ def parse_detail_page(page, url: str, slug: str) -> dict | None:
     """Extract project detail fields from a loaded Playwright page."""
     row = parse_project_detail(page.content(), url=url)
     row["slug"] = slug
-    return row if row.get("name") else None
+    if not row.get("name") or _is_shell_name(row["name"]):
+        return None
+    return row if _has_project_detail_signal(row) else None
 
 
 # ---------------------------------------------------------------------------
@@ -284,7 +433,14 @@ def crawl_detail(
         try:
             page.goto(url, timeout=30000, wait_until="domcontentloaded")
             time.sleep(2 + random.random())
-            return parse_detail_page(page, url, slug)
+            row = parse_detail_page(page, url, slug)
+            if row:
+                return row
+            if attempt < retries:
+                _log(f"  [RETRY] {slug} invalid/empty detail page, attempt {attempt + 1}")
+                time.sleep(3 + random.random() * 2)
+            else:
+                _log(f"  [ERROR] {slug} invalid/empty detail page after {retries + 1} attempts")
         except Exception as e:
             if attempt < retries:
                 _log(f"  [RETRY] {slug} error: {e}, attempt {attempt + 1}")

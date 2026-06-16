@@ -15,10 +15,11 @@ import argparse
 import glob
 import os
 import random
+import re
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright, Browser
@@ -55,6 +56,12 @@ def _slug_from_project_url(url: str) -> str:
     return url.rstrip("/").split("/")[-1]
 
 
+def _is_project_detail_url(url: str) -> bool:
+    path = urlparse(url).path.rstrip("/")
+    slug = path.rsplit("/", 1)[-1]
+    return bool(re.search(r"-pj\d+$", slug))
+
+
 def extract_project_urls(html: str, *, base_url: str) -> list[str]:
     soup = BeautifulSoup(html, "html.parser")
     main_left = soup.select_one(".re__project-main-left")
@@ -67,6 +74,8 @@ def extract_project_urls(html: str, *, base_url: str) -> list[str]:
         if "/du-an/" not in href and "/du-an-" not in href:
             continue
         absolute = urljoin(base_url, href)
+        if not _is_project_detail_url(absolute):
+            continue
         if absolute not in urls:
             urls.append(absolute)
     return urls

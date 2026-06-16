@@ -26,6 +26,8 @@ from data_pipeline.enrich import GeminiIntentExtractor, build_geocoder
 
 
 LISTING_IMAGE_META_KEY = "_image_urls"
+LISTING_COLUMNS = Listing.__table__.columns
+LISTING_COLUMN_KEYS = set(LISTING_COLUMNS.keys())
 
 
 def read_csv_rows(csv_path: str) -> list[dict[str, str]]:
@@ -114,11 +116,15 @@ async def replace_listing_images(
 
 
 def public_listing_data(listing_data: dict[str, Any]) -> dict[str, Any]:
-    return {
-        key: value
-        for key, value in listing_data.items()
-        if not key.startswith("_")
-    }
+    data: dict[str, Any] = {}
+    for key, value in listing_data.items():
+        if key not in LISTING_COLUMN_KEYS:
+            continue
+        max_length = getattr(LISTING_COLUMNS[key].type, "length", None)
+        if isinstance(value, str) and max_length:
+            value = value[:max_length]
+        data[key] = value
+    return data
 
 
 def empty_ingest_result() -> dict[str, int]:

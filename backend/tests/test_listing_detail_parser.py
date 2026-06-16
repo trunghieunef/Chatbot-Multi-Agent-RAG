@@ -1,4 +1,9 @@
-from crawler.core.listing_detail_parser import normalize_listing_detail
+from crawler.core.listing_detail_parser import (
+    extract_listing_address_from_page,
+    extract_listing_property_type_from_page,
+    is_shell_listing_page,
+    normalize_listing_detail,
+)
 from crawler.core.listing_images import image_urls_json_from_page
 from crawler.rent.crawl_details import DETAIL_FIELDS as RENT_DETAIL_FIELDS
 from crawler.sale.crawl_details import DETAIL_FIELDS as SALE_DETAIL_FIELDS
@@ -47,6 +52,126 @@ def test_crawler_detail_fields_include_normalized_keys():
     assert set(detail).issubset(RENT_DETAIL_FIELDS)
     assert "image_urls" in SALE_DETAIL_FIELDS
     assert "image_urls" in RENT_DETAIL_FIELDS
+
+
+def test_shell_listing_page_detection_rejects_challenge_titles():
+    assert is_shell_listing_page("batdongsan.com.vn", "Just a moment...")
+    assert is_shell_listing_page("batdongsan.com.vn", "batdongsan.com.vn")
+    assert is_shell_listing_page("", "Access Denied")
+    assert not is_shell_listing_page(
+        "Cho thuê căn hộ Vinhomes Central Park",
+        "Cho thuê căn hộ Vinhomes Central Park",
+    )
+
+
+class FakeElement:
+    def __init__(self, text="", children=None):
+        self.text = text
+        self.children = children or {}
+
+    def inner_text(self):
+        return self.text
+
+    def query_selector_all(self, selector):
+        return self.children.get(selector, [])
+
+
+class FakeAddressPage:
+    def __init__(self, elements):
+        self.elements = elements
+
+    def query_selector(self, selector):
+        return self.elements.get(selector)
+
+
+def test_extract_listing_address_prefers_ldp_address_line_1_over_breadcrumb():
+    page = FakeAddressPage(
+        {
+            ".re__ldp-address .re__address-line-1": FakeElement(
+                "Khu đô thị Nam Thăng Long - Ciputra, Phường Phú Thượng, Quận Tây Hồ, Hà Nội"
+            ),
+            ".re__breadcrumb": FakeElement(
+                children={
+                    "a": [
+                        FakeElement("Bán"),
+                        FakeElement("Hà Nội"),
+                        FakeElement("Tây Hồ"),
+                        FakeElement("Nhà biệt thự, liền kề tại Khu đô thị Nam Thăng Long - Ciputra"),
+                    ]
+                }
+            ),
+        }
+    )
+
+    address = extract_listing_address_from_page(page)
+
+    assert (
+        address
+        == "Khu đô thị Nam Thăng Long - Ciputra, Phường Phú Thượng, Quận Tây Hồ, Hà Nội"
+    )
+
+
+def test_extract_listing_address_uses_first_ldp_address_line_from_container():
+    page = FakeAddressPage(
+        {
+            ".re__ldp-address .re__address": FakeElement(
+                "Khu đô thị Nam Thăng Long - Ciputra, Phường Phú Thượng, Quận Tây Hồ, Hà Nội\n"
+                "(Phường Phú Thượng, Hà Nội mới)"
+            )
+        }
+    )
+
+    address = extract_listing_address_from_page(page)
+
+    assert (
+        address
+        == "Khu đô thị Nam Thăng Long - Ciputra, Phường Phú Thượng, Quận Tây Hồ, Hà Nội"
+    )
+
+
+def test_extract_listing_address_falls_back_to_breadcrumb():
+    page = FakeAddressPage(
+        {
+            ".re__breadcrumb": FakeElement(
+                children={
+                    "a": [
+                        FakeElement("Bán"),
+                        FakeElement("Hà Nội"),
+                        FakeElement("Tây Hồ"),
+                        FakeElement("Nhà biệt thự, liền kề tại Khu đô thị Nam Thăng Long - Ciputra"),
+                    ]
+                }
+            )
+        }
+    )
+
+    address = extract_listing_address_from_page(page)
+
+    assert (
+        address
+        == "Bán, Hà Nội, Tây Hồ, Nhà biệt thự, liền kề tại Khu đô thị Nam Thăng Long - Ciputra"
+    )
+
+
+def test_extract_listing_property_type_from_breadcrumb_category():
+    page = FakeAddressPage(
+        {
+            ".re__breadcrumb": FakeElement(
+                children={
+                    "a": [
+                        FakeElement("Bán"),
+                        FakeElement("Hà Nội"),
+                        FakeElement("Tây Hồ"),
+                        FakeElement("Nhà biệt thự, liền kề tại Khu đô thị Nam Thăng Long - Ciputra"),
+                    ]
+                }
+            )
+        }
+    )
+
+    property_type = extract_listing_property_type_from_page(page)
+
+    assert property_type == "Nhà biệt thự, liền kề tại Khu đô thị Nam Thăng Long - Ciputra"
 
 
 class FakeImage:

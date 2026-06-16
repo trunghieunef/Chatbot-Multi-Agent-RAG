@@ -662,7 +662,8 @@ python -m crawler.rent.crawl_details --input data\raw\rent_urls.csv --output dat
 python -m crawler.projects.crawl_urls --pages 1 5 --output data\raw\projects_urls.csv --workers 3
 python -m crawler.projects.crawl_details --input data\raw\projects_urls.csv --output data\raw\projects_details.csv --workers 3
 
-python -m crawler.news.crawl_articles --pages 1 5 --output data\raw\news_articles.csv --workers 2
+python -m crawler.news.crawl_urls --pages 1 5 --output data\raw\news_urls.csv --workers 2
+python -m crawler.news.crawl_details --input data\raw\news_urls.csv --output data\raw\news_articles.csv --workers 2
 ```
 
 Các crawler có các đặc điểm chung:

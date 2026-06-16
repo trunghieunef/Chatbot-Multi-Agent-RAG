@@ -11,6 +11,7 @@ from app.models.chunk import Chunk
 from app.models.chat import ChatMessage, ChatSession
 from app.models.listing import Listing
 from app.models.listing_image import ListingImage
+from app.models.market_price_snapshot import MarketPriceSnapshot
 from app.models.pipeline_run import PipelineRun
 from app.models.preference import ChatFeedback, MemoryProposal, UserPreference
 from app.models.project import Project
@@ -29,6 +30,7 @@ __all__ = [
     "EvalScore",
     "Listing",
     "ListingImage",
+    "MarketPriceSnapshot",
     "MemoryProposal",
     "PipelineRun",
     "Project",

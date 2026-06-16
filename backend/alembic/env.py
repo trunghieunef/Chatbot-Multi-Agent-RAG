@@ -19,6 +19,7 @@ from app.models import (
     EvalRun,
     EvalScore,
     Listing,
+    MarketPriceSnapshot,
     MemoryProposal,
     PipelineRun,
     Project,

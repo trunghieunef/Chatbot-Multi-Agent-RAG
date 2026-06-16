@@ -1,4 +1,4 @@
-from chatbot.tools.market_stats import build_district_price_query
+from chatbot.tools.market_stats import build_district_price_query, build_snapshot_district_price_query
 import pytest
 
 
@@ -31,15 +31,38 @@ def test_build_district_price_query_includes_filters():
         city="Ho Chi Minh",
         listing_type="sale",
         property_type="apartment",
+        district="Quan 7",
     )
 
     assert "AVG(price)" in sql
     assert "AVG(price_per_m2)" in sql
-    assert "city = :city" in sql
+    assert "unaccent(city) ILIKE unaccent(:city)" in sql
+    assert "unaccent(district) ILIKE unaccent(:district)" in sql
     assert params == {
         "city": "Ho Chi Minh",
         "listing_type": "sale",
         "property_type": "%apartment%",
+        "district": "%Quan 7%",
+    }
+
+
+def test_build_snapshot_district_price_query_uses_market_snapshots():
+    sql, params = build_snapshot_district_price_query(
+        city="Hồ Chí Minh",
+        property_type="Căn hộ",
+        district="Quận 7",
+    )
+
+    assert "FROM market_price_snapshots" in sql
+    assert "source = :preferred_source" in sql
+    assert "source = (SELECT source FROM selected_source)" in sql
+    assert "unaccent(city) ILIKE unaccent(:city)" in sql
+    assert "unaccent(district) ILIKE unaccent(:district)" in sql
+    assert params == {
+        "city": "Hồ Chí Minh",
+        "property_type": "%Căn hộ%",
+        "district": "%Quận 7%",
+        "preferred_source": "internal:listings",
     }
 
 
