@@ -106,6 +106,23 @@ def test_missing_price_or_area_skips_dependent_metrics():
     assert "missing_area" in metrics["metric_warnings"]["warnings"]
 
 
+def test_missing_purchase_price_skips_price_dependent_metrics():
+    assumptions = _assumptions()
+    assumptions.pop("purchase_price")
+
+    metrics = calculate_investment_metrics(case={}, assumptions=assumptions)
+
+    assert "price_per_m2" not in metrics
+    assert "market_price_delta" not in metrics
+    assert "loan_amount" not in metrics
+    assert "monthly_payment_estimate" not in metrics
+    assert "gross_yield" not in metrics
+    assert "net_yield" not in metrics
+    assert "monthly_cashflow_estimate" not in metrics
+    assert "cash_on_cash_return" not in metrics
+    assert "missing_purchase_price" in metrics["metric_warnings"]["warnings"]
+
+
 def test_market_price_delta_prefers_primary_market_evidence_id():
     metrics = calculate_investment_metrics(
         case={
