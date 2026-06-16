@@ -22,8 +22,9 @@ def _evidence_for_investment(
     evidence_by_id: dict[str, Evidence],
     evidence_for_agent: dict[str, list[str]],
 ) -> list[Evidence]:
-    ids = evidence_for_agent.get("investment_advisor", [])
-    if not ids:
+    if "investment_advisor" in evidence_for_agent:
+        ids = evidence_for_agent["investment_advisor"]
+    else:
         ids = list(evidence_by_id)
     return [evidence_by_id[evidence_id] for evidence_id in ids if evidence_id in evidence_by_id]
 
@@ -34,10 +35,18 @@ def _first_by_domain(evidence: list[Evidence], domain: str) -> list[Evidence]:
 
 def _summary_from_evidence(items: list[Evidence]) -> dict[str, Any]:
     if not items:
-        return {"evidence_ids": []}
+        return {"evidence_ids": [], "items": []}
     first = items[0]
     facts = dict(first.facts)
     facts["evidence_ids"] = [item.evidence_id for item in items]
+    facts["items"] = [
+        {
+            "evidence_id": item.evidence_id,
+            "facts": dict(item.facts),
+            "source_type": item.source_type,
+        }
+        for item in items
+    ]
     return facts
 
 
@@ -117,6 +126,32 @@ def _resolved_value(
     return default, "default"
 
 
+def _has_explicit_value(
+    *,
+    key: str,
+    user_inputs: dict[str, Any],
+    preferences: dict[str, Any],
+) -> bool:
+    return (
+        (key in user_inputs and user_inputs[key] is not None)
+        or _preference_value(preferences, key) is not None
+    )
+
+
+def _capital_stack_note(equity_ratio: Any, loan_ratio: Any) -> str:
+    if not isinstance(equity_ratio, int | float) or not isinstance(loan_ratio, int | float):
+        return ""
+    if abs((equity_ratio + loan_ratio) - 1.0) <= 0.000001:
+        return ""
+    return "Capital stack does not sum to 1.0; please confirm."
+
+
+def _ratio_complement(value: Any) -> float | None:
+    if not isinstance(value, int | float):
+        return None
+    return round(1 - value, 10)
+
+
 def resolve_investment_assumptions(
     *,
     case: dict[str, Any],
@@ -147,8 +182,10 @@ def resolve_investment_assumptions(
             note="Area derived from listing evidence.",
         )
 
-    ratio_keys = {"equity_ratio", "loan_ratio", "interest_rate_annual", "operating_cost_ratio"}
+    ratio_keys = {"interest_rate_annual", "operating_cost_ratio"}
     for key, default in DEFAULT_ASSUMPTIONS.items():
+        if key in {"equity_ratio", "loan_ratio"}:
+            continue
         value, source = _resolved_value(
             key=key,
             user_inputs=user_inputs,
@@ -161,6 +198,83 @@ def resolve_investment_assumptions(
             unit=unit,
             source=source,
             note=f"{key} resolved from {source}.",
+        )
+
+    loan_is_explicit = _has_explicit_value(
+        key="loan_ratio",
+        user_inputs=user_inputs,
+        preferences=preferences,
+    )
+    equity_is_explicit = _has_explicit_value(
+        key="equity_ratio",
+        user_inputs=user_inputs,
+        preferences=preferences,
+    )
+    if loan_is_explicit and not equity_is_explicit:
+        loan_value, loan_source = _resolved_value(
+            key="loan_ratio",
+            user_inputs=user_inputs,
+            preferences=preferences,
+            default=DEFAULT_ASSUMPTIONS["loan_ratio"],
+        )
+        assumptions["loan_ratio"] = _assumption(
+            value=loan_value,
+            unit="ratio_0_1",
+            source=loan_source,
+            note=f"loan_ratio resolved from {loan_source}.",
+        )
+        assumptions["equity_ratio"] = _assumption(
+            value=_ratio_complement(loan_value),
+            unit="ratio_0_1",
+            source="derived",
+            depends_on=["loan_ratio"],
+            note="equity_ratio derived from loan_ratio.",
+        )
+    elif equity_is_explicit and not loan_is_explicit:
+        equity_value, equity_source = _resolved_value(
+            key="equity_ratio",
+            user_inputs=user_inputs,
+            preferences=preferences,
+            default=DEFAULT_ASSUMPTIONS["equity_ratio"],
+        )
+        assumptions["equity_ratio"] = _assumption(
+            value=equity_value,
+            unit="ratio_0_1",
+            source=equity_source,
+            note=f"equity_ratio resolved from {equity_source}.",
+        )
+        assumptions["loan_ratio"] = _assumption(
+            value=_ratio_complement(equity_value),
+            unit="ratio_0_1",
+            source="derived",
+            depends_on=["equity_ratio"],
+            note="loan_ratio derived from equity_ratio.",
+        )
+    else:
+        equity_value, equity_source = _resolved_value(
+            key="equity_ratio",
+            user_inputs=user_inputs,
+            preferences=preferences,
+            default=DEFAULT_ASSUMPTIONS["equity_ratio"],
+        )
+        loan_value, loan_source = _resolved_value(
+            key="loan_ratio",
+            user_inputs=user_inputs,
+            preferences=preferences,
+            default=DEFAULT_ASSUMPTIONS["loan_ratio"],
+        )
+        note = _capital_stack_note(equity_value, loan_value)
+        assumptions["equity_ratio"] = _assumption(
+            value=equity_value,
+            unit="ratio_0_1",
+            source=equity_source,
+            note=note or f"equity_ratio resolved from {equity_source}.",
+        )
+        assumptions["loan_ratio"] = _assumption(
+            value=loan_value,
+            unit="ratio_0_1",
+            source=loan_source,
+            note=note or f"loan_ratio resolved from {loan_source}.",
         )
 
     rent_value, rent_source = _resolved_value(
