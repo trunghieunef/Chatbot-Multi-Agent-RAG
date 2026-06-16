@@ -327,6 +327,7 @@ async def test_synthesizer_node_deduplicates_warnings_and_ignores_unvalidated_so
             },
         },
         "trace_steps": [],
+        "force_deterministic": True,
     }
 
     result = await synthesizer_node(state)

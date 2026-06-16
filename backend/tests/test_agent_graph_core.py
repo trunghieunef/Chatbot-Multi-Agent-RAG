@@ -19,7 +19,7 @@ def test_agent_llm_flags_default_to_deterministic(monkeypatch):
     monkeypatch.delenv("AGENT_QUERY_REWRITE_ENABLED", raising=False)
     monkeypatch.delenv("AGENT_SPECIALIST_LLM_ENABLED", raising=False)
 
-    settings = AgentSettings()
+    settings = AgentSettings(_env_file=None)
 
     assert settings.AGENT_ROUTER_MODE == "rule"
     assert settings.AGENT_QUERY_REWRITE_ENABLED is False
@@ -270,6 +270,7 @@ async def test_synthesizer_exposes_only_valid_used_evidence():
         },
         "trace_steps": [],
         "warnings": [],
+        "force_deterministic": True,
     }
 
     result = await nodes.synthesizer_node(state)
@@ -316,6 +317,7 @@ async def test_synthesizer_rejects_unassigned_evidence_id():
         },
         "trace_steps": [],
         "warnings": [],
+        "force_deterministic": True,
     }
 
     result = await nodes.synthesizer_node(state)
@@ -353,6 +355,7 @@ async def test_synthesizer_dedupes_structured_warnings_without_losing_objects():
         },
         "warnings": [warning],
         "trace_steps": [],
+        "force_deterministic": True,
     }
 
     result = await synthesizer(state)

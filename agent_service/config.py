@@ -16,7 +16,7 @@ class AgentSettings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379/0"
 
     AGENT_INTERNAL_KEY: str = "dev-agent-internal-key"
-    AGENT_ALLOW_DEV_INTERNAL_KEY: bool = True
+    AGENT_ALLOW_DEV_INTERNAL_KEY: bool = False
     CHATBOT_TRACE_LEVEL: str = "full"
     AGENT_GRAPH_VERSION: str = "agent-graph-v1"
     AGENT_PROMPT_VERSION: str = "prompts-v1"
@@ -31,16 +31,16 @@ class AgentSettings(BaseSettings):
 
     AGENT_REQUEST_TIMEOUT_SECONDS: float = 45.0
     AGENT_LLM_TIMEOUT_SECONDS: float = 30.0
-    AGENT_ROUTER_MODE: str = "hybrid"
-    AGENT_QUERY_REWRITE_ENABLED: bool = True
-    AGENT_MEMORY_FILTERS_ENABLED: bool = True
-    AGENT_SPECIALIST_LLM_ENABLED: bool = True
+    AGENT_ROUTER_MODE: str = "rule"
+    AGENT_QUERY_REWRITE_ENABLED: bool = False
+    AGENT_MEMORY_FILTERS_ENABLED: bool = False
+    AGENT_SPECIALIST_LLM_ENABLED: bool = False
     AGENT_LLM_CONFIDENCE_THRESHOLD: float = 0.65
     AGENT_LLM_MAX_REWRITES: int = 3
     AGENT_LLM_ROUTER_TIMEOUT_SECONDS: float = 5.0
     AGENT_LLM_QUERY_TIMEOUT_SECONDS: float = 5.0
     AGENT_SPECIALIST_LLM_TIMEOUT_SECONDS: float = 12.0
-    AGENT_TOTAL_TIMEOUT_SECONDS: float = 60.0
+    AGENT_TOTAL_TIMEOUT_SECONDS: float = 10.0
     AGENT_LLM_MONTHLY_BUDGET_USD: float = 100.0
     AGENT_LLM_COST_TRACKING_ENABLED: bool = True
     AGENT_LLM_INPUT_PRICE_PER_MILLION_USD: float = 0.0

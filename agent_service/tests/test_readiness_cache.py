@@ -30,6 +30,7 @@ def test_readiness_endpoint_returns_sources(monkeypatch):
     async def fake_snapshot():
         return {"listings": {"status": "ready", "parent_count": 1, "chunk_count": 1}}
 
+    monkeypatch.setenv("AGENT_INTERNAL_KEY", "dev-agent-internal-key")
     monkeypatch.setenv("AGENT_ALLOW_DEV_INTERNAL_KEY", "true")
     get_agent_settings.cache_clear()
     monkeypatch.setattr(main, "build_readiness_snapshot", fake_snapshot, raising=False)
