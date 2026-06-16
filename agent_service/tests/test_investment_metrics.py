@@ -150,3 +150,28 @@ def test_market_price_delta_prefers_primary_market_evidence_id():
         "price_per_m2",
         "ev_market_1",
     ]
+
+
+def test_cashflow_uses_vacancy_adjusted_rent():
+    assumptions = _assumptions()
+    assumptions["vacancy_months_per_year"]["value"] = 12
+
+    metrics = calculate_investment_metrics(case={}, assumptions=assumptions)
+
+    assert metrics["gross_yield"]["value"] == 0.0
+    assert metrics["monthly_cashflow_estimate"]["value"] < 0
+
+
+def test_cashflow_skips_when_monthly_payment_missing():
+    assumptions = _assumptions()
+    assumptions["loan_term_years"]["value"] = 0
+
+    metrics = calculate_investment_metrics(case={}, assumptions=assumptions)
+
+    assert "monthly_payment_estimate" not in metrics
+    assert "monthly_cashflow_estimate" not in metrics
+    assert "cash_on_cash_return" not in metrics
+    assert (
+        "missing_monthly_payment_estimate"
+        in metrics["metric_warnings"]["warnings"]
+    )

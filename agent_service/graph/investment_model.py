@@ -432,8 +432,12 @@ def calculate_investment_metrics(
         and area not in {None, 0}
         and rent_vnd is not None
     ):
+        effective_rent_months = max(0.0, 12 - vacancy_months)
+        effective_monthly_rent_billion = (
+            rent_vnd * effective_rent_months / 12 / 1_000_000_000
+        )
         annual_rent_billion = (
-            rent_vnd * max(0.0, 12 - vacancy_months) / 1_000_000_000
+            effective_monthly_rent_billion * 12
         )
         gross_yield = annual_rent_billion / purchase_price
         net_yield = gross_yield * (1 - operating_cost_ratio)
@@ -451,28 +455,37 @@ def calculate_investment_metrics(
             formula="gross_yield * (1 - operating_cost_ratio)",
             confidence="medium",
         )
-        monthly_payment = (
-            _number((metrics.get("monthly_payment_estimate") or {}).get("value")) or 0.0
+        monthly_payment = _number(
+            (metrics.get("monthly_payment_estimate") or {}).get("value")
         )
-        monthly_cashflow = (
-            rent_vnd / 1_000_000_000 * (1 - operating_cost_ratio) - monthly_payment
-        )
-        metrics["monthly_cashflow_estimate"] = _metric(
-            value=round(monthly_cashflow, 4),
-            unit="billion_vnd_per_month",
-            depends_on=["expected_monthly_rent", "operating_cost_ratio", "monthly_payment_estimate"],
-            formula="monthly_rent_after_costs - monthly_payment",
-            confidence="medium",
-        )
-        equity_ratio = _number((assumptions.get("equity_ratio") or {}).get("value")) or 0.0
-        if equity_ratio > 0:
-            metrics["cash_on_cash_return"] = _metric(
-                value=round((monthly_cashflow * 12) / (purchase_price * equity_ratio), 4),
-                unit="ratio_0_1",
-                depends_on=["monthly_cashflow_estimate", "purchase_price", "equity_ratio"],
-                formula="annual_cashflow / invested_equity",
+        if monthly_payment is None:
+            warnings.append("missing_monthly_payment_estimate")
+        else:
+            monthly_cashflow = (
+                effective_monthly_rent_billion * (1 - operating_cost_ratio)
+                - monthly_payment
+            )
+            metrics["monthly_cashflow_estimate"] = _metric(
+                value=round(monthly_cashflow, 4),
+                unit="billion_vnd_per_month",
+                depends_on=[
+                    "expected_monthly_rent",
+                    "vacancy_months_per_year",
+                    "operating_cost_ratio",
+                    "monthly_payment_estimate",
+                ],
+                formula="vacancy_adjusted_monthly_rent_after_costs - monthly_payment",
                 confidence="medium",
             )
+            equity_ratio = _number((assumptions.get("equity_ratio") or {}).get("value")) or 0.0
+            if equity_ratio > 0:
+                metrics["cash_on_cash_return"] = _metric(
+                    value=round((monthly_cashflow * 12) / (purchase_price * equity_ratio), 4),
+                    unit="ratio_0_1",
+                    depends_on=["monthly_cashflow_estimate", "purchase_price", "equity_ratio"],
+                    formula="annual_cashflow / invested_equity",
+                    confidence="medium",
+                )
 
     metrics["metric_warnings"] = _metric(
         value=len(warnings),
