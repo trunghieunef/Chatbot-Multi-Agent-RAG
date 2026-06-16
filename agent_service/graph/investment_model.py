@@ -427,7 +427,11 @@ def calculate_investment_metrics(
                 confidence="medium",
             )
 
-    if purchase_price not in {None, 0} and rent_vnd is not None:
+    if (
+        purchase_price not in {None, 0}
+        and area not in {None, 0}
+        and rent_vnd is not None
+    ):
         annual_rent_billion = (
             rent_vnd * max(0.0, 12 - vacancy_months) / 1_000_000_000
         )
