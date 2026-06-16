@@ -55,3 +55,36 @@ async def test_specialist_agents_node_writes_blackboard_entries(monkeypatch):
     assert entries[0]["author"] == "property_search"
     assert entries[0]["evidence_ids"] == ["ev_listing"]
     assert entries[0]["content"]["status"] == "completed"
+
+
+@pytest.mark.asyncio
+async def test_specialist_blackboard_normalizes_numeric_confidence(monkeypatch):
+    async def fake_property_agent(**kwargs):
+        return {
+            "agent_name": "property_search",
+            "status": "completed",
+            "content": "Listing rat phu hop.",
+            "evidence_ids_used": ["ev_listing"],
+            "confidence": 0.9,
+            "warnings": [],
+        }
+
+    monkeypatch.setattr(nodes, "run_property_agent", fake_property_agent)
+    state = {
+        "request": AgentChatRequest(
+            request_id="req-bb-confidence",
+            session_id="s1",
+            message="Co nen dau tu can ho nay?",
+        ),
+        "agents_to_run": ["property_search"],
+        "evidence_by_id": {"ev_listing": _evidence()},
+        "evidence_for_agent": {"property_search": ["ev_listing"]},
+        "readiness": {},
+        "warnings": [],
+        "trace_steps": [],
+        "force_deterministic": True,
+    }
+
+    result = await nodes.specialist_agents_node(state)
+
+    assert result["agent_blackboard"]["entries"][0]["confidence"] == "high"

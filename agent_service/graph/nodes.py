@@ -412,9 +412,7 @@ def _blackboard_from_agent_results(
     working_state = {**state, **update}
     for agent, result in agent_results.items():
         evidence_ids = [str(value) for value in result.get("evidence_ids_used", [])]
-        confidence = str(result.get("confidence") or "medium")
-        if confidence not in {"low", "medium", "high"}:
-            confidence = "medium"
+        confidence = _normalize_blackboard_confidence(result.get("confidence"))
         update = append_blackboard_entry(
             {**working_state, **update},
             author=agent,
@@ -434,6 +432,20 @@ def _blackboard_from_agent_results(
         )
         working_state = {**working_state, **update}
     return update
+
+
+def _normalize_blackboard_confidence(value: Any) -> str:
+    if isinstance(value, str) and value in {"low", "medium", "high"}:
+        return value
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return "medium"
+    if numeric >= 0.75:
+        return "high"
+    if numeric >= 0.45:
+        return "medium"
+    return "low"
 
 
 async def specialist_agents_node(state: AgentGraphState) -> AgentGraphState:
