@@ -296,3 +296,186 @@ def resolve_investment_assumptions(
         ),
     )
     return assumptions
+
+
+def _number(value: Any) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _metric(
+    *,
+    value: Any,
+    unit: str,
+    depends_on: list[str],
+    formula: str,
+    confidence: Confidence,
+    warnings: list[str] | None = None,
+) -> dict[str, Any]:
+    return {
+        "value": value,
+        "unit": unit,
+        "depends_on": depends_on,
+        "formula": formula,
+        "confidence": confidence,
+        "warnings": warnings or [],
+    }
+
+
+def _monthly_payment_billion(
+    *,
+    principal_billion: float,
+    annual_rate: float,
+    years: float,
+) -> float | None:
+    months = int(years * 12)
+    if principal_billion <= 0 or months <= 0:
+        return None
+    monthly_rate = annual_rate / 12
+    if monthly_rate == 0:
+        return round(principal_billion / months, 4)
+    payment = principal_billion * (
+        monthly_rate * (1 + monthly_rate) ** months
+    ) / ((1 + monthly_rate) ** months - 1)
+    return round(payment, 4)
+
+
+def _market_primary_evidence_ids(market_summary: dict[str, Any]) -> list[str]:
+    primary_ids = market_summary.get("primary_evidence_ids")
+    if primary_ids:
+        return list(primary_ids)
+    primary_id = market_summary.get("primary_evidence_id")
+    if primary_id:
+        return [str(primary_id)]
+    return list(market_summary.get("evidence_ids") or [])
+
+
+def calculate_investment_metrics(
+    *,
+    case: dict[str, Any],
+    assumptions: dict[str, dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    metrics: dict[str, dict[str, Any]] = {}
+    warnings: list[str] = []
+    purchase_price = _number((assumptions.get("purchase_price") or {}).get("value"))
+    area = _number((assumptions.get("area") or {}).get("value"))
+    loan_ratio = _number((assumptions.get("loan_ratio") or {}).get("value")) or 0.0
+    interest_rate = (
+        _number((assumptions.get("interest_rate_annual") or {}).get("value")) or 0.0
+    )
+    loan_term_years = (
+        _number((assumptions.get("loan_term_years") or {}).get("value")) or 0.0
+    )
+    rent_vnd = _number((assumptions.get("expected_monthly_rent") or {}).get("value"))
+    vacancy_months = _number((assumptions.get("vacancy_months_per_year") or {}).get("value")) or 0.0
+    operating_cost_ratio = (
+        _number((assumptions.get("operating_cost_ratio") or {}).get("value")) or 0.0
+    )
+
+    if purchase_price is None:
+        warnings.append("missing_purchase_price")
+    if area is None:
+        warnings.append("missing_area")
+    if rent_vnd is None:
+        warnings.append("missing_expected_monthly_rent")
+
+    if purchase_price is not None and area not in {None, 0}:
+        price_per_m2 = round(purchase_price * 1000 / area, 2)
+        metrics["price_per_m2"] = _metric(
+            value=price_per_m2,
+            unit="million_vnd_per_m2",
+            depends_on=["purchase_price", "area"],
+            formula="purchase_price_billion_vnd * 1000 / area_m2",
+            confidence="high",
+        )
+        market_summary = case.get("market_summary") or {}
+        market_avg = _number(market_summary.get("value"))
+        if market_avg not in {None, 0}:
+            metrics["market_price_delta"] = _metric(
+                value=round((price_per_m2 - market_avg) / market_avg, 4),
+                unit="ratio_0_1",
+                depends_on=["price_per_m2", *_market_primary_evidence_ids(market_summary)],
+                formula="(price_per_m2 - market_avg_price_per_m2) / market_avg_price_per_m2",
+                confidence="medium",
+            )
+
+    if purchase_price is not None:
+        loan_amount = round(purchase_price * loan_ratio, 4)
+        metrics["loan_amount"] = _metric(
+            value=loan_amount,
+            unit="billion_vnd",
+            depends_on=["purchase_price", "loan_ratio"],
+            formula="purchase_price * loan_ratio",
+            confidence="medium",
+            warnings=["uses_default_loan_ratio"]
+            if (assumptions.get("loan_ratio") or {}).get("source") == "default"
+            else [],
+        )
+        monthly_payment = _monthly_payment_billion(
+            principal_billion=loan_amount,
+            annual_rate=interest_rate,
+            years=loan_term_years,
+        )
+        if monthly_payment is not None:
+            metrics["monthly_payment_estimate"] = _metric(
+                value=monthly_payment,
+                unit="billion_vnd_per_month",
+                depends_on=["loan_amount", "interest_rate_annual", "loan_term_years"],
+                formula="standard amortized loan payment",
+                confidence="medium",
+            )
+
+    if purchase_price not in {None, 0} and rent_vnd is not None:
+        annual_rent_billion = (
+            rent_vnd * max(0.0, 12 - vacancy_months) / 1_000_000_000
+        )
+        gross_yield = annual_rent_billion / purchase_price
+        net_yield = gross_yield * (1 - operating_cost_ratio)
+        metrics["gross_yield"] = _metric(
+            value=round(gross_yield, 4),
+            unit="ratio_0_1",
+            depends_on=["expected_monthly_rent", "vacancy_months_per_year", "purchase_price"],
+            formula="monthly_rent * (12 - vacancy_months) / purchase_price",
+            confidence="medium",
+        )
+        metrics["net_yield"] = _metric(
+            value=round(net_yield, 4),
+            unit="ratio_0_1",
+            depends_on=["gross_yield", "operating_cost_ratio"],
+            formula="gross_yield * (1 - operating_cost_ratio)",
+            confidence="medium",
+        )
+        monthly_payment = (
+            _number((metrics.get("monthly_payment_estimate") or {}).get("value")) or 0.0
+        )
+        monthly_cashflow = (
+            rent_vnd / 1_000_000_000 * (1 - operating_cost_ratio) - monthly_payment
+        )
+        metrics["monthly_cashflow_estimate"] = _metric(
+            value=round(monthly_cashflow, 4),
+            unit="billion_vnd_per_month",
+            depends_on=["expected_monthly_rent", "operating_cost_ratio", "monthly_payment_estimate"],
+            formula="monthly_rent_after_costs - monthly_payment",
+            confidence="medium",
+        )
+        equity_ratio = _number((assumptions.get("equity_ratio") or {}).get("value")) or 0.0
+        if equity_ratio > 0:
+            metrics["cash_on_cash_return"] = _metric(
+                value=round((monthly_cashflow * 12) / (purchase_price * equity_ratio), 4),
+                unit="ratio_0_1",
+                depends_on=["monthly_cashflow_estimate", "purchase_price", "equity_ratio"],
+                formula="annual_cashflow / invested_equity",
+                confidence="medium",
+            )
+
+    metrics["metric_warnings"] = _metric(
+        value=len(warnings),
+        unit="count",
+        depends_on=[],
+        formula="count(metric warning codes)",
+        confidence="high",
+        warnings=warnings,
+    )
+    return metrics
