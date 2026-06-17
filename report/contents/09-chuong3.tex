@@ -16,15 +16,15 @@ Hệ thống được triển khai theo mô hình container hóa với Docker Co
     % Sơ đồ kiến trúc Docker triển khai
     \begin{tabular}{|c|c|c|c|c|}
         \hline
-        \multicolumn{5}{|c|}{\textbf{Docker Compose -- Real Estate Chatbot Platform}} \\
+        \multicolumn{5}{|c|}{\textbf{Docker Compose -- Nền tảng Tư vấn Bất động sản}} \\
         \hline
-        \textbf{Frontend} & \textbf{Backend} & \textbf{Agent Service} & \textbf{PostgreSQL} & \textbf{Redis} \\
+        \textbf{Giao diện} & \textbf{Máy chủ} & \textbf{Dịch vụ Tác tử} & \textbf{PostgreSQL} & \textbf{Redis} \\
         Next.js 16 & FastAPI & FastAPI + LangGraph & 16 + pgvector & 7 Alpine \\
-        Port 3000 & Port 8000 & Port 8100 & Port 5432 & Port 6379 \\
+        Cổng 3000 & Cổng 8000 & Cổng 8100 & Cổng 5432 & Cổng 6379 \\
         \hline
-        \multicolumn{5}{|c|}{\textbf{Internal Network: realestate\_network}} \\
+        \multicolumn{5}{|c|}{\textbf{Mạng nội bộ: realestate\_network}} \\
         \hline
-        \multicolumn{5}{|c|}{\textbf{Volumes: pgdata, redisdata}} \\
+        \multicolumn{5}{|c|}{\textbf{Ổ đĩa: pgdata, redisdata}} \\
         \hline
     \end{tabular}
     \caption{Kiến trúc triển khai Docker Compose}
@@ -36,26 +36,21 @@ Hệ thống được triển khai theo mô hình container hóa với Docker Co
 Toàn bộ hệ thống được định nghĩa trong file \texttt{docker-compose.yml} tại thư mục gốc của dự án. Cấu hình này đảm bảo:
 
 \begin{itemize}
-    \item \textbf{Khởi động có thứ tự (Service Dependencies):} Các service được khởi động theo đúng thứ tự phụ thuộc. PostgreSQL và Redis khởi động trước, sau đó đến Agent Service, rồi Backend, và cuối cùng là Frontend. Cơ chế \texttt{depends\_on} kết hợp với \texttt{healthcheck} đảm bảo service chỉ khởi động khi các service phụ thuộc đã sẵn sàng.
+    \item \textbf{Khởi động có thứ tự:} Các dịch vụ được khởi động theo đúng thứ tự phụ thuộc. PostgreSQL và Redis khởi động trước, sau đó đến Dịch vụ Tác tử, rồi Máy chủ Dịch vụ, và cuối cùng là Giao diện người dùng. Cơ chế phụ thuộc kết hợp với kiểm tra trạng thái đảm bảo dịch vụ chỉ khởi động khi các dịch vụ phụ thuộc đã sẵn sàng.
     
-    \item \textbf{Health Checks:} Mỗi service được cấu hình health check riêng để Docker có thể giám sát trạng thái:
+    \item \textbf{Kiểm tra trạng thái:} Mỗi dịch vụ được cấu hình kiểm tra trạng thái riêng:
     \begin{itemize}
         \item \textbf{PostgreSQL:} \texttt{pg\_isready -U admin -d realestate} -- kiểm tra định kỳ mỗi 10 giây, tối đa 5 lần thử.
         \item \textbf{Redis:} \texttt{redis-cli ping} -- kiểm tra định kỳ mỗi 10 giây, tối đa 5 lần thử.
-        \item \textbf{Agent Service:} Gọi \texttt{/internal/agent/health} với internal key -- kiểm tra mỗi 10 giây, tối đa 12 lần thử, có 30 giây khởi động ban đầu.
+        \item \textbf{Dịch vụ Tác tử:} Gọi \texttt{/internal/agent/health} với khóa nội bộ -- kiểm tra mỗi 10 giây, tối đa 12 lần thử, có 30 giây khởi động ban đầu.
     \end{itemize}
     
-    \item \textbf{Quản lý dữ liệu bền vững (Persistent Volumes):} Hai Docker volumes được tạo để lưu trữ dữ liệu bền vững:
-    \begin{itemize}
-        \item \texttt{pgdata}: Lưu toàn bộ dữ liệu PostgreSQL, bao gồm cả dữ liệu quan hệ và vector index.
-        \item \texttt{redisdata}: Lưu dữ liệu cache của Redis.
-    \end{itemize}
-    Các volume này tồn tại độc lập với vòng đời container, đảm bảo dữ liệu không bị mất khi container được tạo lại.
+    \item \textbf{Quản lý dữ liệu bền vững:} Hai ổ đĩa Docker được tạo để lưu trữ dữ liệu bền vững: \texttt{pgdata} lưu toàn bộ dữ liệu PostgreSQL (bao gồm cả dữ liệu quan hệ và chỉ mục véc-tơ) và \texttt{redisdata} lưu dữ liệu bộ nhớ đệm của Redis. Các ổ đĩa này tồn tại độc lập với vòng đời vùng chứa, đảm bảo dữ liệu không bị mất khi vùng chứa được tạo lại.
     
-    \item \textbf{Biến môi trường:} Tất cả cấu hình nhạy cảm được truyền qua biến môi trường từ file \texttt{.env}, không được hard-code trong file cấu hình Docker. Các biến có giá trị mặc định an toàn qua cú pháp \texttt{\$\{VAR:-default\}}.
+    \item \textbf{Biến môi trường:} Tất cả cấu hình nhạy cảm được truyền qua biến môi trường từ tệp \texttt{.env}, không được gán cứng trong tệp cấu hình Docker.
 \end{itemize}
 
-\subsection{Cấu hình chi tiết từng service}
+\subsection{Cấu hình chi tiết từng dịch vụ}
 
 \subsubsection{PostgreSQL + pgvector}
 
@@ -111,11 +106,11 @@ agent-service:
     GEMINI_MODEL: gemini-2.0-flash
 \end{verbatim}
 
-Agent Service được build từ Dockerfile riêng trong thư mục \texttt{agent\_service/}. Dockerfile dựa trên Python 3.12-slim, cài đặt các thư viện cần thiết (bao gồm LangGraph, sentence-transformers, httpx) và chạy ứng dụng qua Uvicorn trên port 8100. Biến môi trường \texttt{PYTHONPATH} được thiết lập để Agent Service có thể import các module từ \texttt{backend/} (models, database).
+Dịch vụ Tác tử được xây dựng từ Dockerfile riêng trong thư mục \texttt{agent\_service/}. Dockerfile dựa trên Python 3.12-slim, cài đặt các thư viện cần thiết (bao gồm LangGraph, sentence-transformers, httpx) và chạy ứng dụng qua Uvicorn trên cổng 8100. Biến môi trường \texttt{PYTHONPATH} được thiết lập để Dịch vụ Tác tử có thể nạp các mô-đun từ \texttt{backend/} (mô hình, cơ sở dữ liệu).
 
-Điểm đặc biệt trong cấu hình Agent Service là \texttt{start\_period: 30s} trong health check -- khoảng thời gian này cho phép service tải model embedding BGE-M3 (dung lượng khoảng 2GB) trước khi bắt đầu nhận health check request.
+Điểm đặc biệt trong cấu hình Dịch vụ Tác tử là khoảng thời gian khởi động 30 giây trong kiểm tra trạng thái -- khoảng thời gian này cho phép dịch vụ tải mô hình véc-tơ BGE-M3 (dung lượng khoảng 2GB) trước khi bắt đầu nhận yêu cầu kiểm tra.
 
-\subsubsection{Backend API}
+\subsubsection{Máy chủ Dịch vụ}
 
 \begin{verbatim}
 backend:
@@ -140,11 +135,11 @@ backend:
     - ./data:/app/data
 \end{verbatim}
 
-Backend API sử dụng Dockerfile trong thư mục \texttt{backend/}, dựa trên Python 3.12-slim với các system dependencies cho asyncpg và bcrypt. Backend chỉ khởi động sau khi cả PostgreSQL, Redis và Agent Service đều đã sẵn sàng (healthy).
+Máy chủ Dịch vụ sử dụng Dockerfile trong thư mục \texttt{backend/}, dựa trên Python 3.12-slim với các gói phụ thuộc hệ thống cho asyncpg và bcrypt. Máy chủ chỉ khởi động sau khi cả PostgreSQL, Redis và Dịch vụ Tác tử đều đã sẵn sàng.
 
-Biến \texttt{CHATBOT\_AGENT\_SERVICE\_ENABLED} (mặc định: false) cho phép vận hành linh hoạt: khi bật, Backend sẽ chuyển các request chatbot sang Agent Service để xử lý nâng cao; khi tắt, Backend sử dụng pipeline nội bộ. Volume \texttt{./data:/app/data} cho phép Backend truy cập dữ liệu CSV và các file cấu hình từ máy host.
+Biến \texttt{CHATBOT\_AGENT\_SERVICE\_ENABLED} (mặc định: false) cho phép vận hành linh hoạt: khi bật, Máy chủ sẽ chuyển các yêu cầu chatbot sang Dịch vụ Tác tử để xử lý nâng cao; khi tắt, Máy chủ sử dụng đường ống nội bộ. Ổ đĩa \texttt{./data:/app/data} cho phép Máy chủ truy cập dữ liệu CSV và các tệp cấu hình từ máy chủ.
 
-\subsubsection{Frontend}
+\subsubsection{Giao diện người dùng}
 
 \begin{verbatim}
 frontend:
@@ -161,24 +156,13 @@ frontend:
     - backend
 \end{verbatim}
 
-Frontend được build từ Dockerfile trong thư mục \texttt{frontend/}, sử dụng Node.js 22 Alpine. Quá trình build gồm hai bước: \texttt{npm ci} để cài đặt dependencies và \texttt{npm run build} để tạo production build. Frontend chạy ở chế độ production (\texttt{npm run start}) trên port 3000.
+Giao diện người dùng được xây dựng từ Dockerfile trong thư mục \texttt{frontend/}, sử dụng Node.js 22 Alpine. Quá trình xây dựng gồm hai bước: \texttt{npm ci} để cài đặt gói phụ thuộc và \texttt{npm run build} để tạo bản dựng sản xuất. Giao diện chạy ở chế độ sản xuất (\texttt{npm run start}) trên cổng 3000.
 
-Hai build arguments quan trọng được truyền vào:
-\begin{itemize}
-    \item \texttt{INTERNAL\_API\_URL}: URL nội bộ để Next.js server-side gọi Backend API (dùng trong Server Components và SSR).
-    \item \texttt{NEXT\_PUBLIC\_API\_URL}: URL công khai để client-side gọi API thông qua browser.
-\end{itemize}
+Hai tham số xây dựng quan trọng được truyền vào: \texttt{INTERNAL\_API\_URL} là địa chỉ nội bộ để Next.js gọi Máy chủ Dịch vụ phía máy chủ (dùng trong Thành phần Máy chủ và kết xuất phía máy chủ), và \texttt{NEXT\_PUBLIC\_API\_URL} là địa chỉ công khai để phía trình duyệt gọi API.
 
-\subsection{Mạng nội bộ và giao tiếp giữa các service}
+\subsection{Mạng nội bộ và giao tiếp giữa các dịch vụ}
 
-Các service trong Docker Compose giao tiếp với nhau thông qua tên service (DNS nội bộ của Docker). Cụ thể:
-
-\begin{itemize}
-    \item \textbf{Frontend $\rightarrow$ Backend:} Frontend gọi Backend qua \texttt{http://backend:8000} (cho SSR/Server Components) và qua \texttt{/api/v1} (cho client-side, được Next.js rewrite).
-    \item \textbf{Backend $\rightarrow$ Agent Service:} Backend gọi Agent Service qua \texttt{http://agent-service:8100/internal/agent/chat} với internal key trong header \texttt{X-Internal-Agent-Key}.
-    \item \textbf{Backend $\rightarrow$ PostgreSQL:} Backend kết nối đến PostgreSQL qua chuỗi \texttt{postgresql+asyncpg://admin:...@postgres:5432/realestate}.
-    \item \textbf{Backend \& Agent Service $\rightarrow$ Redis:} Cả hai service kết nối đến Redis qua \texttt{redis://redis:6379/0}.
-\end{itemize}
+Các dịch vụ trong Docker Compose giao tiếp với nhau thông qua tên dịch vụ (DNS nội bộ của Docker). Cụ thể: Giao diện gọi Máy chủ qua \texttt{http://backend:8000} (cho kết xuất phía máy chủ) và qua \texttt{/api/v1} (cho phía trình duyệt, được Next.js chuyển tiếp); Máy chủ gọi Dịch vụ Tác tử qua \texttt{http://agent-service:8100/internal/agent/chat} với khóa nội bộ trong tiêu đề \texttt{X-Internal-Agent-Key}; Máy chủ kết nối đến PostgreSQL qua chuỗi kết nối bất đồng bộ; cả Máy chủ và Dịch vụ Tác tử đều kết nối đến Redis.
 
 \subsection{Quy trình triển khai}
 
@@ -214,57 +198,57 @@ CHATBOT_AGENT_SERVICE_ENABLED=false  # true de su dung Agent Service
 NEXT_PUBLIC_API_URL=/api/v1
 \end{verbatim}
 
-\subsubsection{Build và khởi động}
+\subsubsection{Xây dựng và khởi động}
 
 Quy trình triển khai đầy đủ gồm các bước sau:
 
 \begin{enumerate}
-    \item \textbf{Build images:}
+    \item \textbf{Xây dựng ảnh:}
     \begin{verbatim}
     docker-compose build
     \end{verbatim}
-    Lệnh này build Docker images cho Backend, Agent Service và Frontend từ Dockerfile tương ứng. PostgreSQL và Redis sử dụng images có sẵn từ Docker Hub.
+    Lệnh này xây dựng ảnh Docker cho Máy chủ Dịch vụ, Dịch vụ Tác tử và Giao diện người dùng từ Dockerfile tương ứng. PostgreSQL và Redis sử dụng ảnh có sẵn từ Docker Hub.
     
     \item \textbf{Khởi động toàn bộ hệ thống:}
     \begin{verbatim}
     docker-compose up -d
     \end{verbatim}
-    Docker Compose sẽ khởi động các service theo thứ tự: PostgreSQL $\rightarrow$ Redis $\rightarrow$ Agent Service $\rightarrow$ Backend $\rightarrow$ Frontend. Tham số \texttt{-d} chạy ở chế độ nền (detached mode).
+    Docker Compose sẽ khởi động các dịch vụ theo thứ tự: PostgreSQL, Redis, Dịch vụ Tác tử, Máy chủ Dịch vụ, Giao diện người dùng. Tham số \texttt{-d} chạy ở chế độ nền.
     
-    \item \textbf{Khởi động riêng các service hạ tầng (cho phát triển):}
+    \item \textbf{Khởi động riêng các dịch vụ hạ tầng (cho phát triển):}
     \begin{verbatim}
     docker-compose up -d postgres redis
     \end{verbatim}
-    Khi phát triển, chỉ cần chạy PostgreSQL và Redis qua Docker, còn Backend và Frontend chạy trực tiếp trên máy host để thuận tiện cho việc debug. Backend: \texttt{uvicorn app.main:app --reload --port 8000}. Frontend: \texttt{npm run dev}.
+    Khi phát triển, chỉ cần chạy PostgreSQL và Redis qua Docker, còn Máy chủ và Giao diện chạy trực tiếp trên máy chủ để thuận tiện cho việc gỡ lỗi. Máy chủ: \texttt{uvicorn app.main:app --reload --port 8000}. Giao diện: \texttt{npm run dev}.
     
-    \item \textbf{Khởi động lại một service sau khi thay đổi code:}
+    \item \textbf{Khởi động lại một dịch vụ sau khi thay đổi mã nguồn:}
     \begin{verbatim}
     docker-compose up -d --build backend
     \end{verbatim}
-    Lệnh này rebuild image và khởi động lại container backend.
+    Lệnh này xây dựng lại ảnh và khởi động lại vùng chứa máy chủ.
     
-    \item \textbf{Xem logs:}
+    \item \textbf{Xem nhật ký:}
     \begin{verbatim}
     docker-compose logs -f backend
     \end{verbatim}
-    Theo dõi logs của một service cụ thể. Tham số \texttt{-f} tương tự \texttt{tail -f}.
+    Theo dõi nhật ký của một dịch vụ cụ thể.
     
     \item \textbf{Dừng hệ thống:}
     \begin{verbatim}
     docker-compose down
     \end{verbatim}
-    Dừng và xóa tất cả containers. Dữ liệu trong volumes vẫn được giữ nguyên. Thêm \texttt{-v} để xóa cả volumes.
+    Dừng và xóa tất cả vùng chứa. Dữ liệu trong ổ đĩa vẫn được giữ nguyên. Thêm \texttt{-v} để xóa cả ổ đĩa.
 \end{enumerate}
 
 \subsubsection{Kiểm tra trạng thái triển khai}
 
-Sau khi hệ thống khởi động, có thể kiểm tra trạng thái qua các endpoint health check:
+Sau khi hệ thống khởi động, có thể kiểm tra trạng thái qua các điểm cuối kiểm tra:
 
 \begin{itemize}
-    \item \textbf{Backend API health:} \texttt{GET http://localhost:8000/health} -- trả về trạng thái database và Redis.
-    \item \textbf{Agent Service health:} \texttt{GET http://localhost:8100/internal/agent/health} -- yêu cầu internal key.
-    \item \textbf{Frontend:} Mở trình duyệt tại \texttt{http://localhost:3000}.
-    \item \textbf{API Documentation:} \texttt{http://localhost:8000/docs} -- Swagger UI với đầy đủ schema.
+    \item \textbf{Máy chủ Dịch vụ:} \texttt{GET http://localhost:8000/health} -- trả về trạng thái cơ sở dữ liệu và Redis.
+    \item \textbf{Dịch vụ Tác tử:} \texttt{GET http://localhost:8100/internal/agent/health} -- yêu cầu khóa nội bộ.
+    \item \textbf{Giao diện người dùng:} Mở trình duyệt tại \texttt{http://localhost:3000}.
+    \item \textbf{Tài liệu API:} \texttt{http://localhost:8000/docs} -- giao diện Swagger với đầy đủ lược đồ.
 \end{itemize}
 
 \subsection{Nạp dữ liệu ban đầu}
@@ -275,43 +259,27 @@ Sau khi hệ thống đã khởi động, cần nạp dữ liệu ban đầu và
 python -m data_pipeline.load_db
 \end{verbatim}
 
-Quy trình nạp dữ liệu gồm các bước:
-\begin{enumerate}
-    \item Đọc dữ liệu từ các file CSV trong thư mục \texttt{data/}.
-    \item Làm sạch và chuẩn hóa dữ liệu qua \texttt{data\_pipeline/clean.py}.
-    \item Làm giàu dữ liệu qua \texttt{data\_pipeline/enrich.py} (geocoding, intent tagging).
-    \item Chia văn bản thành chunks qua \texttt{data\_pipeline/chunk.py}.
-    \item Tạo embedding BGE-M3 qua \texttt{data\_pipeline/embed.py}.
-    \item Upsert vào PostgreSQL qua các ingestor modules.
-    \item Tạo HNSW index trên cột embedding của bảng chunks.
-\end{enumerate}
+Quy trình nạp dữ liệu gồm các bước: đọc dữ liệu từ các tệp CSV trong thư mục dữ liệu; làm sạch và chuẩn hóa dữ liệu (phân tích giá, diện tích, phân loại); làm giàu dữ liệu (mã hóa địa lý, gán nhãn nhu cầu); chia văn bản thành các đoạn ngữ nghĩa với bốn loại cho mỗi bất động sản; tạo véc-tơ đặc trưng 1024 chiều bằng mô hình BGE-M3; nạp vào PostgreSQL qua các mô-đun chuyên biệt; và tạo chỉ mục HNSW trên cột véc-tơ của bảng đoạn văn bản.
 
 \section{Kiểm thử hệ thống}
 
 \subsection{Chiến lược kiểm thử}
 
-Hệ thống được kiểm thử theo chiến lược đa tầng (testing pyramid), từ thấp đến cao:
+Hệ thống được kiểm thử theo chiến lược đa tầng, từ thấp đến cao.
 
-\begin{enumerate}
-    \item \textbf{Kiểm thử đơn vị (Unit Testing):} Kiểm tra từng hàm, class, module độc lập. Sử dụng pytest với mock objects để cô lập các phụ thuộc ngoại vi (database, API, file system). Đây là tầng kiểm thử có số lượng test case lớn nhất và chạy nhanh nhất.
-    
-    \item \textbf{Kiểm thử tích hợp (Integration Testing):} Kiểm tra sự tương tác giữa các module với nhau và với các service bên ngoài (PostgreSQL, Redis, Gemini API). Sử dụng test database hoặc mock service.
-    
-    \item \textbf{Kiểm thử hợp đồng (Contract Testing):} Kiểm tra tính tương thích giữa các service qua API contracts (schema request/response). Đảm bảo thay đổi ở một service không phá vỡ service khác.
-    
-    \item \textbf{Kiểm thử hệ thống (System Testing):} Kiểm tra toàn bộ luồng hoạt động end-to-end, từ frontend đến backend đến database. Đảm bảo các chức năng hoạt động đúng như mong đợi của người dùng.
-    
-    \item \textbf{Kiểm thử chấp nhận (Acceptance Testing):} Kiểm tra hệ thống đáp ứng các yêu cầu nghiệp vụ đã đề ra trong pha phân tích. Được thực hiện thủ công với các kịch bản thực tế.
-\end{enumerate}
+Tầng thứ nhất là kiểm thử đơn vị: kiểm tra từng hàm, lớp, mô-đun độc lập, sử dụng pytest với đối tượng giả để cô lập các phụ thuộc ngoại vi (cơ sở dữ liệu, API, hệ thống tệp). Đây là tầng kiểm thử có số lượng ca kiểm thử lớn nhất và chạy nhanh nhất.
 
-\subsection{Công cụ và framework kiểm thử}
+Tầng thứ hai là kiểm thử tích hợp: kiểm tra sự tương tác giữa các mô-đun với nhau và với các dịch vụ bên ngoài (PostgreSQL, Redis, Gemini API), sử dụng cơ sở dữ liệu kiểm thử hoặc dịch vụ giả.
 
-\begin{itemize}
-    \item \textbf{pytest:} Framework kiểm thử chính cho toàn bộ code Python (backend, agent\_service, data\_pipeline, airflow). Sử dụng các plugin: \texttt{pytest-asyncio} (hỗ trợ async test), \texttt{pytest-cov} (đo coverage), \texttt{monkeypatch} (mock built-in).
-    \item \textbf{ESLint:} Công cụ phân tích tĩnh (static analysis) cho frontend TypeScript, phát hiện lỗi cú pháp, anti-patterns và vấn đề về coding style.
-    \item \textbf{compileall:} Module chuẩn của Python dùng để kiểm tra cú pháp toàn bộ file \texttt{.py} trong dự án, phát hiện lỗi import và syntax error mà không cần chạy test.
-    \item \textbf{Thư viện mock/asyncio:} Sử dụng \texttt{unittest.mock} và \texttt{pytest.monkeypatch} để tạo mock objects, giả lập các service bên ngoài (database, API, LLM).
-\end{itemize}
+Tầng thứ ba là kiểm thử hợp đồng: kiểm tra tính tương thích giữa các dịch vụ qua hợp đồng API, đảm bảo thay đổi ở một dịch vụ không phá vỡ dịch vụ khác.
+
+Tầng thứ tư là kiểm thử hệ thống: kiểm tra toàn bộ luồng hoạt động đầu cuối, từ giao diện người dùng đến máy chủ đến cơ sở dữ liệu, đảm bảo các chức năng hoạt động đúng như mong đợi.
+
+Tầng thứ năm là kiểm thử chấp nhận: kiểm tra hệ thống đáp ứng các yêu cầu nghiệp vụ đã đề ra, được thực hiện thủ công với các kịch bản thực tế.
+
+\subsection{Công cụ và khung công tác kiểm thử}
+
+pytest là khung công tác kiểm thử chính cho toàn bộ mã nguồn Python (máy chủ, dịch vụ tác tử, đường ống dữ liệu, lập lịch), sử dụng các phần mở rộng: pytest-asyncio (hỗ trợ kiểm thử bất đồng bộ), pytest-cov (đo độ bao phủ). ESLint là công cụ phân tích tĩnh cho giao diện người dùng TypeScript, phát hiện lỗi cú pháp và vấn đề về phong cách mã nguồn. compileall là mô-đun chuẩn của Python dùng để kiểm tra cú pháp toàn bộ tệp mã nguồn, phát hiện lỗi nạp thư viện và lỗi cú pháp mà không cần chạy kiểm thử. Thư viện unittest.mock và pytest.monkeypatch được dùng để tạo đối tượng giả, giả lập các dịch vụ bên ngoài.
 
 \newpage
 

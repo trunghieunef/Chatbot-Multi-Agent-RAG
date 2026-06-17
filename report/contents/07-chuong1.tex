@@ -96,31 +96,23 @@ Trong đồ án, hệ thống multi-agent được triển khai theo hai lớp:
     \end{itemize}
 \end{enumerate}
 
-\subsubsection*{Lớp 2: Agent Service (agent\_service/)}
+\subsubsection*{Lớp thứ hai: Dịch vụ Tác tử}
 
-Microservice riêng biệt chạy trên cổng 8100, sử dụng LangGraph StateGraph để điều phối multi-agent workflow với 8 node tuần tự:
+Dịch vụ Tác tử là dịch vụ vi mô riêng biệt chạy trên cổng 8100, sử dụng LangGraph để điều phối quy trình đa tác tử. Đồ thị trạng thái bao gồm 14 nút được tổ chức thành bốn nhóm chức năng chính:
 
-\begin{enumerate}
-    \item \textbf{Context Builder} -- Xây dựng ngữ cảnh hội thoại từ lịch sử chat và user preferences.
-    \item \textbf{Readiness Checker} -- Kiểm tra trạng thái sẵn sàng của các nguồn dữ liệu (listings, projects, articles, legal\_kb) qua bảng source\_readiness.
-    \item \textbf{Router} -- Phân loại ý định và chọn target agents.
-    \item \textbf{Retrieval Planner} -- Lập kế hoạch truy xuất đa bước: xác định cần truy vấn những nguồn nào, với bộ lọc gì, độ ưu tiên ra sao.
-    \item \textbf{Specialist Agents} -- Chạy song song các agent được chọn (property\_search, market\_analysis, legal\_advisor, investment\_advisor), mỗi agent sử dụng LLM (Gemini) kết hợp với tools (retrieval, market\_stats).
-    \item \textbf{Synthesizer} -- Tổng hợp kết quả từ các specialist agents thành phản hồi cuối cùng, đảm bảo tính mạch lạc và đầy đủ.
-    \item \textbf{Safety Validator} -- Kiểm tra phản hồi về các tiêu chí: groundedness (có căn cứ), helpfulness (hữu ích), safety (an toàn), citation\_quality (chất lượng trích dẫn).
-    \item \textbf{Memory Proposals} -- Trích xuất sở thích người dùng từ hội thoại (ví dụ: ``thích căn hộ Quận 7'', ``ngân sách dưới 3 tỷ'') và tạo MemoryProposal để lưu vào hệ thống.
-\end{enumerate}
+Nhóm chuẩn bị và định tuyến gồm: xây dựng ngữ cảnh hội thoại từ lịch sử trò chuyện và sở thích người dùng; kiểm tra trạng thái sẵn sàng của các nguồn dữ liệu (bất động sản, dự án, bài viết, kho kiến thức pháp lý); phân loại ý định và chọn tác tử mục tiêu; phát hiện nhu cầu làm rõ truy vấn khi câu hỏi không đủ thông tin; và phân tích sâu ngữ nghĩa truy vấn để trích xuất thực thể và ràng buộc.
 
-\subsubsection*{Cơ chế ghi nhớ người dùng (Memory System)}
+Nhóm truy xuất và xử lý chuyên biệt gồm: lập kế hoạch truy xuất đa bước, xác định nguồn dữ liệu cần truy vấn, bộ lọc và độ ưu tiên; thực thi song song các tác tử chuyên biệt được chọn, mỗi tác tử sử dụng mô hình ngôn ngữ Gemini kết hợp với công cụ truy xuất và thống kê; và nút phân tích đầu tư chạy mô hình đánh giá tài chính cho các bất động sản được tư vấn đầu tư.
 
-Hệ thống tích hợp cơ chế ghi nhớ thông qua hai bảng trong cơ sở dữ liệu:
+Nhóm tổng hợp và kiểm tra gồm: tổng hợp kết quả từ các tác tử thành phản hồi cuối cùng mạch lạc, ưu tiên thông tin có độ tin cậy cao và loại bỏ trùng lặp; và kiểm tra an toàn phản hồi về bốn tiêu chí: tính có căn cứ, tính hữu ích, an toàn và chất lượng trích dẫn.
 
-\begin{itemize}
-    \item \textbf{UserPreference:} Lưu trữ sở thích đã được xác nhận của người dùng dưới dạng key-value JSON (ví dụ: \texttt{preferred\_city = "Ho Chi Minh"}, \texttt{budget\_max = 3.0}). Các preference có độ tin cậy (confidence score) và nguồn gốc (source: user, agent\_proposal, system).
-    \item \textbf{MemoryProposal:} Lưu trữ các đề xuất sở thích được agent trích xuất từ hội thoại nhưng chưa được xác nhận. Mỗi proposal có trạng thái (pending, accepted, rejected) và có thể yêu cầu người dùng xác nhận.
-\end{itemize}
+Nhóm phản ứng và cải thiện gồm: bộ điều khiển phản ứng quyết định có cần truy xuất thêm hoặc chạy lại tác tử khi phát hiện thiếu bằng chứng; nút truy xuất phản ứng thực hiện truy vấn bổ sung; và nút đánh giá hội đồng để xem xét chéo kết quả giữa các tác tử. Cuối cùng, nút đề xuất ghi nhớ trích xuất sở thích người dùng từ hội thoại và tạo đề xuất để lưu vào hệ thống.
 
-Một số preference key được auto-apply khi confidence $\ge 0.8$ (preferred\_city, preferred\_district, preferred\_property\_type, budget\_max, budget\_min). Các key khác cần người dùng xác nhận thông qua API \texttt{POST /preferences/memory-proposals/\{id\}/accept}.
+\subsubsection*{Cơ chế ghi nhớ người dùng}
+
+Hệ thống tích hợp cơ chế ghi nhớ thông qua hai bảng trong cơ sở dữ liệu. Bảng Sở thích người dùng lưu trữ các sở thích đã được xác nhận dưới dạng khóa-giá trị (ví dụ: thành phố ưa thích là Hồ Chí Minh, ngân sách tối đa 3 tỷ đồng). Mỗi sở thích có điểm tin cậy và được gán nhãn nguồn gốc (do người dùng khai báo, do tác tử đề xuất, hay do hệ thống tự suy luận). Bảng Đề xuất ghi nhớ lưu trữ các đề xuất sở thích được tác tử trích xuất từ hội thoại nhưng chưa được người dùng xác nhận. Mỗi đề xuất mang trạng thái: đang chờ, đã chấp nhận hoặc đã từ chối.
+
+Một số sở thích được tự động áp dụng khi điểm tin cậy đạt ngưỡng 80\% (thành phố, quận, loại hình bất động sản, ngân sách tối đa và tối thiểu). Các sở thích khác cần người dùng xác nhận thông qua API.
 
 \subsection{Véc-tơ đặc trưng và Tìm kiếm ngữ nghĩa}
 

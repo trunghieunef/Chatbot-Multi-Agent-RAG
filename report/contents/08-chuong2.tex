@@ -246,7 +246,7 @@ Backend API là cổng giao tiếp chính của toàn bộ hệ thống, đảm 
 
     \item \textbf{Lớp Schemas (Pydantic):} Định nghĩa contract cho request/response. Pydantic v2 tự động validate dữ liệu đầu vào, sinh JSON Schema và tài liệu OpenAPI. Các schema được thiết kế tách biệt cho từng nghiệp vụ: listing (ListingCard, ListingDetail, PaginatedResponse), chat (ChatMessageRequest, ChatMessageResponse), auth (UserRegisterRequest, TokenResponse), admin (TraceSummary, PipelineReadinessItem).
 
-    \item \textbf{Lớp Routers (API Endpoints):} Xử lý HTTP request, gọi services tương ứng và trả về response. Backend có 7 router modules, mỗi router phụ trách một nhóm chức năng: listings, market, chat, auth, preferences, admin, metrics. Các router sử dụng dependency injection (Depends) để nhận database session và xác thực người dùng.
+    \item \textbf{Lớp Bộ định tuyến (API Endpoints):} Xử lý yêu cầu HTTP, gọi dịch vụ tương ứng và trả về phản hồi. Máy chủ có 8 mô-đun định tuyến, mỗi mô-đun phụ trách một nhóm chức năng: bất động sản, thị trường, trò chuyện, xác thực, sở thích, ghi nhớ, quản trị và chỉ số. Các bộ định tuyến sử dụng tiêm phụ thuộc để nhận phiên cơ sở dữ liệu và xác thực người dùng.
 
     \item \textbf{Lớp Services (Business Logic):} Chứa toàn bộ logic nghiệp vụ, được chia thành 3 nhóm chính:
     \begin{itemize}
@@ -258,65 +258,37 @@ Backend API là cổng giao tiếp chính của toàn bộ hệ thống, đảm 
 
 \subsubsection{Tầng Agent Service -- FastAPI + LangGraph (Port 8100)}
 
-Agent Service là microservice riêng biệt, được thiết kế để xử lý các tác vụ AI/ML phức tạp mà không ảnh hưởng đến hiệu năng của Backend API chính. Service này sử dụng LangGraph để điều phối multi-agent workflow.
+Agent Service là dịch vụ vi mô riêng biệt, được thiết kế để xử lý các tác vụ trí tuệ nhân tạo phức tạp mà không ảnh hưởng đến hiệu năng của Máy chủ Dịch vụ chính. Dịch vụ này sử dụng LangGraph để điều phối quy trình đa tác tử qua đồ thị trạng thái 14 nút, tổ chức thành bốn nhóm chức năng.
 
-\textbf{LangGraph StateGraph Workflow:}
+Nhóm chuẩn bị và định tuyến gồm năm nút. Nút xây dựng ngữ cảnh tổng hợp lịch sử trò chuyện và sở thích người dùng để đưa vào lời nhắc cho tất cả các bước sau. Nút kiểm tra trạng thái sẵn sàng đánh giá tính khả dụng của từng nguồn dữ liệu (bất động sản, dự án, bài viết, kho kiến thức pháp lý) và điều chỉnh chiến lược truy xuất khi có nguồn chưa sẵn sàng. Nút định tuyến phân loại ý định và chọn danh sách tác tử cần kích hoạt, sử dụng Gemini 2.0 Flash với lời nhắc thiết kế riêng cho lĩnh vực bất động sản tiếng Việt. Nút làm rõ phát hiện các truy vấn thiếu thông tin và tạo câu hỏi làm rõ trước khi tiếp tục xử lý. Nút hiểu truy vấn phân tích sâu ngữ nghĩa để trích xuất thực thể, ràng buộc và ngữ cảnh ẩn.
 
-Agent Service triển khai một quy trình 8 bước dưới dạng StateGraph:
+Nhóm truy xuất và xử lý chuyên biệt gồm ba nút. Nút lập kế hoạch truy xuất xác định nguồn dữ liệu cần truy vấn, bộ lọc áp dụng và độ ưu tiên, kết quả được cấu trúc thành danh sách nhiệm vụ truy xuất. Nút tác tử chuyên biệt thực thi đồng thời các tác tử được chọn: tìm kiếm bất động sản (thực hiện tìm kiếm lai và trích xuất bộ lọc), phân tích thị trường (truy vấn thống kê và xu hướng), tư vấn pháp lý (tìm trong kho kiến thức pháp lý) và tư vấn đầu tư (phân tích tiềm năng sinh lời). Nút mô hình đầu tư tính toán các chỉ số tài chính cho bất động sản được tư vấn đầu tư.
 
-\begin{enumerate}
-    \item \textbf{Context Builder:} Xây dựng ngữ cảnh hội thoại từ lịch sử chat (ChatMessage) và sở thích người dùng (UserPreference). Ngữ cảnh này được đưa vào prompt của tất cả các bước sau.
-    
-    \item \textbf{Readiness Checker:} Kiểm tra trạng thái sẵn sàng của các nguồn dữ liệu (listings, projects, articles, legal\_kb) qua bảng source\_readiness. Nếu một nguồn chưa sẵn sàng, hệ thống sẽ cảnh báo và điều chỉnh chiến lược truy xuất.
+Nhóm tổng hợp và kiểm tra gồm hai nút. Nút tổng hợp kết hợp kết quả từ các tác tử thành phản hồi mạch lạc, ưu tiên thông tin có độ tin cậy cao và loại bỏ trùng lặp. Nút kiểm tra an toàn đánh giá phản hồi theo bốn tiêu chí: tính có căn cứ (dựa trên nguồn dữ liệu thực), tính hữu ích, an toàn (không đưa ra khẳng định pháp lý hay tài chính tuyệt đối) và chất lượng trích dẫn.
 
-    \item \textbf{Router:} Phân loại ý định người dùng và chọn danh sách agent cần kích hoạt. Router sử dụng Gemini 2.0 Flash với prompt được thiết kế riêng cho domain bất động sản tiếng Việt.
+Nhóm phản ứng và cải thiện gồm ba nút. Nút điều khiển phản ứng quyết định có cần truy xuất thêm hoặc chạy lại tác tử khi phát hiện phản hồi thiếu bằng chứng. Nút truy xuất phản ứng thực hiện truy vấn bổ sung theo yêu cầu. Nút đánh giá hội đồng cho phép các tác tử xem xét chéo kết quả của nhau. Cuối cùng, nút đề xuất ghi nhớ trích xuất sở thích tiềm năng của người dùng từ nội dung hội thoại và tạo đề xuất để lưu vào hệ thống.
 
-    \item \textbf{Retrieval Planner:} Lập kế hoạch truy xuất đa bước -- xác định cần truy vấn những nguồn dữ liệu nào (listings, projects, articles), với bộ lọc gì, độ ưu tiên ra sao. Kế hoạch được cấu trúc dưới dạng danh sách các RetrievalTask.
+\textbf{Cơ chế đánh giá chất lượng:}
 
-    \item \textbf{Specialist Agents (chạy song song):} Các agent chuyên biệt được thực thi đồng thời:
-    \begin{itemize}
-        \item \textbf{Property Search Agent:} Thực hiện hybrid search trên listings, trích xuất bộ lọc từ query, định dạng kết quả.
-        \item \textbf{Market Analysis Agent:} Truy vấn thống kê thị trường, phân tích xu hướng.
-        \item \textbf{Legal Advisor Agent:} Tìm kiếm trong legal knowledge base.
-        \item \textbf{Investment Advisor Agent:} Phân tích tiềm năng đầu tư.
-    \end{itemize}
-    Mỗi agent nhận system prompt mô tả vai trò, context từ retrieval planner, và sử dụng Gemini để sinh phản hồi chuyên biệt.
+Sau mỗi phản hồi, hệ thống có thể kích hoạt bộ đánh giá tự động sử dụng Gemini để chấm điểm theo năm tiêu chí (thang 0,0--1,0): tính có căn cứ, tính hữu ích, chất lượng trích dẫn, an toàn và tính đầy đủ của vết xử lý. Kết quả đánh giá được lưu vào bảng vết tác tử để phân tích và cải thiện hệ thống.
 
-    \item \textbf{Synthesizer:} Tổng hợp kết quả từ các specialist agents thành một phản hồi cuối cùng mạch lạc. Synthesizer được hướng dẫn ưu tiên thông tin có độ tin cậy cao, loại bỏ trùng lặp và đảm bảo tính đầy đủ.
+\textbf{Tương tác giữa Máy chủ Dịch vụ và Dịch vụ Tác tử:}
 
-    \item \textbf{Safety Validator:} Kiểm tra phản hồi cuối cùng về 5 tiêu chí: groundedness (có căn cứ từ nguồn), helpfulness (hữu ích cho người dùng), citation\_quality (chất lượng trích dẫn), safety (an toàn, không đưa ra khẳng định pháp lý/tài chính tuyệt đối), trace\_completeness (đầy đủ thông tin tracing).
+Máy chủ Dịch vụ gọi Dịch vụ Tác tử qua trình khách HTTP với xác thực bằng khóa nội bộ. Dịch vụ Tác tử nhận yêu cầu chứa câu hỏi, mã phiên, mã người dùng và lịch sử hội thoại, trả về phản hồi cuối cùng, danh sách tác tử đã sử dụng, nguồn tham khảo, hành động gợi ý và vết xử lý đầy đủ. Máy chủ Dịch vụ lưu kết quả vào các bảng tin nhắn, vết tác tử và bảng liên quan trước khi trả về giao diện người dùng. Khi Dịch vụ Tác tử không được kích hoạt hoặc không khả dụng, Máy chủ Dịch vụ tự động chuyển sang đường ống nội bộ.
 
-    \item \textbf{Memory Proposals:} Trích xuất sở thích tiềm năng của người dùng từ nội dung hội thoại và tạo MemoryProposal. Ví dụ: nếu người dùng nhiều lần hỏi về căn hộ Quận 7, hệ thống sẽ đề xuất lưu \texttt{preferred\_district = "Quận 7"}.
-\end{enumerate}
+\subsubsection{Tầng Dữ liệu}
 
-\textbf{Cơ chế đánh giá chất lượng (LLM Judge):}
+\textbf{PostgreSQL 16 với tìm kiếm véc-tơ (cổng 5432):}
 
-Sau mỗi phản hồi, hệ thống có thể kích hoạt LLM Judge (Gemini) để đánh giá chất lượng. Judge chấm điểm theo 5 metrics (thang 0.0--1.0) và cung cấp rationale cho từng điểm. Kết quả đánh giá được lưu vào agent\_traces để phân tích và cải thiện hệ thống.
+PostgreSQL được chọn làm cơ sở dữ liệu chính nhờ khả năng lưu trữ đồng thời dữ liệu quan hệ và dữ liệu véc-tơ thông qua phần mở rộng pgvector. Điều này giúp giảm độ phức tạp vận hành so với việc sử dụng hai hệ quản trị riêng biệt.
 
-\textbf{Tương tác giữa Backend và Agent Service:}
+Dữ liệu quan hệ gồm 14 bảng: bất động sản (30 trường), người dùng, phiên và tin nhắn trò chuyện, dự án, bài viết, cùng các bảng giám sát (vết tác tử, các bước vết, lời gọi mô hình ngôn ngữ, sự kiện truy xuất, lần chạy đường ống, trạng thái nguồn, sở thích người dùng, đề xuất ghi nhớ, phản hồi đánh giá).
 
-\begin{itemize}
-    \item Backend gọi Agent Service qua HTTP client với internal key authentication.
-    \item Agent Service nhận AgentChatRequest (query, session\_id, user\_id, conversation\_history) và trả về AgentChatResponse (final\_response, agents\_used, sources, suggested\_actions, trace\_summary, full\_trace).
-    \item Backend lưu kết quả vào ChatMessage, AgentTrace và các bảng liên quan trước khi trả về frontend.
-    \item Khi Agent Service không được kích hoạt (CHATBOT\_AGENT\_SERVICE\_ENABLED=false) hoặc không khả dụng, Backend tự động fallback sang pipeline nội bộ.
-\end{itemize}
+Dữ liệu véc-tơ được lưu trong bảng đoạn văn bản với cột véc-tơ 1024 chiều, phục vụ tìm kiếm ngữ nghĩa. Chỉ mục HNSW với tham số $m=16$ và $ef\_construction=64$ đảm bảo tốc độ tìm kiếm k lân cận gần nhất nhanh trên tập dữ liệu lớn. Thiết kế đa hình cho phép một bảng đoạn văn bản duy nhất phục vụ nhiều loại dữ liệu nguồn (bất động sản, dự án, bài viết) thông qua cặp cột loại nguồn và mã nguồn.
 
-\subsubsection{Tầng Dữ liệu -- PostgreSQL + pgvector \& Redis}
+\textbf{Redis 7 (cổng 6379):}
 
-\textbf{PostgreSQL 16 + pgvector (Port 5432):}
-
-PostgreSQL được chọn làm cơ sở dữ liệu chính nhờ khả năng lưu trữ đồng thời dữ liệu quan hệ và dữ liệu vector thông qua extension pgvector. Điều này giúp giảm độ phức tạp vận hành so với việc sử dụng một relational database và một vector database riêng biệt.
-
-\begin{itemize}
-    \item \textbf{Dữ liệu quan hệ:} 14+ bảng bao gồm listings (bất động sản), users (người dùng), chat\_sessions và chat\_messages (hội thoại), projects (dự án), articles (bài viết), cùng các bảng observability (agent\_traces, agent\_trace\_steps, agent\_llm\_calls, agent\_retrieval\_events, pipeline\_runs, source\_readiness, user\_preferences, memory\_proposals, chat\_feedback).
-    \item \textbf{Dữ liệu vector:} Bảng chunks lưu vector embedding 1024 chiều, phục vụ tìm kiếm ngữ nghĩa. HNSW index với tham số $m=16$ và $ef\_construction=64$ đảm bảo tốc độ tìm kiếm k-NN nhanh trên tập dữ liệu lớn.
-    \item \textbf{Thiết kế polymorphic cho chunks:} Cột parent\_type và parent\_id cho phép một bảng chunks duy nhất phục vụ nhiều loại dữ liệu nguồn (listings, projects, articles), thay vì phải tạo bảng chunks riêng cho từng loại.
-\end{itemize}
-
-\textbf{Redis 7 (Port 6379):}
-
-Redis được sử dụng làm cache ở hai cấp độ:
+Redis được sử dụng làm bộ nhớ đệm ở hai cấp độ: bộ nhớ đệm véc-tơ đặc trưng (lưu véc-tơ của câu truy vấn, tránh mã hóa lại) và bộ nhớ đệm kết quả tìm kiếm (lưu kết quả tìm kiếm lai cho truy vấn lặp lại).
 \begin{itemize}
     \item \textbf{Embedding Cache:} Lưu vector embedding của câu truy vấn, tránh phải encode lại. Key có dạng \texttt{embedding:\{provider\}:\{model\}:\{dim\}:\{hash\}}, cho phép cache hoạt động chính xác ngay cả khi thay đổi model.
     \item \textbf{Search Result Cache:} Lưu kết quả hybrid search cho các truy vấn lặp lại, giảm tải đáng kể cho PostgreSQL.
