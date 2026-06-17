@@ -20,17 +20,17 @@ const FALLBACK_PROJECTS: ProjectCard[] = [
     name: "The River District",
     slug: "the-river-district",
     developer: "Saigon Urban",
-    location: "Thu Duc, Ho Chi Minh",
-    district: "Thu Duc",
-    city: "Ho Chi Minh",
+    location: "Thủ Đức, Hồ Chí Minh",
+    district: "Thủ Đức",
+    city: "Hồ Chí Minh",
     total_units: 1800,
-    price_range: "4.2 - 9.8 ty",
-    area_range: "48 - 126 m2",
+    price_range: "4,2 - 9,8 tỷ",
+    area_range: "48 - 126 m²",
     status: "selling",
-    project_type: "Can ho",
+    project_type: "Căn hộ",
     description:
-      "Cum can ho ven song voi tien ich noi khu day du, ket noi nhanh toi trung tam va khu cong nghe cao.",
-    amenities: ["Ho boi", "Cong vien", "Trung tam thuong mai"],
+      "Cụm căn hộ ven sông với tiện ích nội khu đầy đủ, kết nối nhanh tới trung tâm và khu công nghệ cao.",
+    amenities: ["Hồ bơi", "Công viên", "Trung tâm thương mại"],
     url: null,
     created_at: null,
     updated_at: null,
@@ -40,17 +40,17 @@ const FALLBACK_PROJECTS: ProjectCard[] = [
     name: "West Lake Residence",
     slug: "west-lake-residence",
     developer: "Capital Homes",
-    location: "Tay Ho, Ha Noi",
-    district: "Tay Ho",
-    city: "Ha Noi",
+    location: "Tây Hồ, Hà Nội",
+    district: "Tây Hồ",
+    city: "Hà Nội",
     total_units: 760,
-    price_range: "6.5 - 18 ty",
-    area_range: "62 - 180 m2",
+    price_range: "6,5 - 18 tỷ",
+    area_range: "62 - 180 m²",
     status: "upcoming",
-    project_type: "Can ho cao cap",
+    project_type: "Căn hộ cao cấp",
     description:
-      "Du an can ho cao cap gan ho Tay, tap trung vao khong gian song rieng tu va dich vu quan ly chuyen nghiep.",
-    amenities: ["Sky lounge", "Gym", "Khu tre em"],
+      "Dự án căn hộ cao cấp gần hồ Tây, tập trung vào không gian sống riêng tư và dịch vụ quản lý chuyên nghiệp.",
+    amenities: ["Sky lounge", "Gym", "Khu trẻ em"],
     url: null,
     created_at: null,
     updated_at: null,
@@ -60,37 +60,37 @@ const FALLBACK_PROJECTS: ProjectCard[] = [
     name: "Green Valley Villas",
     slug: "green-valley-villas",
     developer: "EcoLand",
-    location: "Da Nang",
-    district: "Ngu Hanh Son",
-    city: "Da Nang",
+    location: "Đà Nẵng",
+    district: "Ngũ Hành Sơn",
+    city: "Đà Nẵng",
     total_units: 220,
-    price_range: "12 - 35 ty",
-    area_range: "180 - 420 m2",
+    price_range: "12 - 35 tỷ",
+    area_range: "180 - 420 m²",
     status: "completed",
-    project_type: "Biet thu",
+    project_type: "Biệt thự",
     description:
-      "Khu biet thu thap tang gan bien, phu hop nhu cau nghi duong dai han va khai thac cho thue.",
-    amenities: ["Bao ve 24/7", "Clubhouse", "Duong dao bo"],
+      "Khu biệt thự thấp tầng gần biển, phù hợp nhu cầu nghỉ dưỡng dài hạn và khai thác cho thuê.",
+    amenities: ["Bảo vệ 24/7", "Clubhouse", "Đường dạo bộ"],
     url: null,
     created_at: null,
     updated_at: null,
   },
 ];
 
-const CITY_OPTIONS = ["", "Ho Chi Minh", "Ha Noi", "Da Nang", "Quang Ninh"];
-const TYPE_OPTIONS = ["", "Can ho", "Biet thu", "Shophouse", "Nha pho"];
+const CITY_OPTIONS = ["", "Hồ Chí Minh", "Hà Nội", "Đà Nẵng", "Quảng Ninh"];
+const TYPE_OPTIONS = ["", "Căn hộ", "Biệt thự", "Shophouse", "Nhà phố"];
 const STATUS_OPTIONS = ["", "selling", "upcoming", "completed"];
 
 function statusLabel(status: string | null): string {
   const labels: Record<string, string> = {
-    selling: "Dang mo ban",
-    upcoming: "Sap ra mat",
-    completed: "Da ban giao",
+    selling: "Đang mở bán",
+    upcoming: "Sắp ra mắt",
+    completed: "Đã bàn giao",
   };
-  return status ? labels[status] || status : "Dang cap nhat";
+  return status ? labels[status] || status : "Đang cập nhật";
 }
 
-function fieldLabel(value: string | null | undefined, fallback = "Dang cap nhat") {
+function fieldLabel(value: string | null | undefined, fallback = "Đang cập nhật") {
   return value && value.trim() ? value : fallback;
 }
 
@@ -127,13 +127,13 @@ function ProjectCardItem({ project }: { project: ProjectCard }) {
 
       <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
         <div className="rounded-md bg-muted p-2">
-          <p className="text-muted-foreground">Gia</p>
+          <p className="text-muted-foreground">Giá</p>
           <p className="mt-1 font-semibold text-foreground">
             {fieldLabel(project.price_range)}
           </p>
         </div>
         <div className="rounded-md bg-muted p-2">
-          <p className="text-muted-foreground">Dien tich</p>
+          <p className="text-muted-foreground">Diện tích</p>
           <p className="mt-1 font-semibold text-foreground">
             {fieldLabel(project.area_range)}
           </p>
@@ -141,7 +141,7 @@ function ProjectCardItem({ project }: { project: ProjectCard }) {
       </div>
 
       <p className="mt-4 line-clamp-3 text-sm leading-6 text-muted-foreground">
-        {fieldLabel(project.description, "Thong tin du an dang duoc cap nhat.")}
+        {fieldLabel(project.description, "Thông tin dự án đang được cập nhật.")}
       </p>
 
       {project.amenities.length > 0 && (
@@ -163,7 +163,7 @@ function ProjectCardItem({ project }: { project: ProjectCard }) {
         rel={project.url ? "noreferrer" : undefined}
         className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline"
       >
-        Xem du an <ArrowRight size={14} />
+        Xem dự án <ArrowRight size={14} />
       </a>
     </article>
   );
@@ -220,24 +220,24 @@ export default function ProjectsPage() {
         <div className="mx-auto max-w-7xl px-4 py-8">
           <nav className="mb-5 text-xs text-muted-foreground">
             <Link href="/" className="hover:text-primary">
-              Trang chu
+              Trang chủ
             </Link>
             <span className="mx-1.5">/</span>
-            <span className="font-medium text-foreground">Du an</span>
+            <span className="font-medium text-foreground">Dự án</span>
           </nav>
 
           <div className="grid gap-6 lg:grid-cols-[1.25fr_0.75fr] lg:items-end">
             <div>
               <span className="inline-flex items-center gap-2 rounded-md bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
                 <Building2 size={14} />
-                Du an bat dong san
+                Dự án bất động sản
               </span>
               <h1 className="mt-4 text-3xl font-extrabold text-foreground sm:text-4xl">
-                Tim du an theo khu vuc, loai hinh va trang thai
+                Tìm dự án theo khu vực, loại hình và trạng thái
               </h1>
               <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
-                Cap nhat danh sach du an tu du lieu crawler. Khi du lieu chua san
-                sang, trang van hien thi bo mau de giu trai nghiem duyet noi dung.
+                Cập nhật danh sách dự án từ dữ liệu crawler. Khi dữ liệu chưa sẵn
+                sàng, trang vẫn hiển thị bộ mẫu để giữ trải nghiệm duyệt nội dung.
               </p>
             </div>
 
@@ -246,7 +246,7 @@ export default function ProjectsPage() {
               className="rounded-lg border border-border bg-background p-3 shadow-sm"
             >
               <label className="mb-2 block text-xs font-semibold text-muted-foreground">
-                Tim kiem du an
+                Tìm kiếm dự án
               </label>
               <div className="flex gap-2">
                 <div className="relative flex-1">
@@ -257,7 +257,7 @@ export default function ProjectsPage() {
                   <input
                     value={draftSearch}
                     onChange={(event) => setDraftSearch(event.target.value)}
-                    placeholder="Nhap ten du an, chu dau tu, khu vuc..."
+                    placeholder="Nhập tên dự án, chủ đầu tư, khu vực..."
                     className="w-full rounded-md border border-border bg-card py-2.5 pl-9 pr-3 text-sm outline-none transition-colors focus:border-primary"
                   />
                 </div>
@@ -266,7 +266,7 @@ export default function ProjectsPage() {
                   className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary-hover"
                 >
                   <Search size={15} />
-                  Tim
+                  Tìm
                 </button>
               </div>
             </form>
@@ -278,7 +278,7 @@ export default function ProjectsPage() {
         <div className="mb-5 rounded-lg border border-border bg-card p-4 shadow-sm">
           <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
             <SlidersHorizontal size={16} className="text-primary" />
-            Bo loc du an
+            Bộ lọc dự án
           </div>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <select
@@ -294,7 +294,7 @@ export default function ProjectsPage() {
             >
               {CITY_OPTIONS.map((city) => (
                 <option key={city || "all"} value={city}>
-                  {city || "Tat ca thanh pho"}
+                  {city || "Tất cả thành phố"}
                 </option>
               ))}
             </select>
@@ -312,7 +312,7 @@ export default function ProjectsPage() {
             >
               {TYPE_OPTIONS.map((type) => (
                 <option key={type || "all"} value={type}>
-                  {type || "Tat ca loai hinh"}
+                  {type || "Tất cả loại hình"}
                 </option>
               ))}
             </select>
@@ -330,7 +330,7 @@ export default function ProjectsPage() {
             >
               {STATUS_OPTIONS.map((status) => (
                 <option key={status || "all"} value={status}>
-                  {status ? statusLabel(status) : "Tat ca trang thai"}
+                  {status ? statusLabel(status) : "Tất cả trạng thái"}
                 </option>
               ))}
             </select>
@@ -342,9 +342,9 @@ export default function ProjectsPage() {
               }
               className="rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
             >
-              <option value="newest">Moi nhat</option>
-              <option value="name_asc">Ten A-Z</option>
-              <option value="name_desc">Ten Z-A</option>
+              <option value="newest">Mới nhất</option>
+              <option value="name_asc">Tên A-Z</option>
+              <option value="name_desc">Tên Z-A</option>
             </select>
           </div>
         </div>
@@ -354,17 +354,17 @@ export default function ProjectsPage() {
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
                 <h2 className="text-xl font-bold text-foreground">
-                  Danh sach du an
+                  Danh sách dự án
                 </h2>
                 <p className="text-xs text-muted-foreground">
                   {usingFallback
-                    ? "Dang hien thi du lieu mau"
-                    : "Dang hien thi du lieu tu API"}
+                    ? "Đang hiển thị dữ liệu mẫu"
+                    : "Đang hiển thị dữ liệu từ API"}
                 </p>
               </div>
               {loading && (
                 <span className="rounded-md bg-muted px-3 py-1 text-xs text-muted-foreground">
-                  Dang tai...
+                  Đang tải...
                 </span>
               )}
             </div>
@@ -378,7 +378,7 @@ export default function ProjectsPage() {
 
           <aside className="space-y-4">
             <section className="rounded-lg border border-border bg-card p-4 shadow-sm">
-              <h2 className="text-sm font-bold text-foreground">Khu vuc noi bat</h2>
+              <h2 className="text-sm font-bold text-foreground">Khu vực nổi bật</h2>
               <div className="mt-3 space-y-2">
                 {highlightedCities.map(([city, count]) => (
                   <button
@@ -389,18 +389,18 @@ export default function ProjectsPage() {
                     className="flex w-full items-center justify-between rounded-md px-2 py-2 text-left text-sm transition-colors hover:bg-muted"
                   >
                     <span>{city}</span>
-                    <span className="text-xs text-muted-foreground">{count} du an</span>
+                    <span className="text-xs text-muted-foreground">{count} dự án</span>
                   </button>
                 ))}
               </div>
             </section>
 
             <section className="rounded-lg border border-border bg-card p-4 shadow-sm">
-              <h2 className="text-sm font-bold text-foreground">Goi y tim kiem</h2>
+              <h2 className="text-sm font-bold text-foreground">Gợi ý tìm kiếm</h2>
               <div className="mt-3 space-y-2 text-sm text-muted-foreground">
-                <p>Can ho dang mo ban tai thanh pho lon.</p>
-                <p>Du an da ban giao phu hop khai thac cho thue.</p>
-                <p>Shophouse va biet thu cho nha dau tu dai han.</p>
+                <p>Căn hộ đang mở bán tại thành phố lớn.</p>
+                <p>Dự án đã bàn giao phù hợp khai thác cho thuê.</p>
+                <p>Shophouse và biệt thự cho nhà đầu tư dài hạn.</p>
               </div>
             </section>
           </aside>

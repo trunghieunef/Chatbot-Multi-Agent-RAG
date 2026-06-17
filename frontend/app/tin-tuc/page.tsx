@@ -16,10 +16,10 @@ import type { ArticleCard, ArticleFilters } from "@/lib/types";
 const FALLBACK_ARTICLES: ArticleCard[] = [
   {
     id: 8001,
-    title: "Thi truong nha o do thi lon tiep tuc phan hoa",
+    title: "Thị trường nhà ở đô thị lớn tiếp tục phân hóa",
     body: null,
     summary:
-      "Nguoi mua uu tien san pham co phap ly ro, tien ich hoan thien va kha nang khai thac cho thue on dinh.",
+      "Người mua ưu tiên sản phẩm có pháp lý rõ, tiện ích hoàn thiện và khả năng khai thác cho thuê ổn định.",
     category: "market",
     source: "batdongsan.com",
     post_date: "2026-06-15",
@@ -29,10 +29,10 @@ const FALLBACK_ARTICLES: ArticleCard[] = [
   },
   {
     id: 8002,
-    title: "Kinh nghiem doc thong tin quy hoach truoc khi xuong tien",
+    title: "Kinh nghiệm đọc thông tin quy hoạch trước khi xuống tiền",
     body: null,
     summary:
-      "Kiem tra quy hoach, ha tang va lo trinh phap ly giup nha dau tu giam rui ro khi mua bat dong san.",
+      "Kiểm tra quy hoạch, hạ tầng và lộ trình pháp lý giúp nhà đầu tư giảm rủi ro khi mua bất động sản.",
     category: "guide",
     source: "batdongsan.com",
     post_date: "2026-06-12",
@@ -42,10 +42,10 @@ const FALLBACK_ARTICLES: ArticleCard[] = [
   },
   {
     id: 8003,
-    title: "Ha tang moi tao luc day cho khu Dong",
+    title: "Hạ tầng mới tạo lực đẩy cho khu Đông",
     body: null,
     summary:
-      "Cac tuyen vanh dai, metro va truc ket noi lien vung tiep tuc la bien so quan trong cua gia nha dat.",
+      "Các tuyến vành đai, metro và trục kết nối liên vùng tiếp tục là biến số quan trọng của giá nhà đất.",
     category: "planning",
     source: "batdongsan.com",
     post_date: "2026-06-09",
@@ -55,10 +55,10 @@ const FALLBACK_ARTICLES: ArticleCard[] = [
   },
   {
     id: 8004,
-    title: "Can ho vua tui tien van giu thanh khoan tot",
+    title: "Căn hộ vừa túi tiền vẫn giữ thanh khoản tốt",
     body: null,
     summary:
-      "Phan khuc co tong gia hop ly, vi tri gan viec lam va tien ich co ban van duoc nguoi mua thuc quan tam.",
+      "Phân khúc có tổng giá hợp lý, vị trí gần việc làm và tiện ích cơ bản vẫn được người mua thực sự quan tâm.",
     category: "news",
     source: "batdongsan.com",
     post_date: "2026-06-05",
@@ -69,24 +69,24 @@ const FALLBACK_ARTICLES: ArticleCard[] = [
 ];
 
 const CATEGORIES = [
-  { value: "", label: "Tat ca", icon: Newspaper },
-  { value: "market", label: "Thi truong", icon: TrendingUp },
-  { value: "guide", label: "Huong dan", icon: BookOpen },
-  { value: "planning", label: "Quy hoach", icon: CalendarDays },
+  { value: "", label: "Tất cả", icon: Newspaper },
+  { value: "market", label: "Thị trường", icon: TrendingUp },
+  { value: "guide", label: "Hướng dẫn", icon: BookOpen },
+  { value: "planning", label: "Quy hoạch", icon: CalendarDays },
 ];
 
 function categoryLabel(category: string | null): string {
   const labels: Record<string, string> = {
-    market: "Thi truong",
-    guide: "Huong dan",
-    planning: "Quy hoach",
-    news: "Tin tuc",
+    market: "Thị trường",
+    guide: "Hướng dẫn",
+    planning: "Quy hoạch",
+    news: "Tin tức",
   };
-  return category ? labels[category] || category : "Tin tuc";
+  return category ? labels[category] || category : "Tin tức";
 }
 
 function formatDate(value: string | null): string {
-  if (!value) return "Moi cap nhat";
+  if (!value) return "Mới cập nhật";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleDateString("vi-VN", {
@@ -100,7 +100,7 @@ function articleSummary(article: ArticleCard): string {
   return (
     article.summary ||
     article.body ||
-    "Noi dung bai viet dang duoc cap nhat tu he thong crawl tin tuc."
+    "Nội dung bài viết đang được cập nhật từ hệ thống crawl tin tức."
   );
 }
 
@@ -137,7 +137,7 @@ function ArticleCardItem({ article }: { article: ArticleCard }) {
           rel={article.url ? "noreferrer" : undefined}
           className="inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline"
         >
-          Doc tiep <ArrowRight size={14} />
+          Đọc tiếp <ArrowRight size={14} />
         </a>
       </div>
     </article>
@@ -199,24 +199,24 @@ export default function NewsPage() {
         <div className="mx-auto max-w-7xl px-4 py-8">
           <nav className="mb-5 text-xs text-muted-foreground">
             <Link href="/" className="hover:text-primary">
-              Trang chu
+              Trang chủ
             </Link>
             <span className="mx-1.5">/</span>
-            <span className="font-medium text-foreground">Tin tuc</span>
+            <span className="font-medium text-foreground">Tin tức</span>
           </nav>
 
           <div className="grid gap-6 lg:grid-cols-[1fr_360px] lg:items-end">
             <div>
               <span className="inline-flex items-center gap-2 rounded-md bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
                 <Newspaper size={14} />
-                Tin tuc bat dong san
+                Tin tức bất động sản
               </span>
               <h1 className="mt-4 text-3xl font-extrabold text-foreground sm:text-4xl">
-                Doc tin thi truong, quy hoach va kinh nghiem mua nha
+                Đọc tin thị trường, quy hoạch và kinh nghiệm mua nhà
               </h1>
               <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
-                Noi dung duoc lay tu bang articles. Trang uu tien du lieu that,
-                dong thoi co noi dung mau khi backend chua san sang.
+                Nội dung được lấy từ bảng articles. Trang ưu tiên dữ liệu thật,
+                đồng thời có nội dung mẫu khi backend chưa sẵn sàng.
               </p>
             </div>
 
@@ -225,7 +225,7 @@ export default function NewsPage() {
               className="rounded-lg border border-border bg-background p-3 shadow-sm"
             >
               <label className="mb-2 block text-xs font-semibold text-muted-foreground">
-                Tim tin tuc
+                Tìm tin tức
               </label>
               <div className="flex gap-2">
                 <div className="relative flex-1">
@@ -236,7 +236,7 @@ export default function NewsPage() {
                   <input
                     value={draftSearch}
                     onChange={(event) => setDraftSearch(event.target.value)}
-                    placeholder="Nhap tu khoa thi truong, quy hoach..."
+                    placeholder="Nhập từ khóa thị trường, quy hoạch..."
                     className="w-full rounded-md border border-border bg-card py-2.5 pl-9 pr-3 text-sm outline-none transition-colors focus:border-primary"
                   />
                 </div>
@@ -245,7 +245,7 @@ export default function NewsPage() {
                   className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary-hover"
                 >
                   <Search size={15} />
-                  Tim
+                  Tìm
                 </button>
               </div>
             </form>
@@ -289,8 +289,8 @@ export default function NewsPage() {
             }
             className="rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
           >
-            <option value="newest">Moi nhat</option>
-            <option value="oldest">Cu nhat</option>
+            <option value="newest">Mới nhất</option>
+            <option value="oldest">Cũ nhất</option>
           </select>
         </div>
 
@@ -298,16 +298,16 @@ export default function NewsPage() {
           <div>
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
-                <h2 className="text-xl font-bold text-foreground">Tin noi bat</h2>
+                <h2 className="text-xl font-bold text-foreground">Tin nổi bật</h2>
                 <p className="text-xs text-muted-foreground">
                   {usingFallback
-                    ? "Dang hien thi du lieu mau"
-                    : "Dang hien thi du lieu tu API"}
+                    ? "Đang hiển thị dữ liệu mẫu"
+                    : "Đang hiển thị dữ liệu từ API"}
                 </p>
               </div>
               {loading && (
                 <span className="rounded-md bg-muted px-3 py-1 text-xs text-muted-foreground">
-                  Dang tai...
+                  Đang tải...
                 </span>
               )}
             </div>
@@ -331,18 +331,18 @@ export default function NewsPage() {
                     rel={featured.url ? "noreferrer" : undefined}
                     className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline"
                   >
-                    Doc bai viet <ArrowRight size={14} />
+                    Đọc bài viết <ArrowRight size={14} />
                   </a>
                 </div>
                 <div className="rounded-lg bg-muted p-4">
                   <p className="text-xs font-semibold uppercase text-muted-foreground">
-                    Nguon
+                    Nguồn
                   </p>
                   <p className="mt-1 text-sm font-bold text-foreground">
                     {featured.source || "batdongsan.com"}
                   </p>
                   <p className="mt-4 text-xs font-semibold uppercase text-muted-foreground">
-                    Ngay dang
+                    Ngày đăng
                   </p>
                   <p className="mt-1 text-sm font-bold text-foreground">
                     {formatDate(featured.post_date)}
@@ -360,7 +360,7 @@ export default function NewsPage() {
 
           <aside className="space-y-4">
             <section className="rounded-lg border border-border bg-card p-4 shadow-sm">
-              <h2 className="text-sm font-bold text-foreground">Chu de dang doc</h2>
+              <h2 className="text-sm font-bold text-foreground">Chủ đề đang đọc</h2>
               <div className="mt-3 space-y-2">
                 {sourceStats.map(([category, count]) => (
                   <div
@@ -368,17 +368,17 @@ export default function NewsPage() {
                     className="flex items-center justify-between rounded-md bg-background px-3 py-2 text-sm"
                   >
                     <span>{category}</span>
-                    <span className="text-xs text-muted-foreground">{count} bai</span>
+                    <span className="text-xs text-muted-foreground">{count} bài</span>
                   </div>
                 ))}
               </div>
             </section>
 
             <section className="rounded-lg border border-border bg-card p-4 shadow-sm">
-              <h2 className="text-sm font-bold text-foreground">Goc phan tich</h2>
+              <h2 className="text-sm font-bold text-foreground">Góc phân tích</h2>
               <div className="mt-3 space-y-3 text-sm leading-6 text-muted-foreground">
-                <p>Theo doi bien dong gia, ha tang va thanh khoan theo khu vuc.</p>
-                <p>Luu cac bai viet quan trong de hoi chatbot ve ngu canh dau tu.</p>
+                <p>Theo dõi biến động giá, hạ tầng và thanh khoản theo khu vực.</p>
+                <p>Lưu các bài viết quan trọng để hỏi chatbot về ngữ cảnh đầu tư.</p>
               </div>
             </section>
           </aside>
