@@ -182,7 +182,7 @@ export default function ChatWidget() {
 
       {/* Chat Panel */}
       {open && (
-        <div className="fixed bottom-6 right-6 z-50 flex w-[380px] max-w-[calc(100vw-2rem)] flex-col rounded-2xl border border-border bg-card shadow-2xl animate-slide-in overflow-hidden"
+        <div className="fixed bottom-4 left-4 right-4 z-50 flex flex-col rounded-2xl border border-border bg-card shadow-2xl animate-slide-in overflow-hidden sm:bottom-6 sm:left-auto sm:right-6 sm:w-[380px]"
              style={{ height: "min(560px, calc(100vh - 6rem))" }}>
           {/* Header */}
           <div className="flex items-center justify-between bg-gradient-to-r from-primary to-primary-hover px-4 py-3 text-primary-foreground">
