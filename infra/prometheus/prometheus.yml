@@ -1,0 +1,48 @@
+# ============================================================
+# RealEstate Chatbot v2 — Prometheus Configuration
+# ============================================================
+global:
+  scrape_interval: 15s
+  scrape_timeout: 10s
+  evaluation_interval: 30s
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
+
+rule_files:
+  - /etc/prometheus/alert-rules.yml
+
+scrape_configs:
+  # --- Backend API metrics ---
+  - job_name: backend
+    metrics_path: /api/v1/metrics
+    static_configs:
+      - targets: ["backend:8000"]
+        labels:
+          service: backend
+    scrape_interval: 30s
+
+  # --- PostgreSQL exporter ---
+  - job_name: postgres
+    static_configs:
+      - targets: ["postgres-exporter:9187"]
+        labels:
+          service: postgres
+    scrape_interval: 30s
+
+  # --- Redis exporter ---
+  - job_name: redis
+    static_configs:
+      - targets: ["redis-exporter:9121"]
+        labels:
+          service: redis
+    scrape_interval: 30s
+
+  # --- Prometheus self-monitoring ---
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+        labels:
+          service: prometheus

@@ -1,0 +1,97 @@
+# ============================================================
+# RealEstate Chatbot v2 — Alert Rules
+# ============================================================
+groups:
+  - name: realestate_critical
+    interval: 30s
+    rules:
+      # --- Service down ---
+      - alert: BackendDown
+        expr: up{job="backend"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Backend service is DOWN"
+          description: "Backend ({{ $labels.instance }}) has been unreachable for 2 minutes."
+
+      - alert: PostgresDown
+        expr: up{job="postgres"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "PostgreSQL exporter DOWN"
+          description: "PostgreSQL exporter ({{ $labels.instance }}) unreachable — DB may be down."
+
+      - alert: RedisDown
+        expr: up{job="redis"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Redis exporter DOWN"
+          description: "Redis exporter ({{ $labels.instance }}) unreachable — cache may be down."
+
+      # --- No chat traffic ---
+      - alert: NoChatTraffic
+        expr: rate(realestate_chat_requests_total[5m]) == 0
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Zero chat requests in 15 minutes"
+          description: "Backend is up but no chat requests received — possible frontend or routing issue."
+
+      # --- High retrieval latency ---
+      - alert: HighRetrievalLatency
+        expr: histogram_quantile(0.95, sum by (le) (rate(realestate_retrieval_latency_seconds_bucket[5m]))) > 2.0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "P95 retrieval latency > 2s"
+          description: "Vector search latency P95 is {{ $value }}s — DB or embedding service may be overloaded."
+
+      # --- Pipeline runs failing ---
+      - alert: PipelineFailing
+        expr: sum by (dag_id) (rate(realestate_pipeline_runs_total{status="failed"}[10m])) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Pipeline DAG {{ $labels.dag_id }} is failing"
+          description: "Pipeline DAG has failures — check Airflow or pipeline-worker."
+
+      # --- LLM budget exceeded ---
+      - alert: LLMBudgetExceeded
+        expr: realestate_llm_cost_budget_exceeded == 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "LLM monthly budget EXCEEDED"
+          description: "Monthly LLM cost has exceeded the configured budget."
+
+  - name: realestate_infra
+    interval: 1m
+    rules:
+      # --- High PostgreSQL connections ---
+      - alert: HighPostgresConnections
+        expr: pg_stat_database_numbackends{datname="realestate"} > 50
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "PostgreSQL connections > 50"
+          description: "Too many active connections ({{ $value }}) — may exhaust connection pool."
+
+      # --- Redis memory high ---
+      - alert: RedisMemoryHigh
+        expr: redis_memory_used_bytes / redis_memory_max_bytes > 0.85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Redis memory > 85%"
+          description: "Redis memory usage at {{ $value | humanizePercentage }} — consider scaling or eviction policy."

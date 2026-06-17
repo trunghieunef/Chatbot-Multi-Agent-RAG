@@ -5,7 +5,9 @@ from crawler.core.listing_detail_parser import (
     normalize_listing_detail,
 )
 from crawler.core.listing_images import image_urls_json_from_page
+from crawler.rent import crawl_details as rent_crawl_details
 from crawler.rent.crawl_details import DETAIL_FIELDS as RENT_DETAIL_FIELDS
+from crawler.sale import crawl_details as sale_crawl_details
 from crawler.sale.crawl_details import DETAIL_FIELDS as SALE_DETAIL_FIELDS
 
 
@@ -209,3 +211,76 @@ def test_image_urls_json_from_page_normalizes_and_dedupes_urls():
         '["https://file4.batdongsan.com.vn/resize/1275x717/2026/06/10/listing-a_wm.jpg", '
         '"https://file4.batdongsan.com.vn/resize/1275x717/2026/06/10/listing-b_wm.webp"]'
     )
+
+
+class FakeDetailElement:
+    def inner_text(self):
+        return "Valid listing title"
+
+
+class FakeDetailPage:
+    def __init__(self):
+        self.goto_kwargs = None
+
+    def goto(self, url, **kwargs):
+        self.goto_kwargs = kwargs
+
+    def query_selector(self, selector):
+        if selector in {"h1.re__pr-title", "h1"}:
+            return FakeDetailElement()
+        return None
+
+    def title(self):
+        return "Valid listing title"
+
+
+class FakeDetailContext:
+    def __init__(self, page):
+        self.page = page
+
+    def new_page(self):
+        return self.page
+
+    def close(self):
+        pass
+
+
+class FakeDetailBrowser:
+    def __init__(self, page):
+        self.page = page
+
+    def new_context(self, **_kwargs):
+        return FakeDetailContext(self.page)
+
+
+class FakeStealth:
+    def apply_stealth_sync(self, _page):
+        pass
+
+
+def _assert_detail_crawler_uses_fast_commit_wait(monkeypatch, module):
+    page = FakeDetailPage()
+    monkeypatch.setattr(
+        module,
+        "parse_detail_page",
+        lambda _page, url, product_id: {"url": url, "product_id": product_id},
+    )
+
+    row = module.crawl_detail(
+        FakeDetailBrowser(page),
+        "https://batdongsan.com.vn/listing-pr1",
+        "pr1",
+        FakeStealth(),
+        retries=0,
+    )
+
+    assert row == {"url": "https://batdongsan.com.vn/listing-pr1", "product_id": "pr1"}
+    assert page.goto_kwargs["wait_until"] == "commit"
+
+
+def test_sale_detail_crawler_uses_fast_commit_wait(monkeypatch):
+    _assert_detail_crawler_uses_fast_commit_wait(monkeypatch, sale_crawl_details)
+
+
+def test_rent_detail_crawler_uses_fast_commit_wait(monkeypatch):
+    _assert_detail_crawler_uses_fast_commit_wait(monkeypatch, rent_crawl_details)

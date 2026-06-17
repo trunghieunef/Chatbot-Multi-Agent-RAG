@@ -311,7 +311,7 @@ def crawl_detail(
         page = ctx.new_page()
         stealth_obj.apply_stealth_sync(page)
         try:
-            page.goto(url, timeout=30000, wait_until="domcontentloaded")
+            page.goto(url, timeout=30000, wait_until="commit")
             time.sleep(2 + random.random())
 
             # Check if we actually loaded a detail page (not a block/error page)

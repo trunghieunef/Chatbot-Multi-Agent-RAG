@@ -1,0 +1,12 @@
+# ============================================================
+# Grafana — Dashboard Provider
+# ============================================================
+apiVersion: 1
+
+providers:
+  - name: RealEstate
+    folder: RealEstate
+    type: file
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/dashboards
