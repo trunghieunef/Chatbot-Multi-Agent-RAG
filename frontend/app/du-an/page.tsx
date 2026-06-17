@@ -32,6 +32,8 @@ const FALLBACK_PROJECTS: ProjectCard[] = [
       "Cụm căn hộ ven sông với tiện ích nội khu đầy đủ, kết nối nhanh tới trung tâm và khu công nghệ cao.",
     amenities: ["Hồ bơi", "Công viên", "Trung tâm thương mại"],
     url: null,
+    primary_image_url: null,
+    image_urls: [],
     created_at: null,
     updated_at: null,
   },
@@ -52,6 +54,8 @@ const FALLBACK_PROJECTS: ProjectCard[] = [
       "Dự án căn hộ cao cấp gần hồ Tây, tập trung vào không gian sống riêng tư và dịch vụ quản lý chuyên nghiệp.",
     amenities: ["Sky lounge", "Gym", "Khu trẻ em"],
     url: null,
+    primary_image_url: null,
+    image_urls: [],
     created_at: null,
     updated_at: null,
   },
@@ -72,6 +76,8 @@ const FALLBACK_PROJECTS: ProjectCard[] = [
       "Khu biệt thự thấp tầng gần biển, phù hợp nhu cầu nghỉ dưỡng dài hạn và khai thác cho thuê.",
     amenities: ["Bảo vệ 24/7", "Clubhouse", "Đường dạo bộ"],
     url: null,
+    primary_image_url: null,
+    image_urls: [],
     created_at: null,
     updated_at: null,
   },
@@ -99,6 +105,17 @@ function ProjectCardItem({ project }: { project: ProjectCard }) {
 
   return (
     <article className="group rounded-lg border border-border bg-card p-4 shadow-sm transition-all hover:border-primary/40 hover:shadow-md">
+      <div
+        className="mb-3 flex h-36 items-center justify-center overflow-hidden rounded-md bg-muted bg-cover bg-center text-primary"
+        style={
+          project.primary_image_url
+            ? { backgroundImage: `url(${project.primary_image_url})` }
+            : undefined
+        }
+      >
+        {!project.primary_image_url && <Building2 size={32} className="opacity-60" />}
+      </div>
+
       <div className="mb-3 flex items-start justify-between gap-3">
         <div className="min-w-0">
           <span className="mb-2 inline-flex items-center gap-1 rounded-md bg-primary/10 px-2 py-1 text-[11px] font-semibold text-primary">

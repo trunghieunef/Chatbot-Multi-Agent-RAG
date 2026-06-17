@@ -29,3 +29,18 @@ test("detail pages keep Vietnamese accented labels", () => {
   assert.match(project, /Tổng quan/);
   assert.match(project, /Thông tin chi tiết/);
 });
+
+test("content pages render article and project images when present", () => {
+  const types = read("lib/types.ts");
+  const news = read("app/tin-tuc/page.tsx");
+  const article = read("app/tin-tuc/[id]/page.tsx");
+  const projects = read("app/du-an/page.tsx");
+  const project = read("app/du-an/[id]/page.tsx");
+
+  assert.match(types, /primary_image_url/);
+  assert.match(types, /image_urls/);
+  assert.match(news, /primary_image_url/);
+  assert.match(article, /image_urls/);
+  assert.match(projects, /primary_image_url/);
+  assert.match(project, /image_urls/);
+});

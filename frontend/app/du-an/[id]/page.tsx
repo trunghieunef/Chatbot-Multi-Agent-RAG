@@ -42,6 +42,7 @@ export default function ProjectDetailPage() {
   const [project, setProject] = useState<ProjectDetail | null>(null);
   const [related, setRelated] = useState<ProjectCard[]>([]);
   const [loading, setLoading] = useState(!invalidId);
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
 
   useEffect(() => {
     if (invalidId) return;
@@ -51,6 +52,7 @@ export default function ProjectDetailPage() {
     getProjectDetail(id)
       .then(async (data) => {
         if (cancelled) return;
+        setSelectedImageIndex(0);
         setProject(data);
 
         const relatedProjects = await getProjects({
@@ -97,6 +99,8 @@ export default function ProjectDetailPage() {
       .map((line) => line.trim())
       .filter(Boolean);
   }, [project]);
+  const imageUrls = project?.image_urls || [];
+  const selectedImageUrl = imageUrls[selectedImageIndex] || project?.primary_image_url;
 
   if (loading) {
     return (
@@ -185,19 +189,54 @@ export default function ProjectDetailPage() {
 
       <main className="mx-auto max-w-7xl px-4 py-7">
         <div className="mb-6 overflow-hidden rounded-lg border border-border bg-card shadow-sm">
-          <div className="flex min-h-[260px] items-center justify-center bg-[radial-gradient(circle_at_20%_20%,rgba(220,38,38,0.14),transparent_34%),linear-gradient(135deg,rgba(15,23,42,0.05),rgba(220,38,38,0.08))] p-8">
-            <div className="max-w-2xl text-center">
-              <Building2 size={58} className="mx-auto mb-4 text-primary" />
-              <p className="text-sm font-semibold uppercase text-primary">Hồ sơ dự án</p>
-              <h2 className="mt-2 text-2xl font-extrabold text-foreground">
+          <div
+            className="flex min-h-[300px] items-center justify-center bg-[radial-gradient(circle_at_20%_20%,rgba(220,38,38,0.14),transparent_34%),linear-gradient(135deg,rgba(15,23,42,0.05),rgba(220,38,38,0.08))] bg-cover bg-center p-8"
+            style={
+              selectedImageUrl
+                ? { backgroundImage: `linear-gradient(rgba(0,0,0,0.28), rgba(0,0,0,0.28)), url(${selectedImageUrl})` }
+                : undefined
+            }
+          >
+            <div
+              className={`max-w-2xl text-center ${
+                selectedImageUrl
+                  ? "rounded-lg bg-black/50 p-5 text-white backdrop-blur"
+                  : ""
+              }`}
+            >
+              {!selectedImageUrl && (
+                <Building2 size={58} className="mx-auto mb-4 text-primary" />
+              )}
+              <p className={`text-sm font-semibold uppercase ${selectedImageUrl ? "text-white/80" : "text-primary"}`}>
+                Hồ sơ dự án
+              </p>
+              <h2 className={`mt-2 text-2xl font-extrabold ${selectedImageUrl ? "text-white" : "text-foreground"}`}>
                 {project.name}
               </h2>
-              <p className="mt-3 text-sm leading-6 text-muted-foreground">
+              <p className={`mt-3 text-sm leading-6 ${selectedImageUrl ? "text-white/80" : "text-muted-foreground"}`}>
                 Thông tin tổng hợp từ dữ liệu dự án, được trình bày theo cấu trúc dễ quét
                 cho nhu cầu so sánh và ra quyết định.
               </p>
             </div>
           </div>
+          {imageUrls.length > 1 && (
+            <div className="flex gap-2 overflow-x-auto border-t border-border bg-card p-3">
+              {imageUrls.slice(0, 10).map((imageUrl, index) => (
+                <button
+                  key={`${imageUrl}-${index}`}
+                  type="button"
+                  onClick={() => setSelectedImageIndex(index)}
+                  className={`h-16 w-24 shrink-0 rounded-md border-2 bg-muted bg-cover bg-center transition-colors ${
+                    selectedImageIndex === index
+                      ? "border-primary"
+                      : "border-transparent hover:border-primary/50"
+                  }`}
+                  style={{ backgroundImage: `url(${imageUrl})` }}
+                  aria-label={`Xem ảnh dự án ${index + 1}`}
+                />
+              ))}
+            </div>
+          )}
         </div>
 
         {facts.length > 0 && (

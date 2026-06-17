@@ -100,6 +100,7 @@ export default function ArticleDetailPage() {
       .map((line) => line.trim())
       .filter(Boolean);
   }, [article]);
+  const imageUrls = article?.image_urls || [];
 
   if (loading) {
     return (
@@ -178,6 +179,32 @@ export default function ArticleDetailPage() {
 
       <main className="mx-auto grid max-w-7xl gap-6 px-4 py-7 lg:grid-cols-[1fr_320px]">
         <article className="min-w-0">
+          <div
+            className="mb-6 flex h-72 items-center justify-center overflow-hidden rounded-lg border border-border bg-muted bg-cover bg-center"
+            style={
+              article.primary_image_url
+                ? { backgroundImage: `url(${article.primary_image_url})` }
+                : undefined
+            }
+          >
+            {!article.primary_image_url && (
+              <Newspaper size={48} className="text-primary/50" />
+            )}
+          </div>
+
+          {imageUrls.length > 1 && (
+            <div className="mb-6 flex gap-2 overflow-x-auto">
+              {imageUrls.slice(0, 8).map((imageUrl, index) => (
+                <div
+                  key={`${imageUrl}-${index}`}
+                  className="h-16 w-24 shrink-0 rounded-md border border-border bg-muted bg-cover bg-center"
+                  style={{ backgroundImage: `url(${imageUrl})` }}
+                  aria-label={`Ảnh bài viết ${index + 1}`}
+                />
+              ))}
+            </div>
+          )}
+
           {article.summary && (
             <p className="mb-5 border-l-4 border-primary pl-4 text-lg font-semibold leading-8 text-foreground">
               {article.summary}

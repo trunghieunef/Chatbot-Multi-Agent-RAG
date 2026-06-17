@@ -24,6 +24,8 @@ const FALLBACK_ARTICLES: ArticleCard[] = [
     source: "batdongsan.com",
     post_date: "2026-06-15",
     url: null,
+    primary_image_url: null,
+    image_urls: [],
     created_at: null,
     updated_at: null,
   },
@@ -37,6 +39,8 @@ const FALLBACK_ARTICLES: ArticleCard[] = [
     source: "batdongsan.com",
     post_date: "2026-06-12",
     url: null,
+    primary_image_url: null,
+    image_urls: [],
     created_at: null,
     updated_at: null,
   },
@@ -50,6 +54,8 @@ const FALLBACK_ARTICLES: ArticleCard[] = [
     source: "batdongsan.com",
     post_date: "2026-06-09",
     url: null,
+    primary_image_url: null,
+    image_urls: [],
     created_at: null,
     updated_at: null,
   },
@@ -63,6 +69,8 @@ const FALLBACK_ARTICLES: ArticleCard[] = [
     source: "batdongsan.com",
     post_date: "2026-06-05",
     url: null,
+    primary_image_url: null,
+    image_urls: [],
     created_at: null,
     updated_at: null,
   },
@@ -109,6 +117,19 @@ function ArticleCardItem({ article }: { article: ArticleCard }) {
 
   return (
     <article className="group rounded-lg border border-border bg-card p-4 shadow-sm transition-all hover:border-primary/40 hover:shadow-md">
+      <div
+        className="mb-3 flex h-36 items-center justify-center overflow-hidden rounded-md bg-muted bg-cover bg-center"
+        style={
+          article.primary_image_url
+            ? { backgroundImage: `url(${article.primary_image_url})` }
+            : undefined
+        }
+      >
+        {!article.primary_image_url && (
+          <Newspaper size={32} className="text-primary/50" />
+        )}
+      </div>
+
       <div className="mb-3 flex items-center justify-between gap-3">
         <span className="inline-flex items-center gap-1 rounded-md bg-primary/10 px-2 py-1 text-[11px] font-semibold text-primary">
           <Newspaper size={12} />
@@ -330,19 +351,37 @@ export default function NewsPage() {
                     Đọc bài viết <ArrowRight size={14} />
                   </Link>
                 </div>
-                <div className="rounded-lg bg-muted p-4">
-                  <p className="text-xs font-semibold uppercase text-muted-foreground">
-                    Nguồn
-                  </p>
-                  <p className="mt-1 text-sm font-bold text-foreground">
-                    {featured.source || "batdongsan.com"}
-                  </p>
-                  <p className="mt-4 text-xs font-semibold uppercase text-muted-foreground">
-                    Ngày đăng
-                  </p>
-                  <p className="mt-1 text-sm font-bold text-foreground">
-                    {formatDate(featured.post_date)}
-                  </p>
+                <div
+                  className="flex min-h-48 items-end overflow-hidden rounded-lg bg-muted bg-cover bg-center p-4"
+                  style={
+                    featured.primary_image_url
+                      ? { backgroundImage: `url(${featured.primary_image_url})` }
+                      : undefined
+                  }
+                >
+                  {featured.primary_image_url ? (
+                    <div className="w-full rounded-md bg-black/55 p-3 text-white backdrop-blur">
+                      <p className="text-xs font-semibold uppercase">Ngày đăng</p>
+                      <p className="mt-1 text-sm font-bold">
+                        {formatDate(featured.post_date)}
+                      </p>
+                    </div>
+                  ) : (
+                    <div>
+                      <p className="text-xs font-semibold uppercase text-muted-foreground">
+                        Nguồn
+                      </p>
+                      <p className="mt-1 text-sm font-bold text-foreground">
+                        {featured.source || "batdongsan.com"}
+                      </p>
+                      <p className="mt-4 text-xs font-semibold uppercase text-muted-foreground">
+                        Ngày đăng
+                      </p>
+                      <p className="mt-1 text-sm font-bold text-foreground">
+                        {formatDate(featured.post_date)}
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
             </article>

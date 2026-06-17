@@ -268,6 +268,8 @@ export interface ProjectCard {
   description: string | null;
   amenities: string[];
   url: string | null;
+  primary_image_url: string | null;
+  image_urls: string[];
   created_at: string | null;
   updated_at: string | null;
 }
@@ -294,6 +296,8 @@ export interface ArticleCard {
   source: string | null;
   post_date: string | null;
   url: string | null;
+  primary_image_url: string | null;
+  image_urls: string[];
   created_at: string | null;
   updated_at: string | null;
 }
