@@ -52,18 +52,18 @@
 % ========== CHỈ MỤC ==========
 \makeindex
 
-% ========== ĐỊNH DẠNG CHƯƠNG (khớp PDF gốc) ==========
-% CHƯƠNG X. TÊN CHƯƠNG — bold, 13pt, căn trái
-\titleformat{\chapter}[hang]
-    {\bfseries\fontsize{13}{16}\selectfont}
+% ========== ĐỊNH DẠNG CHƯƠNG ==========
+% CHƯƠNG X. TÊN CHƯƠNG — bold, 16pt, căn giữa
+\titleformat{\chapter}[block]
+    {\centering\bfseries\fontsize{19}{19}\selectfont}
     {\MakeUppercase{\chaptertitlename}\ \thechapter.}
     {0.5em}
     {}
 \titlespacing*{\chapter}{0pt}{0pt}{12pt}
 
-% CHƯƠNG KHÔNG SỐ (Kết luận, Phụ lục, ...) — bold, 13pt, căn giữa
+% CHƯƠNG KHÔNG SỐ (Kết luận, Phụ lục, ...) — bold, 16pt, căn giữa
 \titleformat{name=\chapter,numberless}[block]
-    {\centering\bfseries\fontsize{13}{16}\selectfont}
+    {\centering\bfseries\fontsize{16}{19}\selectfont}
     {}
     {0pt}
     {}

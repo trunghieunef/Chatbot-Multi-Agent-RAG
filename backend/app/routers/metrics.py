@@ -47,6 +47,14 @@ CHUNKS_TOTAL = Gauge(
 ARTICLES_TOTAL = Gauge(
     "realestate_articles_total", "Total articles in DB", labelnames=("category",)
 )
+LLM_COST_USD = Gauge(
+    "realestate_llm_cost_usd",
+    "Estimated LLM cost for current month (USD)",
+)
+LLM_BUDGET_EXCEEDED = Gauge(
+    "realestate_llm_cost_budget_exceeded",
+    "Whether LLM monthly budget is exceeded (1=yes, 0=no)",
+)
 
 
 async def _refresh_gauges() -> None:
@@ -84,6 +92,21 @@ async def _refresh_gauges() -> None:
         )
         for dag_id, status, count in runs.all():
             PIPELINE_RUNS.labels(dag_id=dag_id, status=status).set(count)
+
+    # --- LLM cost from agent-service ---
+    try:
+        from app.services.agent_service.client import get_agent_service_client
+        health = await get_agent_service_client().health()
+        llm_cost = health.get("llm_cost") if isinstance(health, dict) else {}
+    except Exception:
+        llm_cost = {}
+
+    if llm_cost and llm_cost.get("tracking_available"):
+        LLM_COST_USD.set(float(llm_cost.get("estimated_cost_usd", 0.0)))
+        LLM_BUDGET_EXCEEDED.set(1 if llm_cost.get("budget_exceeded") else 0)
+    else:
+        LLM_COST_USD.set(0.0)
+        LLM_BUDGET_EXCEEDED.set(0)
 
 
 @router.get("/metrics", include_in_schema=False)

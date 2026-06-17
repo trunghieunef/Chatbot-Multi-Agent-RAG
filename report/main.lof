@@ -1,6 +1,7 @@
 \babel@toc {vietnamese}{}\relax 
 \addvspace {10\p@ }
 \addvspace {10\p@ }
+\contentsline {figure}{\numberline {2.1}{\ignorespaces Kiến trúc tổng thể hệ thống Nền tảng Tư vấn Bất động sản Tích hợp Chatbot}}{39}{figure.caption.6}%
 \addvspace {10\p@ }
-\contentsline {figure}{\numberline {3.1}{\ignorespaces Kiến trúc tổng thể hệ thống}}{23}{figure.caption.4}%
-\contentsline {figure}{\numberline {3.2}{\ignorespaces Sơ đồ luồng dữ liệu từ crawl đến hiển thị}}{35}{figure.caption.8}%
+\contentsline {figure}{\numberline {3.1}{\ignorespaces Kiến trúc triển khai Docker Compose}}{48}{figure.caption.7}%
+\contentsline {figure}{\numberline {3.2}{\ignorespaces Sơ đồ kiến trúc tổng thể hệ thống (5 tầng: Người dùng -- Frontend -- Backend \& Agent Service -- Data -- Pipeline)}}{65}{figure.caption.11}%

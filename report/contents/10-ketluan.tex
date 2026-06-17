@@ -7,85 +7,52 @@
 \section*{Kết quả đạt được}
 \addcontentsline{toc}{section}{Kết quả đạt được}
 
-Sau quá trình nghiên cứu và triển khai, đồ án đã đạt được các kết quả chính sau:
+Sau quá trình nghiên cứu và triển khai, đồ án đã đạt được các kết quả chính sau đây.
 
-\begin{enumerate}
-    \item \textbf{Xây dựng thành công nền tảng web bất động sản hoàn chỉnh} với frontend Next.js và backend FastAPI, bao gồm các chức năng: duyệt danh sách nhà đất bán/cho thuê, lọc đa tiêu chí, xem chi tiết bất động sản kèm bản đồ, dashboard thống kê thị trường và hệ thống xác thực người dùng qua JWT.
+\textbf{Về xây dựng nền tảng:} Đồ án đã xây dựng thành công một nền tảng web bất động sản hoàn chỉnh với giao diện người dùng hiện đại sử dụng Next.js 16 và React 19, máy chủ dịch vụ FastAPI. Nền tảng cung cấp đầy đủ các chức năng cho người dùng cuối: duyệt danh sách nhà đất bán và cho thuê, lọc đa tiêu chí (loại hình, khu vực, giá, diện tích, số phòng, hướng nhà), sắp xếp theo giá và diện tích, xem chi tiết bất động sản với ba mươi trường thông tin, bảng thống kê thị trường trực quan, cùng hệ thống xác thực người dùng qua mã thông báo và bảng điều khiển quản trị.
 
-    \item \textbf{Phát triển chatbot đa tác tử (Multi-Agent) hoạt động ổn định} với 5 agent chuyên biệt (Router, Property Search, Market Analysis, Legal Advisor, Investment Advisor). Chatbot có khả năng hiểu ý định người dùng bằng tiếng Việt, điều phối đến agent phù hợp, truy xuất dữ liệu qua hybrid search (SQL + pgvector kNN + Cohere rerank) và sinh phản hồi có trích dẫn nguồn rõ ràng.
+\textbf{Về chatbot đa tác tử:} Đồ án đã phát triển thành công chatbot đa tác tử với bốn tác tử chuyên biệt đảm nhận các vai trò tìm kiếm bất động sản, phân tích thị trường, tư vấn pháp lý và tư vấn đầu tư. Chatbot có khả năng hiểu ý định người dùng bằng tiếng Việt qua hai cơ chế định tuyến (dựa trên từ khóa và dựa trên mô hình ngôn ngữ lớn), điều phối đến tác tử phù hợp, truy xuất dữ liệu qua tìm kiếm lai (kết hợp truy vấn có cấu trúc, tìm kiếm véc-tơ qua chỉ mục HNSW, xếp hạng lại và bộ nhớ đệm Redis) và sinh phản hồi có trích dẫn nguồn rõ ràng.
 
-    \item \textbf{Xây dựng pipeline thu thập và xử lý dữ liệu tự động} từ batdongsan.com.vn, bao gồm: crawl dữ liệu bằng Playwright, làm sạch và chuẩn hóa (parse giá, diện tích, phân loại), làm giàu (geocoding tọa độ, trích xuất intent tags), chunking ngữ nghĩa, tạo embedding BGE-M3 (1024 chiều) và nạp vào PostgreSQL + pgvector. Pipeline được lập lịch tự động qua Apache Airflow.
+\textbf{Về kiến trúc hệ thống:} Đồ án đã triển khai kiến trúc chatbot hai lớp với đường ống nội bộ xử lý nhanh cho người dùng cuối và Dịch vụ Tác tử chạy đồ thị trạng thái LangGraph riêng biệt cho suy luận đa bước nâng cao. Hệ thống tích hợp cơ chế ghi nhớ và sở thích người dùng để cá nhân hóa phản hồi. Toàn bộ hệ thống được thiết kế theo kiến trúc dịch vụ vi mô với năm dịch vụ độc lập trong Docker Compose, có khả năng mở rộng và triển khai dễ dàng trên nhiều môi trường.
 
-    \item \textbf{Triển khai hệ thống tìm kiếm lai hiệu quả} kết hợp giữa SQL filtering cho dữ liệu có cấu trúc và pgvector kNN cho tìm kiếm ngữ nghĩa, với reranking qua Cohere để cải thiện độ chính xác.
+\textbf{Về đường ống dữ liệu:} Đồ án đã xây dựng đường ống thu thập và xử lý dữ liệu tự động hoàn chỉnh từ batdongsan.com.vn. Quy trình bao gồm: thu thập dữ liệu bằng công cụ tự động hóa trình duyệt với cơ chế ẩn danh cho cả tin bán, tin cho thuê, dự án và tin tức; làm sạch và chuẩn hóa dữ liệu; làm giàu (mã hóa địa lý qua dịch vụ bản đồ, gán nhãn nhu cầu); chia đoạn ngữ nghĩa với bốn loại đoạn cho mỗi bất động sản; tạo véc-tơ đặc trưng 1024 chiều bằng mô hình BGE-M3; và nạp vào PostgreSQL với tìm kiếm véc-tơ qua các mô-đun chuyên biệt. Đường ống được lập lịch tự động qua Apache Airflow với bốn luồng công việc.
 
-    \item \textbf{Thiết kế kiến trúc có khả năng mở rộng} với Docker Compose, tách biệt các service (frontend, backend, database, cache), hỗ trợ triển khai dễ dàng trên nhiều môi trường.
-\end{enumerate}
+\textbf{Về tìm kiếm:} Đồ án đã triển khai hệ thống tìm kiếm lai hiệu quả, kết hợp giữa lọc có cấu trúc cho dữ liệu quan hệ và tìm kiếm véc-tơ với chỉ mục HNSW cho tìm kiếm ngữ nghĩa, có xếp hạng lại qua mô hình chuyên dụng đa ngôn ngữ và bộ nhớ đệm qua Redis để cải thiện độ chính xác và tốc độ.
+
+\textbf{Về giám sát và chất lượng:} Đồ án đã xây dựng hệ thống quan sát toàn diện với theo dõi vết tác tử (vết xử lý, các bước, lời gọi mô hình ngôn ngữ, sự kiện truy xuất), phản hồi đánh giá chất lượng, đề xuất ghi nhớ, giám sát trạng thái nguồn dữ liệu và điểm cuối chỉ số hệ thống. Bộ kiểm thử với hơn 60 tệp bao phủ toàn bộ các mô-đun: đường ống chatbot, dịch vụ tác tử, tìm kiếm lai, tạo sinh tăng cường truy xuất, đường ống dữ liệu, kho kiến thức pháp lý, thu thập dữ liệu, ghi nhớ/sở thích và quản trị.
 
 \section*{Hạn chế}
 \addcontentsline{toc}{section}{Hạn chế}
 
-Bên cạnh những kết quả đạt được, đồ án vẫn còn một số hạn chế:
+Bên cạnh những kết quả đạt được, đồ án vẫn còn một số hạn chế cần được khắc phục trong các phiên bản tiếp theo.
 
-\begin{itemize}
-    \item \textbf{Dữ liệu giới hạn:} Hiện tại mới chỉ crawl dữ liệu từ batdongsan.com.vn. Việc tích hợp thêm các nguồn khác (alonhadat.com.vn, chotot.com) sẽ làm phong phú thêm kho dữ liệu.
+Thứ nhất, về nguồn dữ liệu, hệ thống hiện chỉ thu thập dữ liệu từ một nguồn duy nhất là batdongsan.com.vn. Điều này hạn chế độ phủ của dữ liệu, đặc biệt ở các khu vực mà nền tảng này chưa chiếm ưu thế. Việc tích hợp thêm các nguồn dữ liệu khác như alonhadat.com.vn, chotot.com sẽ giúp tăng đáng kể số lượng và chất lượng tin đăng.
 
-    \item \textbf{Agent pháp lý còn đơn giản:} Legal Advisor Agent hiện tại chỉ cung cấp checklist cơ bản, chưa tích hợp đầy đủ knowledge base pháp lý chuyên sâu.
+Thứ hai, về chất lượng véc-tơ đặc trưng tiếng Việt, mô hình BGE-M3 tuy hỗ trợ tiếng Việt nhưng chưa được tối ưu riêng cho ngôn ngữ này. Các mô hình véc-tơ chuyên biệt cho tiếng Việt như PhoBERT, ViT5 cần được đánh giá và thử nghiệm để cải thiện độ chính xác của tìm kiếm ngữ nghĩa.
 
-    \item \textbf{Chưa có real-time:} Hệ thống hiện sử dụng REST API thay vì WebSocket, do đó chatbot chưa hỗ trợ streaming response.
+Thứ ba, về khả năng hội thoại của chatbot, hệ thống hiện tại vẫn gặp khó khăn với các câu hỏi phức tạp đòi hỏi suy luận qua nhiều bước hoặc tổng hợp thông tin từ nhiều nguồn khác nhau. Cơ chế ghi nhớ người dùng còn đơn giản, chưa hỗ trợ ghi nhớ ngữ cảnh dài hạn qua nhiều phiên.
 
-    \item \textbf{Chất lượng embedding:} Mặc dù BGE-M3 hoạt động tốt với tiếng Việt, vẫn còn không gian để cải thiện với các mô hình embedding chuyên biệt cho tiếng Việt hoặc fine-tuned models.
+Thứ tư, về giao diện người dùng, bảng điều khiển quản trị và các trang thống kê thị trường còn ở mức cơ bản, chưa có nhiều biểu đồ tương tác và khả năng lọc sâu. Trải nghiệm trên thiết bị di động cần được cải thiện thêm.
 
-    \item \textbf{Thiếu bộ test toàn diện:} Hệ thống chưa có test coverage đầy đủ cho tất cả các module, đặc biệt là frontend.
+Thứ năm, về vận hành, hệ thống chưa được triển khai thực tế trên môi trường sản xuất với tên miền công cộng, chứng chỉ bảo mật và cân bằng tải. Khả năng chịu lỗi và phục hồi của hệ thống chưa được kiểm thử đầy đủ dưới tải cao.
 
-    \item \textbf{Crawler chưa hoàn thiện:} Crawler cho mục projects và news đang ở dạng scaffold, selector chưa được triển khai đầy đủ.
-\end{itemize}
+Thứ sáu, về kiểm thử, mặc dù đã có hơn 60 tệp kiểm thử nhưng độ bao phủ mã nguồn còn chưa đồng đều giữa các mô-đun. Các bài kiểm thử đầu cuối cho luồng chatbot hoàn chỉnh còn hạn chế do phụ thuộc vào API bên ngoài.
 
 \section*{Hướng phát triển}
 \addcontentsline{toc}{section}{Hướng phát triển}
 
-Từ những kết quả đạt được và hạn chế hiện tại, đồ án có thể được phát triển mở rộng theo các hướng sau:
+Từ những hạn chế đã nêu, đồ án đề xuất các hướng phát triển trong tương lai.
 
-\begin{enumerate}
-    \item \textbf{Tích hợp thêm nguồn dữ liệu:} Mở rộng crawler sang các nền tảng bất động sản khác tại Việt Nam, tăng độ phủ và chất lượng dữ liệu.
+Về dữ liệu, cần mở rộng thu thập từ nhiều nguồn bất động sản khác nhau, bổ sung dữ liệu về quy hoạch đô thị, hạ tầng giao thông và tiện ích xung quanh (trường học, bệnh viện, trung tâm thương mại) để làm giàu thông tin cho mỗi bất động sản.
 
-    \item \textbf{Nâng cấp chatbot:}
-    \begin{itemize}
-        \item Hỗ trợ streaming response qua WebSocket hoặc Server-Sent Events (SSE).
-        \item Tích hợp knowledge base pháp lý đầy đủ cho Legal Advisor Agent.
-        \item Bổ sung agent mới (ví dụ: Interior Design Advisor, Mortgage Calculator).
-        \item Hỗ trợ multi-turn conversation có ngữ cảnh.
-    \end{itemize}
+Về chatbot, cần nâng cấp lên các mô hình ngôn ngữ mới hơn, hỗ trợ suy luận đa bước tốt hơn và xử lý ngữ cảnh dài. Tích hợp thêm tác tử chuyên biệt mới như tác tử so sánh bất động sản, tác tử dự báo giá, tác tử tư vấn vay ngân hàng. Cải thiện cơ chế ghi nhớ để hỗ trợ ghi nhớ dài hạn và cá nhân hóa sâu hơn. Bổ sung khả năng đa phương thức: cho phép người dùng tải lên hình ảnh bất động sản để chatbot phân tích và so sánh.
 
-    \item \textbf{Cải thiện chất lượng tìm kiếm:}
-    \begin{itemize}
-        \item Fine-tune embedding model cho domain bất động sản tiếng Việt.
-        \item Thử nghiệm các mô hình embedding mới (E5, GTE, text-embedding-004).
-        \item Tích hợp tìm kiếm đa phương thức (multimodal search) với ảnh bất động sản.
-    \end{itemize}
+Về tìm kiếm, cần thử nghiệm các mô hình véc-tơ tiếng Việt chuyên biệt như PhoBERT để cải thiện chất lượng tìm kiếm ngữ nghĩa. Nghiên cứu áp dụng tìm kiếm lai kết hợp tìm kiếm toàn văn bản, tìm kiếm véc-tơ và tìm kiếm dựa trên đồ thị tri thức.
 
-    \item \textbf{Mở rộng chức năng người dùng:}
-    \begin{itemize}
-        \item Lưu tin yêu thích và lịch sử xem.
-        \item So sánh bất động sản.
-        \item Thông báo khi có tin mới phù hợp với tiêu chí đã lưu.
-        \item Đánh giá và nhận xét bất động sản.
-    \end{itemize}
+Về nền tảng, cần bổ sung các chức năng mới như so sánh bất động sản cạnh nhau, bản đồ nhiệt giá, biểu đồ xu hướng giá theo thời gian, cảnh báo giá khi có bất động sản phù hợp với tiêu chí người dùng, và xây dựng cộng đồng người dùng với tính năng bình luận và đánh giá.
 
-    \item \textbf{Triển khai production:}
-    \begin{itemize}
-        \item CI/CD pipeline với GitHub Actions.
-        \item Monitoring và alerting với Grafana + Prometheus.
-        \item Load balancing và auto-scaling.
-        \item Backup và disaster recovery cho database.
-    \end{itemize}
+Về triển khai, cần chuyển đổi từ Docker Compose sang Kubernetes để vận hành ở quy mô sản xuất với khả năng tự động mở rộng, cân bằng tải và phục hồi. Thiết lập đường ống tích hợp liên tục và triển khai liên tục để tự động hóa kiểm thử và phát hành. Bổ sung giám sát nâng cao với Grafana để trực quan hóa chỉ số hệ thống.
 
-    \item \textbf{Tối ưu hiệu năng:}
-    \begin{itemize}
-        \item Query optimization và index tuning cho PostgreSQL.
-        \item Caching strategy toàn diện hơn với Redis.
-        \item Batch processing cho embedding pipeline.
-        \item CDN cho static assets.
-    \end{itemize}
-\end{enumerate}
+Về kiểm thử, cần tăng độ bao phủ kiểm thử, đặc biệt là kiểm thử đầu cuối cho các luồng nghiệp vụ chính. Xây dựng bộ kiểm thử hiệu năng để đảm bảo hệ thống đáp ứng được tải người dùng trong thực tế.
 
 \newpage

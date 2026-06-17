@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import csv
+import json
 import os
 import sys
 from pathlib import Path
@@ -17,11 +18,16 @@ if str(BACKEND) not in sys.path:
 
 from app.config import get_settings
 from app.database import async_session, engine
-from app.models import Chunk, Listing
+from app.models import Chunk, Listing, ListingImage
 from data_pipeline.chunk import build_listing_chunks
 from data_pipeline.clean import row_to_listing
 from data_pipeline.embed import BGEEmbedder
 from data_pipeline.enrich import GeminiIntentExtractor, build_geocoder
+
+
+LISTING_IMAGE_META_KEY = "_image_urls"
+LISTING_COLUMNS = Listing.__table__.columns
+LISTING_COLUMN_KEYS = set(LISTING_COLUMNS.keys())
 
 
 def read_csv_rows(csv_path: str) -> list[dict[str, str]]:
@@ -46,6 +52,79 @@ def prepare_listing_chunks(
         }
         for chunk, vector in zip(chunks, vectors, strict=True)
     ]
+
+
+def listing_image_urls_from_row(row: dict[str, Any]) -> list[str]:
+    raw = row.get("image_urls") or ""
+    if not raw:
+        return []
+    if isinstance(raw, list):
+        values = raw
+    else:
+        text = str(raw).strip()
+        if not text:
+            return []
+        try:
+            parsed = json.loads(text)
+            values = parsed if isinstance(parsed, list) else []
+        except json.JSONDecodeError:
+            values = [part.strip() for part in text.replace("\n", ",").split(",")]
+
+    urls: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        url = str(value).strip()
+        if not url.startswith(("http://", "https://")) or url in seen:
+            continue
+        seen.add(url)
+        urls.append(url)
+    return urls
+
+
+def prepare_listing_image_rows(
+    listing: Listing,
+    image_urls: list[str],
+    *,
+    source: str = "batdongsan",
+) -> list[dict[str, Any]]:
+    return [
+        {
+            "listing_id": listing.id,
+            "product_id": listing.product_id,
+            "image_url": image_url,
+            "sort_order": index,
+            "is_primary": index == 0,
+            "source": source,
+        }
+        for index, image_url in enumerate(image_urls)
+    ]
+
+
+async def replace_listing_images(
+    session,
+    listing: Listing,
+    image_urls: list[str],
+) -> None:
+    await session.execute(delete(ListingImage).where(ListingImage.listing_id == listing.id))
+    if image_urls:
+        session.add_all(
+            [
+                ListingImage(**image_row)
+                for image_row in prepare_listing_image_rows(listing, image_urls)
+            ]
+        )
+
+
+def public_listing_data(listing_data: dict[str, Any]) -> dict[str, Any]:
+    data: dict[str, Any] = {}
+    for key, value in listing_data.items():
+        if key not in LISTING_COLUMN_KEYS:
+            continue
+        max_length = getattr(LISTING_COLUMNS[key].type, "length", None)
+        if isinstance(value, str) and max_length:
+            value = value[:max_length]
+        data[key] = value
+    return data
 
 
 def empty_ingest_result() -> dict[str, int]:
@@ -128,7 +207,9 @@ async def publish_listing_batch(
     persisted: list[Listing] = []
     async with async_session() as session:
         for listing_data in listings_data:
-            listing = await upsert_listing(session, listing_data)
+            image_urls = list(listing_data.get(LISTING_IMAGE_META_KEY) or [])
+            listing = await upsert_listing(session, public_listing_data(listing_data))
+            await replace_listing_images(session, listing, image_urls)
             persisted.append(listing)
         await session.commit()
     return persisted
@@ -243,6 +324,7 @@ async def ingest_listing_rows(rows: list[dict[str, str]], batch_size: int = 50) 
                 listing_data = row_to_listing(row)
                 if not listing_data.get("product_id"):
                     continue
+                listing_data[LISTING_IMAGE_META_KEY] = listing_image_urls_from_row(row)
                 listing_data = await enrich_listing_data(
                     listing_data,
                     geocoder=geocoder,

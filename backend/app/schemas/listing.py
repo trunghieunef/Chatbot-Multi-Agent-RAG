@@ -58,6 +58,8 @@ class ListingResponse(BaseModel):
     # Meta
     url: str | None = None
     badge: str | None = None
+    primary_image_url: str | None = None
+    image_urls: list[str] = Field(default_factory=list)
 
     created_at: datetime | None = None
 
@@ -84,6 +86,8 @@ class ListingCardResponse(BaseModel):
     post_date: str | None = None
     badge: str | None = None
     url: str | None = None
+    primary_image_url: str | None = None
+    image_urls: list[str] = Field(default_factory=list)
 
     class Config:
         from_attributes = True

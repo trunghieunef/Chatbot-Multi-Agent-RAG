@@ -79,7 +79,8 @@ export GEMINI_API_KEY=<your-key>
 
 - `python -m crawler.projects.crawl_urls --pages 1 100 --output data/raw/project_urls.csv --workers 4`
 - `python -m crawler.projects.crawl_details --input data/raw/project_urls.csv --output data/raw/project_details.csv --workers 4 --limit 0`
-- `python -m crawler.news.crawl_articles --pages 1 50 --output data/raw/news_articles.csv --workers 4`
+- `python -m crawler.news.crawl_urls --pages 1 50 --output data/raw/news_urls.csv --workers 4`
+- `python -m crawler.news.crawl_details --input data/raw/news_urls.csv --output data/raw/news_articles.csv --workers 4 --limit 0`
 
 ---
 
@@ -121,7 +122,8 @@ python -m crawler.projects.crawl_urls --pages 1 20 --output data/raw/projects_ur
 python -m crawler.projects.crawl_details --input data/raw/projects_urls.csv --output data/raw/projects_details.csv --workers 3
 python -m data_pipeline.ingestors.projects_ingestor --csv data/raw/projects_details.csv --batch-size 25
 
-python -m crawler.news.crawl_articles --pages 1 10 --output data/raw/news_articles.csv --workers 2
+python -m crawler.news.crawl_urls --pages 1 10 --output data/raw/news_urls.csv --workers 2
+python -m crawler.news.crawl_details --input data/raw/news_urls.csv --output data/raw/news_articles.csv --workers 2
 python -m data_pipeline.ingestors.news_ingestor --csv data/raw/news_articles.csv --batch-size 25
 ```
 

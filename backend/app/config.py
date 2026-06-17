@@ -32,6 +32,7 @@ class Settings(BaseSettings):
     EMBEDDING_DIM: int = 1024
     EMBEDDING_BATCH_SIZE: int = 16
     HF_EMBEDDING_DEVICE: str = ""
+    CHATBOT_EMBEDDING_LOCAL_FILES_ONLY: bool = True
     CHUNK_SIZE_TOKENS: int = 400
     CHUNK_OVERLAP_TOKENS: int = 80
 
@@ -45,16 +46,27 @@ class Settings(BaseSettings):
     AGENT_SERVICE_URL: str = "http://localhost:8100"
     AGENT_INTERNAL_KEY: str = "dev-agent-internal-key"
     AGENT_SERVICE_TIMEOUT_SECONDS: float = 45.0
-    CHATBOT_AGENT_SERVICE_ENABLED: bool = False
+    CHATBOT_AGENT_SERVICE_ENABLED: bool = True
     CHATBOT_LLM_JUDGE_ENABLED: bool = False
+    CHATBOT_EVAL_ENABLED: bool = False
+    CHATBOT_EVAL_SAMPLE_RATE: float = 0.0
+    CHATBOT_EVAL_SYNC_FOR_TESTS: bool = False
     CHATBOT_MEMORY_ENABLED: bool = True
     CHATBOT_ADMIN_ENABLED: bool = True
     CHATBOT_TRACE_LEVEL: str = "full"
     GEMINI_JUDGE_MODEL: str = "gemini-2.0-flash"
+    OBSERVABILITY_ANON_RETENTION_DAYS: int = 30
+    OBSERVABILITY_AUTH_RETENTION_DAYS: int = 90
+    OBSERVABILITY_CLEANUP_ENABLED: bool = True
 
     # Chat quotas
     ANON_CHAT_DAILY_LIMIT: int = 20
     AUTH_CHAT_DAILY_LIMIT: int = 200
+    CHAT_ABUSE_GUARD_ENABLED: bool = True
+    CHAT_ABUSE_GUARD_ANON_MAX_REQUESTS: int = 10
+    CHAT_ABUSE_GUARD_ANON_WINDOW_SECONDS: int = 60
+    CHAT_ABUSE_GUARD_AUTH_MAX_REQUESTS: int = 30
+    CHAT_ABUSE_GUARD_AUTH_WINDOW_SECONDS: int = 60
 
     # JWT
     JWT_SECRET_KEY: str = "your-super-secret-jwt-key-change-in-production"

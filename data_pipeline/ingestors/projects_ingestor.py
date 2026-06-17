@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import csv
+import json
 import sys
 from pathlib import Path
 from typing import Any
@@ -16,9 +17,85 @@ if str(BACKEND) not in sys.path:
 
 from app.config import get_settings
 from app.database import async_session, engine
-from app.models import Chunk, Project
+from app.models import Chunk, Project, ProjectImage
 from data_pipeline.clean import row_to_project
 from data_pipeline.embed import BGEEmbedder
+
+
+PROJECT_COLUMNS = Project.__table__.columns
+PROJECT_COLUMN_KEYS = set(PROJECT_COLUMNS.keys())
+PROJECT_IMAGE_META_KEY = "_image_urls"
+
+
+def project_image_urls_from_row(row: dict[str, Any]) -> list[str]:
+    raw = row.get("image_urls") or ""
+    if not raw:
+        return []
+    if isinstance(raw, list):
+        values = raw
+    else:
+        text = str(raw).strip()
+        if not text:
+            return []
+        try:
+            parsed = json.loads(text)
+            values = parsed if isinstance(parsed, list) else []
+        except json.JSONDecodeError:
+            values = [part.strip() for part in text.replace("\n", ",").split(",")]
+
+    urls: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        url = str(value).strip()
+        if not url.startswith(("http://", "https://")) or url in seen:
+            continue
+        seen.add(url)
+        urls.append(url)
+    return urls
+
+
+def prepare_project_image_rows(
+    project: Project,
+    image_urls: list[str],
+    *,
+    source: str = "batdongsan",
+) -> list[dict[str, Any]]:
+    return [
+        {
+            "project_id": project.id,
+            "project_slug": project.slug,
+            "image_url": image_url,
+            "sort_order": index,
+            "is_primary": index == 0,
+            "source": source,
+        }
+        for index, image_url in enumerate(image_urls)
+    ]
+
+
+async def replace_project_images(
+    session,
+    project: Project,
+    image_urls: list[str],
+) -> None:
+    await session.execute(delete(ProjectImage).where(ProjectImage.project_id == project.id))
+    if image_urls:
+        session.add_all(
+            ProjectImage(**image_row)
+            for image_row in prepare_project_image_rows(project, image_urls)
+        )
+
+
+def public_project_data(project_data: dict[str, Any]) -> dict[str, Any]:
+    data: dict[str, Any] = {}
+    for key, value in project_data.items():
+        if key not in PROJECT_COLUMN_KEYS:
+            continue
+        max_length = getattr(PROJECT_COLUMNS[key].type, "length", None)
+        if isinstance(value, str) and max_length:
+            value = value[:max_length]
+        data[key] = value
+    return data
 
 
 def build_project_chunks(project: dict) -> list[dict[str, Any]]:
@@ -84,7 +161,9 @@ async def publish_project_batch(projects_data: list[dict[str, Any]]) -> list[Pro
     persisted: list[Project] = []
     async with async_session() as session:
         for project_data in projects_data:
-            project = await upsert_project(session, project_data)
+            image_urls = list(project_data.get(PROJECT_IMAGE_META_KEY) or [])
+            project = await upsert_project(session, public_project_data(project_data))
+            await replace_project_images(session, project, image_urls)
             persisted.append(project)
         await session.commit()
     return persisted
@@ -188,6 +267,7 @@ async def ingest_project_rows(rows: list[dict[str, str]], batch_size: int = 25) 
                 project_data = row_to_project(row)
                 if not project_data.get("slug"):
                     continue
+                project_data[PROJECT_IMAGE_META_KEY] = project_image_urls_from_row(row)
                 prepared.append(project_data)
             except asyncio.CancelledError:
                 raise

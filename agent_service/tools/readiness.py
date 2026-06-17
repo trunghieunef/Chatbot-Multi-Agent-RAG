@@ -1,11 +1,24 @@
 from __future__ import annotations
 
+import asyncio
+import time
 from typing import Any
 
 from sqlalchemy import func, select
 
 from app.database import async_session
 from app.models import Article, Chunk, Listing, Project
+
+
+READINESS_SOURCE_TIMEOUT_SECONDS = 2.0
+READINESS_CACHE_TTL_SECONDS = 30.0
+SOURCE_NAMES = ("listings", "projects", "news", "legal")
+_readiness_cache: tuple[float, dict[str, dict[str, Any]]] | None = None
+
+
+def clear_readiness_cache() -> None:
+    global _readiness_cache
+    _readiness_cache = None
 
 
 def _status(parent_count: int, chunk_count: int) -> str:
@@ -61,15 +74,31 @@ async def count_source(source_name: str) -> dict[str, Any]:
 
 
 async def build_readiness_snapshot() -> dict[str, dict[str, Any]]:
-    snapshot: dict[str, dict[str, Any]] = {}
-    for source_name in ("listings", "projects", "news", "legal"):
+    global _readiness_cache
+    now = time.monotonic()
+    if _readiness_cache is not None:
+        cached_at, cached_value = _readiness_cache
+        if now - cached_at < READINESS_CACHE_TTL_SECONDS:
+            return cached_value
+
+    async def safe_count(source_name: str) -> tuple[str, dict[str, Any]]:
         try:
-            snapshot[source_name] = await count_source(source_name)
+            result = await asyncio.wait_for(
+                count_source(source_name),
+                timeout=READINESS_SOURCE_TIMEOUT_SECONDS,
+            )
         except Exception as exc:
-            snapshot[source_name] = {
+            result = {
                 "status": "unknown",
                 "parent_count": 0,
                 "chunk_count": 0,
                 "warning": str(exc),
             }
+        return source_name, result
+
+    pairs = await asyncio.gather(
+        *(safe_count(source_name) for source_name in SOURCE_NAMES)
+    )
+    snapshot = dict(pairs)
+    _readiness_cache = (now, snapshot)
     return snapshot

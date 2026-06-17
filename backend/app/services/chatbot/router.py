@@ -72,6 +72,8 @@ def _keyword_route(query: str) -> RoutingDecision:
 def route_query(query: str) -> RoutingDecision:
     """Route a user query to one or more specialized agents."""
     settings = get_settings()
+    if getattr(settings, "INTENT_EXTRACTOR", "rule").lower() != "gemini":
+        return _keyword_route(query)
     if not settings.GEMINI_API_KEY:
         return _keyword_route(query)
 

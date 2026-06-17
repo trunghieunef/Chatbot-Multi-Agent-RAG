@@ -33,7 +33,13 @@ from playwright.sync_api import sync_playwright, Browser
 from playwright_stealth import Stealth
 
 from crawler.core.csv_writer import append_csv, merge_tmp_files, read_done_ids
-from crawler.core.listing_detail_parser import normalize_listing_detail
+from crawler.core.listing_images import image_urls_json_from_page
+from crawler.core.listing_detail_parser import (
+    extract_listing_address_from_page,
+    extract_listing_property_type_from_page,
+    is_shell_listing_page,
+    normalize_listing_detail,
+)
 from crawler.core.parser import text_or_empty
 
 USER_AGENT = (
@@ -66,6 +72,7 @@ DETAIL_FIELDS = [
     "listing_type",     # loại tin
     "contact_name",
     "url",
+    "image_urls",
 ]
 
 # Map Vietnamese spec labels → field names
@@ -142,6 +149,8 @@ def parse_detail_page(page, url: str, product_id: str) -> dict | None:
             or page.query_selector("h1")
         )
         data["title"] = text_or_empty(title_el)
+        if is_shell_listing_page(data["title"], page.title()):
+            return None
 
         # --- Short info bar (price, area, bedrooms, dates) ---
         short_items = page.query_selector_all(
@@ -210,24 +219,10 @@ def parse_detail_page(page, url: str, product_id: str) -> dict | None:
                 if field_key and not data[field_key]:
                     data[field_key] = value
 
-        # --- Address (from breadcrumb) ---
-        breadcrumb = page.query_selector(".re__breadcrumb")
-        if breadcrumb:
-            # Breadcrumb text like: "Bán/Hồ Chí Minh/Quận 7/Nhà riêng tại đường Lâm Văn Bền"
-            crumbs = breadcrumb.query_selector_all("a")
-            if crumbs:
-                parts = [text_or_empty(c) for c in crumbs if text_or_empty(c)]
-                data["address"] = ", ".join(parts)
-            else:
-                data["address"] = _text(breadcrumb).replace("\n", ", ")
-
-        # If breadcrumb didn't work, try other selectors
-        if not data["address"]:
-            addr_el = (
-                page.query_selector(".re__pr-short-description--address")
-                or page.query_selector(".js__pr-address")
-            )
-            data["address"] = text_or_empty(addr_el)
+        # --- Address ---
+        data["address"] = extract_listing_address_from_page(page)
+        if not data["property_type"]:
+            data["property_type"] = extract_listing_property_type_from_page(page)
 
         # --- Description ---
         desc_el = (
@@ -248,6 +243,7 @@ def parse_detail_page(page, url: str, product_id: str) -> dict | None:
             or page.query_selector(".re__agent-info .agent-name")
         )
         data["contact_name"] = text_or_empty(contact_el)
+        data["image_urls"] = image_urls_json_from_page(page, url)
 
         # Apply shared normalization (sets listing_type + price_unit)
         data = normalize_listing_detail(data, source="sale")
@@ -315,12 +311,13 @@ def crawl_detail(
         page = ctx.new_page()
         stealth_obj.apply_stealth_sync(page)
         try:
-            page.goto(url, timeout=30000, wait_until="domcontentloaded")
+            page.goto(url, timeout=30000, wait_until="commit")
             time.sleep(2 + random.random())
 
             # Check if we actually loaded a detail page (not a block/error page)
             title_el = page.query_selector("h1.re__pr-title") or page.query_selector("h1")
-            if title_el and _text(title_el):
+            title_text = _text(title_el)
+            if title_text and not is_shell_listing_page(title_text, page.title()):
                 return parse_detail_page(page, url, product_id)
 
             if attempt < retries:

@@ -4,7 +4,12 @@ import pytest
 
 from data_pipeline.chunk import build_listing_chunks
 from data_pipeline.ingestors import listings_ingestor as li
-from data_pipeline.ingestors.listings_ingestor import prepare_listing_chunks, read_csv_rows
+from data_pipeline.ingestors.listings_ingestor import (
+    listing_image_urls_from_row,
+    prepare_listing_chunks,
+    prepare_listing_image_rows,
+    read_csv_rows,
+)
 
 
 class FailingEmbedder:
@@ -86,6 +91,50 @@ def test_empty_ingest_result_shape():
         "publish_errors": 0,
         "index_errors": 0,
     }
+
+
+def test_listing_image_urls_from_row_accepts_json_and_dedupes():
+    row = {
+        "image_urls": (
+            '["https://cdn.example.test/a.jpg", '
+            '"https://cdn.example.test/b.webp", '
+            '"https://cdn.example.test/a.jpg", '
+            '"data:image/png;base64,abc"]'
+        )
+    }
+
+    assert listing_image_urls_from_row(row) == [
+        "https://cdn.example.test/a.jpg",
+        "https://cdn.example.test/b.webp",
+    ]
+
+
+def test_prepare_listing_image_rows_marks_first_image_primary():
+    listing = type("ListingStub", (), {"id": 7, "product_id": "p7"})()
+
+    rows = prepare_listing_image_rows(
+        listing,
+        ["https://cdn.example.test/a.jpg", "https://cdn.example.test/b.jpg"],
+    )
+
+    assert rows == [
+        {
+            "listing_id": 7,
+            "product_id": "p7",
+            "image_url": "https://cdn.example.test/a.jpg",
+            "sort_order": 0,
+            "is_primary": True,
+            "source": "batdongsan",
+        },
+        {
+            "listing_id": 7,
+            "product_id": "p7",
+            "image_url": "https://cdn.example.test/b.jpg",
+            "sort_order": 1,
+            "is_primary": False,
+            "source": "batdongsan",
+        },
+    ]
 
 
 @pytest.mark.asyncio

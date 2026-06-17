@@ -44,6 +44,22 @@ export default function Footer() {
               </li>
               <li>
                 <Link
+                  href="/du-an"
+                  className="hover:text-primary transition-colors"
+                >
+                  Dự án
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/tin-tuc"
+                  className="hover:text-primary transition-colors"
+                >
+                  Tin tức
+                </Link>
+              </li>
+              <li>
+                <Link
                   href="/thi-truong"
                   className="hover:text-primary transition-colors"
                 >

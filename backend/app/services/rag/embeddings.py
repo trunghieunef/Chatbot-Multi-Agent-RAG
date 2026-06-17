@@ -3,8 +3,43 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
+import os
+from contextlib import contextmanager
 from dataclasses import dataclass
+from collections.abc import Iterator
 from typing import Sequence
+
+
+def _accepts_local_files_only(model_class: object) -> bool:
+    try:
+        parameters = inspect.signature(model_class.__init__).parameters
+    except (TypeError, ValueError):
+        return False
+    return "local_files_only" in parameters or any(
+        parameter.kind == inspect.Parameter.VAR_KEYWORD
+        for parameter in parameters.values()
+    )
+
+
+@contextmanager
+def _temporary_hf_offline(enabled: bool) -> Iterator[None]:
+    if not enabled:
+        yield
+        return
+
+    keys = ("HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE")
+    previous = {key: os.environ.get(key) for key in keys}
+    try:
+        for key in keys:
+            os.environ[key] = "1"
+        yield
+    finally:
+        for key, value in previous.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
 
 
 @dataclass
@@ -19,15 +54,20 @@ class BGEEmbedder:
     normalize_embeddings: bool = True
     max_seq_length: int = 8192
     device: str | None = None
+    local_files_only: bool = False
     model: object | None = None
     provider: str = "bge_m3"
 
     def __post_init__(self) -> None:
         if self.model is None:
-            from sentence_transformers import SentenceTransformer
+            with _temporary_hf_offline(self.local_files_only):
+                from sentence_transformers import SentenceTransformer
 
-            kwargs = {"device": self.device} if self.device else {}
-            self.model = SentenceTransformer(self.model_name, **kwargs)
+                kwargs = {"device": self.device} if self.device else {}
+                supports_local_only = _accepts_local_files_only(SentenceTransformer)
+                if self.local_files_only and supports_local_only:
+                    kwargs["local_files_only"] = True
+                self.model = SentenceTransformer(self.model_name, **kwargs)
         if hasattr(self.model, "max_seq_length"):
             self.model.max_seq_length = self.max_seq_length
 

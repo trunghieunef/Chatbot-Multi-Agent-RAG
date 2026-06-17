@@ -18,6 +18,8 @@ export interface ListingCard {
   post_date: string | null;
   badge: string | null;
   url: string | null;
+  primary_image_url: string | null;
+  image_urls: string[];
 }
 
 export interface ListingDetail extends ListingCard {
@@ -97,11 +99,13 @@ export interface ChatMessageRequest {
 }
 
 export interface ChatSource {
-  type?: "listing" | "legal_article" | "market_aggregate" | "district_comparison" | "investment_aggregate" | string;
-  id?: number;
+  type?: "listing" | "project" | "article" | "market_metric" | "legal_article" | "market_aggregate" | "district_comparison" | "investment_aggregate" | string;
+  domain?: "property" | "project" | "news" | "legal" | "market" | string | null;
+  id?: number | string;
   product_id?: string | null;
   title?: string | null;
-  location?: string | null;
+  location?: string | Record<string, unknown> | null;
+  snippet?: string | null;
   price_text?: string | null;
   area_text?: string | null;
   published_at?: string | null;
@@ -110,16 +114,25 @@ export interface ChatSource {
   url?: string | null;
   citation?: {
     doc_slug?: string;
-    dieu_number?: number;
-    khoan_number?: number;
-  } | null;
+    dieu_number?: number | string;
+    khoan_number?: number | string;
+  } | string | Record<string, unknown> | null;
   count?: number;
   filters?: Record<string, unknown>;
   items?: Array<Record<string, unknown>>;
   sale?: Record<string, unknown>;
   rent?: Record<string, unknown>;
   rental_yield_percent?: number | null;
-  score?: number;
+  score?: number | null;
+  metadata?: Record<string, unknown>;
+}
+
+export interface StructuredWarning {
+  code: string;
+  domain?: string | null;
+  message: string;
+  retryable?: boolean;
+  details?: Record<string, unknown>;
 }
 
 export interface TraceSummary {
@@ -127,7 +140,7 @@ export interface TraceSummary {
   agents: string[];
   source_count: number;
   latency_ms: number;
-  warnings: string[];
+  warnings: Array<string | StructuredWarning>;
   [key: string]: unknown;
 }
 
@@ -234,6 +247,66 @@ export interface ListingFilters {
   bedrooms?: number;
   bathrooms?: number;
   direction?: string;
+  sort?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface ProjectCard {
+  id: number;
+  name: string;
+  slug: string | null;
+  developer: string | null;
+  location: string | null;
+  district: string | null;
+  city: string | null;
+  total_units: number | null;
+  price_range: string | null;
+  area_range: string | null;
+  status: string | null;
+  project_type: string | null;
+  description: string | null;
+  amenities: string[];
+  url: string | null;
+  primary_image_url: string | null;
+  image_urls: string[];
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export type ProjectDetail = ProjectCard;
+
+export interface ProjectFilters {
+  search?: string;
+  city?: string;
+  district?: string;
+  project_type?: string;
+  status?: string;
+  sort?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface ArticleCard {
+  id: number;
+  title: string;
+  body: string | null;
+  summary: string | null;
+  category: string | null;
+  source: string | null;
+  post_date: string | null;
+  url: string | null;
+  primary_image_url: string | null;
+  image_urls: string[];
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export type ArticleDetail = ArticleCard;
+
+export interface ArticleFilters {
+  search?: string;
+  category?: string;
   sort?: string;
   page?: number;
   limit?: number;

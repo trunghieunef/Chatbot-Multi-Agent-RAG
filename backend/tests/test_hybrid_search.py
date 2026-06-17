@@ -8,7 +8,7 @@ def test_build_listing_filter_clauses_maps_supported_filters():
         {
             "price_min": 3,
             "price_max": 5,
-            "district": "Quận 7",
+            "district": "Quan 7",
             "bedrooms": 2,
             "listing_type": "sale",
         }
@@ -18,15 +18,42 @@ def test_build_listing_filter_clauses_maps_supported_filters():
 
     assert "price >= :price_min" in sql
     assert "price <= :price_max" in sql
-    assert "district ILIKE :district" in sql
+    assert "unaccent(lower(district)) LIKE :district_norm" in sql
+    assert "district = :district_number" in sql
     assert "bedrooms = :bedrooms" in sql
     assert "listing_type = :listing_type" in sql
-    assert params["district"] == "%Quận 7%"
+    assert params["district_norm"] == "%quan 7%"
+    assert params["district_number"] == "7"
+
+
+def test_build_listing_filter_clauses_uses_general_vietnamese_normalization():
+    clauses, params = build_listing_filter_clauses(
+        {
+            "district": "Quan 7",
+            "city": "Ho Chi Minh",
+            "property_type": "Can ho",
+        }
+    )
+
+    sql = " ".join(clauses)
+
+    assert "unaccent(lower(district)) LIKE :district_norm" in sql
+    assert "unaccent(lower(city)) LIKE :city_norm" in sql
+    assert "unaccent(lower(property_type)) LIKE :property_type_norm" in sql
+    assert "%Qu\u1eadn 7%" not in params.values()
+    assert "%H\u1ed3 Ch\u00ed Minh%" not in params.values()
+    assert params["district_norm"] == "%quan 7%"
+    assert params["city_norm"] == "%ho chi minh%"
+    assert params["property_type_norm"] == "%can ho%"
 
 
 def test_build_listing_filter_clauses_always_filters_active_listings():
     clauses, _ = build_listing_filter_clauses({})
-    assert clauses == ["is_active = true"]
+    sql = " ".join(clauses)
+
+    assert "is_active = true" in sql
+    assert "expiry_date" in sql
+    assert "CURRENT_DATE" in sql
 
 
 def test_build_listing_filter_clauses_accepts_chatbot_price_aliases():
@@ -49,6 +76,36 @@ def test_build_listing_filter_clauses_accepts_chatbot_area_aliases():
     assert "area <= :area_max" in sql
     assert params["area_min"] == 60
     assert params["area_max"] == 90
+
+
+def test_query_embedder_uses_local_files_only_setting(monkeypatch):
+    from app.services.rag import hybrid_search as hs
+
+    captured = {}
+
+    class FakeEmbedder:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+    settings = type(
+        "S",
+        (),
+        {
+            "HF_EMBEDDING_MODEL": "BAAI/bge-m3",
+            "EMBEDDING_BATCH_SIZE": 16,
+            "EMBEDDING_DIM": 1024,
+            "HF_EMBEDDING_DEVICE": "",
+            "CHATBOT_EMBEDDING_LOCAL_FILES_ONLY": True,
+        },
+    )()
+
+    monkeypatch.setattr(hs, "_QUERY_EMBEDDER", None)
+    monkeypatch.setattr(hs, "get_settings", lambda: settings)
+    monkeypatch.setattr(hs, "BGEEmbedder", FakeEmbedder)
+
+    hs._get_query_embedder()
+
+    assert captured["local_files_only"] is True
 
 
 @pytest.mark.asyncio

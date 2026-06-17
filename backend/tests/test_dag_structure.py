@@ -67,6 +67,16 @@ def test_daily_listings_ingest_runs_after_crawl_details(dagbag):
         assert mark_done in ingest.downstream_list
 
 
+def test_weekly_news_ingest_runs_after_crawl_details(dagbag):
+    dag = dagbag.dags["weekly_news_dag"]
+    crawl_urls = dag.get_task("crawl_news_urls")
+    crawl_details = dag.get_task("crawl_news_details")
+    ingest = dag.get_task("ingest_news")
+
+    assert crawl_details in crawl_urls.downstream_list
+    assert ingest in crawl_details.downstream_list
+
+
 def test_retry_policy_applied(dagbag):
     dag = dagbag.dags["weekly_projects_dag"]
     for task in dag.tasks:

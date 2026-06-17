@@ -4,16 +4,22 @@ Chat API router.
 REST endpoint for chatbot interaction. WebSocket support will be added in Phase 3.
 """
 
+import asyncio
+import json
+import logging
+import random
 import uuid
+from datetime import datetime
 from inspect import isawaitable
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
-from app.database import get_db
-from app.models.agent_observability import AgentTrace
+from app.database import async_session, get_db
+from app.models.agent_observability import EvalRun, EvalScore
 from app.models.chat import ChatMessage, ChatSession
 from app.models.preference import ChatFeedback, MemoryProposal
 from app.models.user import User
@@ -36,6 +42,9 @@ from app.services.agent_service.contracts import (
     AgentChatResponse,
     TraceSummary,
 )
+from app.services.agent_service.observability import (
+    persist_agent_observability as _persist_agent_observability,
+)
 from app.services.chatbot import run_chat_pipeline
 from app.services.chatbot.context import (
     build_conversation_context,
@@ -47,12 +56,78 @@ from app.services.chatbot.memory import (
     mark_memory_proposal_resolved,
     upsert_user_preference,
 )
+from app.services.chatbot.abuse_guard import (
+    ChatAbuseGuard,
+    enforce_chat_abuse_guard,
+)
+from app.services.chatbot.quota import enforce_chat_quota
+from app.services.chatbot.session_guard import verify_session_ownership
 
 router = APIRouter(prefix="/chat", tags=["Chat"])
+logger = logging.getLogger(__name__)
+AGENT_USED_STORAGE_MAX_LENGTH = 50
+
+_anon_abuse_guard = ChatAbuseGuard(
+    max_requests=get_settings().CHAT_ABUSE_GUARD_ANON_MAX_REQUESTS,
+    window_seconds=get_settings().CHAT_ABUSE_GUARD_ANON_WINDOW_SECONDS,
+)
+_auth_abuse_guard = ChatAbuseGuard(
+    max_requests=get_settings().CHAT_ABUSE_GUARD_AUTH_MAX_REQUESTS,
+    window_seconds=get_settings().CHAT_ABUSE_GUARD_AUTH_WINDOW_SECONDS,
+)
 
 
 def is_agent_service_enabled() -> bool:
     return get_settings().CHATBOT_AGENT_SERVICE_ENABLED
+
+
+def agent_used_for_storage(agent_used: str, agents_used: list[str]) -> str:
+    if len(agent_used) <= AGENT_USED_STORAGE_MAX_LENGTH:
+        return agent_used
+    if len(agents_used) > 1:
+        return "multi_agent"
+    return agent_used[:AGENT_USED_STORAGE_MAX_LENGTH]
+
+
+def should_schedule_eval(
+    *,
+    enabled: bool,
+    sample_rate: float,
+    answer: str,
+    mode: str | None,
+) -> bool:
+    if not enabled or not answer.strip():
+        return False
+    if mode in {"agent_service_error", "legacy_pipeline", "legacy"}:
+        return False
+    if sample_rate <= 0:
+        return False
+    if sample_rate >= 1:
+        return True
+    return random.random() < sample_rate
+
+
+def _chat_abuse_key(body: ChatMessageRequest, user: User | None, request: Request) -> str:
+    if user is not None:
+        return f"auth:{user.id}"
+    client_host = request.client.host if request.client else "unknown"
+    return f"anon:ip:{client_host}"
+
+
+def _enforce_chat_abuse_guard(
+    body: ChatMessageRequest,
+    user: User | None,
+    request: Request,
+    response: Response,
+) -> None:
+    settings = get_settings()
+    guard = _auth_abuse_guard if user is not None else _anon_abuse_guard
+    enforce_chat_abuse_guard(
+        guard,
+        key=_chat_abuse_key(body, user, request),
+        enabled=settings.CHAT_ABUSE_GUARD_ENABLED,
+        response=response,
+    )
 
 
 async def _run_chatbot_pipeline(
@@ -169,26 +244,24 @@ def _trace_summary_dict(response: AgentChatResponse) -> dict:
     return response.trace_summary.model_dump(mode="json")
 
 
-def persist_agent_observability(
-    db: AsyncSession,
-    session: ChatSession,
+async def persist_agent_observability(
+    session_factory,
+    chat_session: ChatSession,
     user: User | None,
     response: AgentChatResponse,
 ) -> None:
-    db.add(
-        AgentTrace(
-            request_id=response.request_id,
-            session_id=session.id,
-            user_id=user.id if user else None,
-            intent=response.trace_summary.intent,
-            agents_used=response.agents_used,
-            trace_summary_json=_trace_summary_dict(response),
-            full_trace_json=response.full_trace,
-            readiness_json=response.readiness,
-            latency_ms=response.trace_summary.latency_ms,
-            status="success",
-        )
+    await _persist_agent_observability(
+        session_factory=session_factory,
+        chat_session=chat_session,
+        user=user,
+        response=response,
     )
+
+
+async def _commit_if_supported(db: AsyncSession) -> None:
+    commit = getattr(db, "commit", None)
+    if commit is not None:
+        await commit()
 
 
 def _memory_proposal_hint(record: MemoryProposal) -> dict:
@@ -246,6 +319,145 @@ async def handle_memory_proposals(
     return hints
 
 
+def _trace_value(full_trace: dict, key: str, default: str) -> str:
+    value = full_trace.get(key)
+    if value is None or str(value).strip() == "":
+        return default
+    return str(value)
+
+
+def _score_value(metric: str, value) -> tuple[float, str]:
+    if isinstance(value, dict):
+        raw_score = value.get("score", 0.0)
+        rationale = value.get("rationale") or value.get("reason") or ""
+    else:
+        raw_score = value
+        rationale = ""
+    try:
+        score = float(raw_score)
+    except (TypeError, ValueError):
+        score = 0.0
+    return score, str(rationale)
+
+
+def _eval_payload(
+    *,
+    question: str,
+    answer: str,
+    sources: list[dict],
+    response: AgentChatResponse,
+    graph_version: str,
+    prompt_version: str,
+    model_name: str,
+) -> dict:
+    return {
+        "question": question,
+        "answer": answer,
+        "sources": sources,
+        "trace": response.full_trace if isinstance(response.full_trace, dict) else {},
+        "graph_version": graph_version,
+        "prompt_version": prompt_version,
+        "model_name": model_name,
+    }
+
+
+async def _process_eval_run(
+    *,
+    session_factory,
+    eval_run_id: int,
+    payload: dict,
+) -> None:
+    try:
+        async with session_factory() as db:
+            result = await db.execute(select(EvalRun).where(EvalRun.id == eval_run_id))
+            eval_run = result.scalar_one_or_none()
+            if eval_run is None:
+                return
+            try:
+                evaluation = await get_agent_service_client().evaluate(payload)
+                status = str(evaluation.get("status") or "completed")
+                eval_run.status = status if status in {"completed", "skipped"} else "completed"
+                eval_run.summary_json = evaluation.get("summary") or {}
+                eval_run.error_message = None
+                eval_run.completed_at = datetime.utcnow()
+                if eval_run.status == "completed":
+                    scores = evaluation.get("scores") or {}
+                    if isinstance(scores, dict):
+                        for metric, value in scores.items():
+                            score, rationale = _score_value(str(metric), value)
+                            db.add(
+                                EvalScore(
+                                    eval_run_id=eval_run.id,
+                                    metric=str(metric),
+                                    score=score,
+                                    rationale=rationale,
+                                )
+                            )
+            except Exception as exc:
+                logger.exception("Agent evaluation failed for eval_run_id=%s", eval_run_id)
+                eval_run.status = "failed"
+                eval_run.error_message = exc.__class__.__name__
+                eval_run.completed_at = datetime.utcnow()
+            await db.commit()
+    except Exception:
+        logger.exception("Agent evaluation task failed for eval_run_id=%s", eval_run_id)
+
+
+async def schedule_agent_evaluation(
+    *,
+    session_factory,
+    chat_session: ChatSession,
+    question: str,
+    sources: list[dict],
+    response: AgentChatResponse,
+    sync_for_tests: bool,
+) -> None:
+    full_trace = response.full_trace if isinstance(response.full_trace, dict) else {}
+    graph_version = _trace_value(full_trace, "graph_version", "unknown_graph")
+    prompt_version = _trace_value(full_trace, "prompt_version", "unknown_prompt")
+    model_name = _trace_value(full_trace, "model_name", "unknown_model")
+    payload = _eval_payload(
+        question=question,
+        answer=response.final_response,
+        sources=sources,
+        response=response,
+        graph_version=graph_version,
+        prompt_version=prompt_version,
+        model_name=model_name,
+    )
+
+    async with session_factory() as db:
+        eval_run = EvalRun(
+            request_id=response.request_id,
+            session_id=chat_session.id,
+            status="pending",
+            evaluator="gemini",
+            graph_version=graph_version,
+            prompt_version=prompt_version,
+            model_name=model_name,
+            summary_json={},
+        )
+        db.add(eval_run)
+        await db.flush()
+        eval_run_id = eval_run.id
+        await db.commit()
+
+    if sync_for_tests:
+        await _process_eval_run(
+            session_factory=session_factory,
+            eval_run_id=eval_run_id,
+            payload=payload,
+        )
+    else:
+        asyncio.create_task(
+            _process_eval_run(
+                session_factory=session_factory,
+                eval_run_id=eval_run_id,
+                payload=payload,
+            )
+        )
+
+
 @router.post("/feedback", response_model=ChatFeedbackResponse)
 async def submit_feedback(
     body: ChatFeedbackRequest,
@@ -274,11 +486,174 @@ async def submit_feedback(
     db.add(feedback)
     await db.flush()
     return ChatFeedbackResponse(id=feedback.id)
+def _format_sse(event: dict) -> str:
+    event_name = str(event.get("event") or "message")
+    payload = json.dumps(event, ensure_ascii=False, default=str)
+    return f"event: {event_name}\ndata: {payload}\n\n"
+
+
+async def _stream_agent_service_pipeline(
+    message: str,
+    db: AsyncSession,
+    session: ChatSession,
+    user: User | None,
+    request_id: str,
+):
+    yield {"event": "started", "request_id": request_id, "payload": {}}
+    response = await _run_agent_service_pipeline(
+        message,
+        db,
+        session,
+        user,
+        request_id,
+    )
+
+    user_msg = ChatMessage(
+        session_id=session.id,
+        role="user",
+        content=message,
+    )
+    db.add(user_msg)
+    response_text = response.final_response
+    agents_used = response.agents_used
+    agent_used = ", ".join(agents_used) if agents_used else "unknown"
+    sources = _source_dicts(response)
+    suggested_actions = response.suggested_actions
+    trace_summary = _trace_summary_dict(response)
+    memory_hints = await handle_memory_proposals(db, session, user, response)
+
+    CHAT_REQUESTS.labels(agent=agent_used or "unknown").inc()
+    assistant_msg = ChatMessage(
+        session_id=session.id,
+        role="assistant",
+        content=response_text,
+        agent_used=agent_used,
+        metadata_json={
+            "request_id": request_id,
+            "sources": sources,
+            "suggested_actions": suggested_actions,
+            "trace_summary": trace_summary,
+            "agents_used": agents_used,
+            "memory_hints": memory_hints,
+        },
+    )
+    db.add(assistant_msg)
+    await db.flush()
+    await _commit_if_supported(db)
+
+    try:
+        await _resolve(
+            persist_agent_observability(
+                async_session,
+                session,
+                user,
+                response,
+            )
+        )
+    except Exception:
+        logger.exception(
+            "Failed to persist agent observability for request_id=%s",
+            response.request_id,
+        )
+
+    settings = get_settings()
+    full_trace = response.full_trace if isinstance(response.full_trace, dict) else {}
+    if should_schedule_eval(
+        enabled=settings.CHATBOT_EVAL_ENABLED,
+        sample_rate=settings.CHATBOT_EVAL_SAMPLE_RATE,
+        answer=response_text,
+        mode=full_trace.get("mode"),
+    ):
+        try:
+            await schedule_agent_evaluation(
+                session_factory=async_session,
+                chat_session=session,
+                question=message,
+                sources=sources,
+                response=response,
+                sync_for_tests=settings.CHATBOT_EVAL_SYNC_FOR_TESTS,
+            )
+        except Exception:
+            logger.exception(
+                "Failed to schedule agent evaluation for request_id=%s",
+                response.request_id,
+            )
+
+    payload = response.model_dump(mode="json")
+    payload["session_id"] = str(session.id)
+    payload["memory_hints"] = memory_hints
+    yield {
+        "event": "final",
+        "request_id": request_id,
+        "payload": payload,
+    }
+
+
+@router.post("/stream")
+async def stream_message(
+    body: ChatMessageRequest,
+    request: Request = None,
+    response: Response = None,
+    user: User | None = Depends(get_optional_user),
+    db: AsyncSession = Depends(get_db),
+):
+    request_id = str(uuid.uuid4())
+    request = request or Request({"type": "http", "client": ("direct-test", 0)})
+    response = response or Response()
+    _enforce_chat_abuse_guard(body, user, request, response)
+
+    if body.session_id:
+        result = await db.execute(
+            select(ChatSession).where(ChatSession.id == body.session_id)
+        )
+        session = result.scalar_one_or_none()
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+        verify_session_ownership(session, user)
+    else:
+        session = ChatSession(
+            user_id=user.id if user else None,
+            title=body.message[:80],
+        )
+        db.add(session)
+        await db.flush()
+
+    await enforce_chat_quota(db, user=user, session_id=session.id)
+
+    async def event_generator():
+        try:
+            async for event in _stream_agent_service_pipeline(
+                body.message,
+                db,
+                session,
+                user,
+                request_id,
+            ):
+                yield _format_sse(event)
+        except Exception:
+            logger.exception("Streaming chat failed for request_id=%s", request_id)
+            yield _format_sse(
+                {
+                    "event": "error",
+                    "request_id": request_id,
+                    "payload": {
+                        "code": "stream_pipeline_error",
+                        "message": "Chat stream failed while processing the request.",
+                    },
+                }
+            )
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+    )
 
 
 @router.post("", response_model=ChatMessageResponse)
 async def send_message(
     body: ChatMessageRequest,
+    request: Request = None,
+    response: Response = None,
     user: User | None = Depends(get_optional_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -289,6 +664,9 @@ async def send_message(
     The RAG multi-agent pipeline will process the message (Phase 3).
     """
     request_id = str(uuid.uuid4())
+    request = request or Request({"type": "http", "client": ("direct-test", 0)})
+    response = response or Response()
+    _enforce_chat_abuse_guard(body, user, request, response)
 
     # Get or create session
     if body.session_id:
@@ -298,8 +676,7 @@ async def send_message(
         session = result.scalar_one_or_none()
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
-        if session.user_id is not None and (user is None or session.user_id != user.id):
-            raise HTTPException(status_code=404, detail="Session not found")
+        verify_session_ownership(session, user)
     else:
         session = ChatSession(
             user_id=user.id if user else None,
@@ -307,6 +684,8 @@ async def send_message(
         )
         db.add(session)
         await db.flush()
+
+    await enforce_chat_quota(db, user=user, session_id=session.id)
 
     agent_response = await _run_agent_service_pipeline(
         body.message,
@@ -326,10 +705,10 @@ async def send_message(
     response_text = agent_response.final_response
     agents_used = agent_response.agents_used
     agent_used = ", ".join(agents_used) if agents_used else "unknown"
+    stored_agent_used = agent_used_for_storage(agent_used, agents_used)
     sources = _source_dicts(agent_response)
     suggested_actions = agent_response.suggested_actions
     trace_summary = _trace_summary_dict(agent_response)
-    persist_agent_observability(db, session, user, agent_response)
     memory_hints = await handle_memory_proposals(db, session, user, agent_response)
 
     # Save assistant response
@@ -338,7 +717,7 @@ async def send_message(
         session_id=session.id,
         role="assistant",
         content=response_text,
-        agent_used=agent_used,
+        agent_used=stored_agent_used,
         metadata_json={
             "request_id": request_id,
             "sources": sources,
@@ -350,6 +729,45 @@ async def send_message(
     )
     db.add(assistant_msg)
     await db.flush()
+    await _commit_if_supported(db)
+
+    try:
+        await _resolve(
+            persist_agent_observability(
+                async_session,
+                session,
+                user,
+                agent_response,
+            )
+        )
+    except Exception:
+        logger.exception(
+            "Failed to persist agent observability for request_id=%s",
+            agent_response.request_id,
+        )
+
+    settings = get_settings()
+    full_trace = agent_response.full_trace if isinstance(agent_response.full_trace, dict) else {}
+    if should_schedule_eval(
+        enabled=settings.CHATBOT_EVAL_ENABLED,
+        sample_rate=settings.CHATBOT_EVAL_SAMPLE_RATE,
+        answer=response_text,
+        mode=full_trace.get("mode"),
+    ):
+        try:
+            await schedule_agent_evaluation(
+                session_factory=async_session,
+                chat_session=session,
+                question=body.message,
+                sources=sources,
+                response=agent_response,
+                sync_for_tests=settings.CHATBOT_EVAL_SYNC_FOR_TESTS,
+            )
+        except Exception:
+            logger.exception(
+                "Failed to schedule agent evaluation for request_id=%s",
+                agent_response.request_id,
+            )
 
     return ChatMessageResponse(
         session_id=session.id,
@@ -400,6 +818,7 @@ async def get_sessions(
 @router.get("/sessions/{session_id}", response_model=ChatHistoryResponse)
 async def get_session_history(
     session_id: uuid.UUID,
+    user: User | None = Depends(get_optional_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Get full chat history for a session."""
@@ -409,6 +828,7 @@ async def get_session_history(
     session = result.scalar_one_or_none()
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
+    verify_session_ownership(session, user)
 
     msg_result = await db.execute(
         select(ChatMessage)

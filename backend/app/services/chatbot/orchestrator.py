@@ -43,7 +43,7 @@ def _combine_results(results: list[AgentResult]) -> dict:
     content = "\n\n".join(result.content for result in ordered if result.content)
     sources = [source for result in ordered for source in result.sources]
     return {
-        "final_response": content or "Toi chua tao duoc cau tra loi phu hop.",
+        "final_response": content or "Tôi chưa tạo được câu trả lời phù hợp.",
         "agent_used": ", ".join(result.agent_name for result in ordered) or "none",
         "sources": sources,
         "suggested_actions": _dedupe_actions(ordered),

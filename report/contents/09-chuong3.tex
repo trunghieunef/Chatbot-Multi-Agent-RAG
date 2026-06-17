@@ -1,360 +1,285 @@
 % ============================================================
-% CHƯƠNG 3: PHÂN TÍCH THIẾT KẾ HỆ THỐNG
+% CHƯƠNG 3: TRIỂN KHAI VÀ KIỂM THỬ
 % ============================================================
-\chapter{PHÂN TÍCH THIẾT KẾ HỆ THỐNG}
+\chapter{TRIỂN KHAI VÀ KIỂM THỬ}
 
-\section{Phân tích yêu cầu}
+Chương này trình bày chi tiết quá trình triển khai hệ thống lên môi trường vận hành và chiến lược kiểm thử toàn diện được áp dụng trong đồ án. Phần đầu mô tả kiến trúc triển khai với Docker Compose, cấu hình từng dịch vụ, quy trình xây dựng và chạy hệ thống. Phần tiếp theo trình bày chiến lược kiểm thử đa tầng: từ kiểm thử đơn vị, kiểm thử tích hợp đến kiểm thử hệ thống và kiểm thử chấp nhận. Cuối cùng, chương tổng hợp kết quả kiểm thử, các vấn đề đã phát hiện và hướng khắc phục.
 
-\subsection{Yêu cầu chức năng}
+\section{Triển khai hệ thống với Docker}
 
-Hệ thống được chia thành các nhóm chức năng chính:
+\subsection{Kiến trúc triển khai}
 
-\subsubsection{Nhóm chức năng người dùng}
-
-\begin{itemize}
-    \item \textbf{Đăng ký và đăng nhập:} Người dùng có thể tạo tài khoản, đăng nhập bằng email/mật khẩu, xác thực qua JWT token.
-    \item \textbf{Duyệt danh sách bất động sản:} Hiển thị danh sách nhà đất bán và cho thuê dưới dạng lưới thẻ (card grid), hỗ trợ phân trang.
-    \item \textbf{Lọc và tìm kiếm:} Người dùng có thể lọc theo loại tin (bán/cho thuê), thành phố, quận/huyện, khoảng giá, diện tích, số phòng ngủ, loại hình bất động sản.
-    \item \textbf{Xem chi tiết:} Trang chi tiết hiển thị đầy đủ thông tin bất động sản (tiêu đề, giá, diện tích, địa chỉ, mô tả, thông tin pháp lý, tiện ích) kèm bản đồ vị trí.
-    \item \textbf{Xem bất động sản tương tự:} Gợi ý các bất động sản có đặc điểm tương đồng dựa trên vector similarity.
-    \item \textbf{Thống kê thị trường:} Dashboard hiển thị các chỉ số tổng quan (tổng số tin, giá trung bình, diện tích trung bình), top khu vực, biểu đồ giá theo quận và phân bố loại hình.
-    \item \textbf{Chatbot tư vấn:} Giao diện chat widget nổi (floating), người dùng có thể đặt câu hỏi bằng tiếng Việt và nhận phản hồi từ hệ thống multi-agent.
-\end{itemize}
-
-\subsubsection{Nhóm chức năng chatbot}
-
-\begin{itemize}
-    \item \textbf{Phân loại ý định:} Tự động nhận diện người dùng muốn tìm bất động sản, phân tích thị trường, tư vấn pháp lý hay tư vấn đầu tư.
-    \item \textbf{Tìm kiếm bất động sản:} Dựa trên mô tả của người dùng (ví dụ: ``căn hộ Quận 7 dưới 5 tỷ''), hệ thống trích xuất bộ lọc, thực hiện hybrid search và trả về danh sách phù hợp kèm giải thích.
-    \item \textbf{Phân tích thị trường:} Cung cấp số liệu thống kê (giá trung bình, giá/m\textsuperscript{2}, số lượng tin) theo khu vực và loại hình.
-    \item \textbf{Tư vấn pháp lý:} Cung cấp checklist các vấn đề pháp lý cần lưu ý khi giao dịch (sổ đỏ, công chứng, thuế phí, quy hoạch).
-    \item \textbf{Tư vấn đầu tư:} Phân tích sơ bộ về thanh khoản, khả năng cho thuê và biên an toàn tài chính.
-    \item \textbf{Trích dẫn nguồn:} Mỗi phản hồi đều kèm danh sách nguồn tham khảo (link listing, loại dữ liệu).
-    \item \textbf{Gợi ý câu hỏi tiếp theo:} Hệ thống đề xuất các câu hỏi liên quan để người dùng tiếp tục khai thác.
-\end{itemize}
-
-\subsubsection{Nhóm chức năng quản trị và dữ liệu}
-
-\begin{itemize}
-    \item \textbf{Crawl dữ liệu định kỳ:} Tự động thu thập dữ liệu mới từ batdongsan.com.vn theo lịch (hàng ngày cho tin đăng, hàng tuần cho dự án và tin tức, hàng tháng cho kiến thức pháp lý).
-    \item \textbf{Xử lý dữ liệu (ETL):} Pipeline làm sạch, chuẩn hóa, làm giàu và tạo embedding cho dữ liệu thu thập được.
-    \item \textbf{Nạp dữ liệu vào DB:} Upsert dữ liệu đã xử lý vào PostgreSQL và pgvector.
-    \item \textbf{Giám sát hệ thống:} Endpoint Prometheus metrics để theo dõi hiệu năng và trạng thái hệ thống.
-\end{itemize}
-
-\subsection{Yêu cầu phi chức năng}
-
-\begin{itemize}
-    \item \textbf{Hiệu năng:} API phản hồi trong dưới 500ms cho truy vấn danh sách, dưới 5 giây cho truy vấn chatbot (bao gồm thời gian LLM inference).
-    \item \textbf{Khả năng mở rộng:} Kiến trúc microservices với Docker Compose, có thể mở rộng từng service độc lập.
-    \item \textbf{Bảo mật:} Xác thực JWT, chống SQL injection qua ORM, chống XSS qua Next.js auto-escaping, CORS cấu hình qua biến môi trường.
-    \item \textbf{Độ tin cậy:} Hệ thống có fallback mechanism -- nếu multi-agent pipeline lỗi, tự động chuyển sang simple RAG; nếu simple RAG cũng lỗi, trả về thông báo an toàn.
-    \item \textbf{Khả năng bảo trì:} Mã nguồn phân chia module rõ ràng, docstring tiếng Anh, biến/hàm đặt tên theo chuẩn.
-    \item \textbf{Tương thích ngôn ngữ:} Giao diện và chatbot hỗ trợ tiếng Việt, embedding tối ưu cho văn bản tiếng Việt.
-\end{itemize}
-
-\section{Thiết kế hệ thống}
-
-\subsection{Kiến trúc tổng thể}
-
-Hệ thống được thiết kế theo kiến trúc microservices với 4 service chính:
-
-\begin{enumerate}
-    \item \textbf{Frontend (Next.js 16 + React 19):} Giao diện người dùng, server-side rendering, App Router.
-    \item \textbf{Backend API (FastAPI):} Xử lý nghiệp vụ, REST API, tích hợp chatbot pipeline.
-    \item \textbf{PostgreSQL + pgvector:} Cơ sở dữ liệu chính, lưu trữ cả dữ liệu quan hệ và vector embedding.
-    \item \textbf{Redis:} Cache session, message và kết quả tìm kiếm.
-\end{enumerate}
+Hệ thống được triển khai theo mô hình container hóa với Docker Compose, bao gồm 5 service chính hoạt động trong cùng một mạng nội bộ (internal network). Mỗi service được đóng gói trong một Docker image riêng, đảm bảo tính nhất quán giữa môi trường phát triển và môi trường vận hành. Hình~\ref{fig:docker-architecture} mô tả tổng quan kiến trúc triển khai.
 
 \begin{figure}[H]
     \centering
-    % Sơ đồ kiến trúc tổng thể (vui lòng chèn hình tại đây)
-    \caption{Kiến trúc tổng thể hệ thống}
-    \label{fig:architecture}
+    % Sơ đồ kiến trúc Docker triển khai
+    \begin{tabular}{|c|c|c|c|c|}
+        \hline
+        \multicolumn{5}{|c|}{\textbf{Docker Compose -- Nền tảng Tư vấn Bất động sản}} \\
+        \hline
+        \textbf{Giao diện} & \textbf{Máy chủ} & \textbf{Dịch vụ Tác tử} & \textbf{PostgreSQL} & \textbf{Redis} \\
+        Next.js 16 & FastAPI & FastAPI + LangGraph & 16 + pgvector & 7 Alpine \\
+        Cổng 3000 & Cổng 8000 & Cổng 8100 & Cổng 5432 & Cổng 6379 \\
+        \hline
+        \multicolumn{5}{|c|}{\textbf{Mạng nội bộ: realestate\_network}} \\
+        \hline
+        \multicolumn{5}{|c|}{\textbf{Ổ đĩa: pgdata, redisdata}} \\
+        \hline
+    \end{tabular}
+    \caption{Kiến trúc triển khai Docker Compose}
+    \label{fig:docker-architecture}
 \end{figure}
 
-\subsubsection{Luồng xử lý chính}
+\subsection{Cấu hình Docker Compose}
+
+Toàn bộ hệ thống được định nghĩa trong file \texttt{docker-compose.yml} tại thư mục gốc của dự án. Cấu hình này đảm bảo:
+
+\begin{itemize}
+    \item \textbf{Khởi động có thứ tự:} Các dịch vụ được khởi động theo đúng thứ tự phụ thuộc. PostgreSQL và Redis khởi động trước, sau đó đến Dịch vụ Tác tử, rồi Máy chủ Dịch vụ, và cuối cùng là Giao diện người dùng. Cơ chế phụ thuộc kết hợp với kiểm tra trạng thái đảm bảo dịch vụ chỉ khởi động khi các dịch vụ phụ thuộc đã sẵn sàng.
+    
+    \item \textbf{Kiểm tra trạng thái:} Mỗi dịch vụ được cấu hình kiểm tra trạng thái riêng:
+    \begin{itemize}
+        \item \textbf{PostgreSQL:} \texttt{pg\_isready -U admin -d realestate} -- kiểm tra định kỳ mỗi 10 giây, tối đa 5 lần thử.
+        \item \textbf{Redis:} \texttt{redis-cli ping} -- kiểm tra định kỳ mỗi 10 giây, tối đa 5 lần thử.
+        \item \textbf{Dịch vụ Tác tử:} Gọi \texttt{/internal/agent/health} với khóa nội bộ -- kiểm tra mỗi 10 giây, tối đa 12 lần thử, có 30 giây khởi động ban đầu.
+    \end{itemize}
+    
+    \item \textbf{Quản lý dữ liệu bền vững:} Hai ổ đĩa Docker được tạo để lưu trữ dữ liệu bền vững: \texttt{pgdata} lưu toàn bộ dữ liệu PostgreSQL (bao gồm cả dữ liệu quan hệ và chỉ mục véc-tơ) và \texttt{redisdata} lưu dữ liệu bộ nhớ đệm của Redis. Các ổ đĩa này tồn tại độc lập với vòng đời vùng chứa, đảm bảo dữ liệu không bị mất khi vùng chứa được tạo lại.
+    
+    \item \textbf{Biến môi trường:} Tất cả cấu hình nhạy cảm được truyền qua biến môi trường từ tệp \texttt{.env}, không được gán cứng trong tệp cấu hình Docker.
+\end{itemize}
+
+\subsection{Cấu hình chi tiết từng dịch vụ}
+
+\subsubsection{PostgreSQL + pgvector}
+
+\begin{verbatim}
+postgres:
+  image: pgvector/pgvector:pg16
+  container_name: realestate_postgres
+  environment:
+    POSTGRES_DB: realestate
+    POSTGRES_USER: admin
+    POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+  volumes:
+    - pgdata:/var/lib/postgresql/data
+  ports:
+    - "5432:5432"
+\end{verbatim}
+
+PostgreSQL được triển khai với image \texttt{pgvector/pgvector:pg16}, tích hợp sẵn extension pgvector cho phép lưu trữ và tìm kiếm vector embedding. Database mặc định được đặt tên là \texttt{realestate} với user \texttt{admin}. Extension pgvector được tự động kích hoạt thông qua SQLAlchemy trong quá trình khởi tạo schema (hàm \texttt{init\_db()} trong \texttt{backend/app/database.py}).
+
+\subsubsection{Redis}
+
+\begin{verbatim}
+redis:
+  image: redis:7-alpine
+  container_name: realestate_redis
+  ports:
+    - "6379:6379"
+  volumes:
+    - redisdata:/data
+\end{verbatim}
+
+Redis sử dụng image Alpine nhẹ (chỉ khoảng 30MB), phù hợp với môi trường container hóa. Redis đảm nhận hai vai trò: caching embedding vector và caching kết quả hybrid search. Dữ liệu cache được lưu bền vững qua volume \texttt{redisdata}.
+
+\subsubsection{Agent Service}
+
+\begin{verbatim}
+agent-service:
+  build:
+    context: .
+    dockerfile: agent_service/Dockerfile
+  container_name: realestate_agent_service
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  env_file: .env
+  environment:
+    DATABASE_URL: postgresql+asyncpg://admin:...@postgres:5432/realestate
+    REDIS_URL: redis://redis:6379/0
+    AGENT_INTERNAL_KEY: ${AGENT_INTERNAL_KEY}
+    GEMINI_API_KEY: ${GEMINI_API_KEY}
+    GEMINI_MODEL: gemini-2.0-flash
+\end{verbatim}
+
+Dịch vụ Tác tử được xây dựng từ Dockerfile riêng trong thư mục \texttt{agent\_service/}. Dockerfile dựa trên Python 3.12-slim, cài đặt các thư viện cần thiết (bao gồm LangGraph, sentence-transformers, httpx) và chạy ứng dụng qua Uvicorn trên cổng 8100. Biến môi trường \texttt{PYTHONPATH} được thiết lập để Dịch vụ Tác tử có thể nạp các mô-đun từ \texttt{backend/} (mô hình, cơ sở dữ liệu).
+
+Điểm đặc biệt trong cấu hình Dịch vụ Tác tử là khoảng thời gian khởi động 30 giây trong kiểm tra trạng thái -- khoảng thời gian này cho phép dịch vụ tải mô hình véc-tơ BGE-M3 (dung lượng khoảng 2GB) trước khi bắt đầu nhận yêu cầu kiểm tra.
+
+\subsubsection{Máy chủ Dịch vụ}
+
+\begin{verbatim}
+backend:
+  build:
+    context: ./backend
+    dockerfile: Dockerfile
+  container_name: realestate_backend
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+    agent-service:
+      condition: service_healthy
+  env_file: .env
+  environment:
+    DATABASE_URL: postgresql+asyncpg://admin:...@postgres:5432/realestate
+    REDIS_URL: redis://redis:6379/0
+    AGENT_SERVICE_URL: http://agent-service:8100
+    CHATBOT_AGENT_SERVICE_ENABLED: ${CHATBOT_AGENT_SERVICE_ENABLED:-false}
+  volumes:
+    - ./data:/app/data
+\end{verbatim}
+
+Máy chủ Dịch vụ sử dụng Dockerfile trong thư mục \texttt{backend/}, dựa trên Python 3.12-slim với các gói phụ thuộc hệ thống cho asyncpg và bcrypt. Máy chủ chỉ khởi động sau khi cả PostgreSQL, Redis và Dịch vụ Tác tử đều đã sẵn sàng.
+
+Biến \texttt{CHATBOT\_AGENT\_SERVICE\_ENABLED} (mặc định: false) cho phép vận hành linh hoạt: khi bật, Máy chủ sẽ chuyển các yêu cầu chatbot sang Dịch vụ Tác tử để xử lý nâng cao; khi tắt, Máy chủ sử dụng đường ống nội bộ. Ổ đĩa \texttt{./data:/app/data} cho phép Máy chủ truy cập dữ liệu CSV và các tệp cấu hình từ máy chủ.
+
+\subsubsection{Giao diện người dùng}
+
+\begin{verbatim}
+frontend:
+  build:
+    context: ./frontend
+    dockerfile: Dockerfile
+    args:
+      INTERNAL_API_URL: http://backend:8000
+      NEXT_PUBLIC_API_URL: /api/v1
+  container_name: realestate_frontend
+  ports:
+    - "3000:3000"
+  depends_on:
+    - backend
+\end{verbatim}
+
+Giao diện người dùng được xây dựng từ Dockerfile trong thư mục \texttt{frontend/}, sử dụng Node.js 22 Alpine. Quá trình xây dựng gồm hai bước: \texttt{npm ci} để cài đặt gói phụ thuộc và \texttt{npm run build} để tạo bản dựng sản xuất. Giao diện chạy ở chế độ sản xuất (\texttt{npm run start}) trên cổng 3000.
+
+Hai tham số xây dựng quan trọng được truyền vào: \texttt{INTERNAL\_API\_URL} là địa chỉ nội bộ để Next.js gọi Máy chủ Dịch vụ phía máy chủ (dùng trong Thành phần Máy chủ và kết xuất phía máy chủ), và \texttt{NEXT\_PUBLIC\_API\_URL} là địa chỉ công khai để phía trình duyệt gọi API.
+
+\subsection{Mạng nội bộ và giao tiếp giữa các dịch vụ}
+
+Các dịch vụ trong Docker Compose giao tiếp với nhau thông qua tên dịch vụ (DNS nội bộ của Docker). Cụ thể: Giao diện gọi Máy chủ qua \texttt{http://backend:8000} (cho kết xuất phía máy chủ) và qua \texttt{/api/v1} (cho phía trình duyệt, được Next.js chuyển tiếp); Máy chủ gọi Dịch vụ Tác tử qua \texttt{http://agent-service:8100/internal/agent/chat} với khóa nội bộ trong tiêu đề \texttt{X-Internal-Agent-Key}; Máy chủ kết nối đến PostgreSQL qua chuỗi kết nối bất đồng bộ; cả Máy chủ và Dịch vụ Tác tử đều kết nối đến Redis.
+
+\subsection{Quy trình triển khai}
+
+\subsubsection{Chuẩn bị môi trường}
+
+Trước khi triển khai, cần chuẩn bị file \texttt{.env} với các biến môi trường bắt buộc:
+
+\begin{verbatim}
+# Database
+POSTGRES_DB=realestate
+POSTGRES_USER=admin
+POSTGRES_PASSWORD=<mat_khau_manh>
+DATABASE_URL=postgresql+asyncpg://admin:<password>@postgres:5432/realestate
+
+# Redis
+REDIS_URL=redis://redis:6379/0
+
+# JWT
+JWT_SECRET_KEY=<khoa_bi_mat_jwt>
+
+# CORS
+CORS_ORIGINS=http://localhost:3000
+
+# AI/ML
+GEMINI_API_KEY=<google_gemini_api_key>
+COHERE_API_KEY=<cohere_api_key>  # Optional
+
+# Agent Service
+AGENT_INTERNAL_KEY=<internal_key>
+CHATBOT_AGENT_SERVICE_ENABLED=false  # true de su dung Agent Service
+
+# Frontend
+NEXT_PUBLIC_API_URL=/api/v1
+\end{verbatim}
+
+\subsubsection{Xây dựng và khởi động}
+
+Quy trình triển khai đầy đủ gồm các bước sau:
 
 \begin{enumerate}
-    \item User gửi request HTTP đến frontend Next.js.
-    \item Frontend gọi REST API đến backend FastAPI qua \texttt{api.ts} client.
-    \item Backend xử lý request tùy theo endpoint:
-    \begin{itemize}
-        \item \texttt{/listings}: Truy vấn PostgreSQL với SQLAlchemy ORM, áp dụng bộ lọc.
-        \item \texttt{/market}: Thực hiện aggregate query trên bảng listings.
-        \item \texttt{/chat}: Gọi chatbot pipeline (router $\rightarrow$ agents $\rightarrow$ synthesizer).
-        \item \texttt{/auth}: Xác thực JWT, hash mật khẩu với bcrypt.
-    \end{itemize}
-    \item Chatbot pipeline sử dụng LangGraph để điều phối các agent, mỗi agent có thể gọi hybrid search (SQL + pgvector kNN + Cohere rerank) để truy xuất dữ liệu liên quan.
-    \item Kết quả được trả về frontend dưới dạng JSON và render thành UI.
+    \item \textbf{Xây dựng ảnh:}
+    \begin{verbatim}
+    docker-compose build
+    \end{verbatim}
+    Lệnh này xây dựng ảnh Docker cho Máy chủ Dịch vụ, Dịch vụ Tác tử và Giao diện người dùng từ Dockerfile tương ứng. PostgreSQL và Redis sử dụng ảnh có sẵn từ Docker Hub.
+    
+    \item \textbf{Khởi động toàn bộ hệ thống:}
+    \begin{verbatim}
+    docker-compose up -d
+    \end{verbatim}
+    Docker Compose sẽ khởi động các dịch vụ theo thứ tự: PostgreSQL, Redis, Dịch vụ Tác tử, Máy chủ Dịch vụ, Giao diện người dùng. Tham số \texttt{-d} chạy ở chế độ nền.
+    
+    \item \textbf{Khởi động riêng các dịch vụ hạ tầng (cho phát triển):}
+    \begin{verbatim}
+    docker-compose up -d postgres redis
+    \end{verbatim}
+    Khi phát triển, chỉ cần chạy PostgreSQL và Redis qua Docker, còn Máy chủ và Giao diện chạy trực tiếp trên máy chủ để thuận tiện cho việc gỡ lỗi. Máy chủ: \texttt{uvicorn app.main:app --reload --port 8000}. Giao diện: \texttt{npm run dev}.
+    
+    \item \textbf{Khởi động lại một dịch vụ sau khi thay đổi mã nguồn:}
+    \begin{verbatim}
+    docker-compose up -d --build backend
+    \end{verbatim}
+    Lệnh này xây dựng lại ảnh và khởi động lại vùng chứa máy chủ.
+    
+    \item \textbf{Xem nhật ký:}
+    \begin{verbatim}
+    docker-compose logs -f backend
+    \end{verbatim}
+    Theo dõi nhật ký của một dịch vụ cụ thể.
+    
+    \item \textbf{Dừng hệ thống:}
+    \begin{verbatim}
+    docker-compose down
+    \end{verbatim}
+    Dừng và xóa tất cả vùng chứa. Dữ liệu trong ổ đĩa vẫn được giữ nguyên. Thêm \texttt{-v} để xóa cả ổ đĩa.
 \end{enumerate}
 
-\subsubsection{Chi tiết các module}
+\subsubsection{Kiểm tra trạng thái triển khai}
 
-\textbf{Frontend (Next.js):}
-\begin{itemize}
-    \item \texttt{app/page.tsx} -- Trang chủ.
-    \item \texttt{app/nha-dat-ban/page.tsx} -- Danh sách nhà đất bán.
-    \item \texttt{app/nha-dat-cho-thue/page.tsx} -- Danh sách cho thuê.
-    \item \texttt{app/thi-truong/page.tsx} -- Dashboard thị trường.
-    \item \texttt{app/dang-nhap/page.tsx}, \texttt{app/dang-ky/page.tsx} -- Xác thực.
-    \item \texttt{components/layout/} -- Header, Footer, ChatWidget.
-    \item \texttt{components/listing/} -- ListingCard, ListingGrid, ListingDetail, ListingMap.
-    \item \texttt{components/search/} -- SearchBar, FilterPanel.
-    \item \texttt{components/market/} -- PriceChart, MarketStats.
-    \item \texttt{lib/api.ts} -- API client với typed requests/responses.
-\end{itemize}
-
-\textbf{Backend (FastAPI):}
-\begin{itemize}
-    \item \texttt{app/main.py} -- Khởi tạo FastAPI app, CORS middleware, đăng ký routers.
-    \item \texttt{app/config.py} -- Cấu hình từ biến môi trường (DB, Redis, Gemini, JWT, CORS).
-    \item \texttt{app/database.py} -- SQLAlchemy async engine, session factory, tạo bảng.
-    \item \texttt{app/models/} -- 7 ORM models: Listing, Chunk, ChatSession, ChatMessage, User, Project, Article.
-    \item \texttt{app/schemas/} -- Pydantic schemas cho request/response validation.
-    \item \texttt{app/routers/} -- 5 routers: listings, market, chat, auth, metrics.
-    \item \texttt{app/services/chatbot/} -- Pipeline multi-agent:
-    \begin{itemize}
-        \item \texttt{router.py} -- Phân loại ý định (Gemini hoặc keyword-based fallback).
-        \item \texttt{orchestrator.py} -- Điều phối agents, gom kết quả.
-        \item \texttt{agents/property.py} -- Tìm bất động sản.
-        \item \texttt{agents/market.py} -- Phân tích thị trường.
-        \item \texttt{agents/legal.py} -- Tư vấn pháp lý.
-        \item \texttt{agents/investment.py} -- Tư vấn đầu tư.
-    \end{itemize}
-\end{itemize}
-
-\textbf{Data Pipeline:}
-\begin{itemize}
-    \item \texttt{Crawl/} -- Playwright crawler scripts (thu thập URL và chi tiết listing).
-    \item \texttt{data\_pipeline/clean.py} -- Làm sạch và chuẩn hóa dữ liệu (parse giá, diện tích, phân loại).
-    \item \texttt{data\_pipeline/enrich.py} -- Làm giàu (geocoding tọa độ, trích xuất intent tags).
-    \item \texttt{data\_pipeline/chunk.py} -- Chia văn bản thành các đoạn ngữ nghĩa.
-    \item \texttt{data\_pipeline/embed.py} -- Tạo BGE-M3 embedding (1024 chiều, batch size 16).
-    \item \texttt{data\_pipeline/load\_db.py} -- Upsert dữ liệu đã xử lý vào PostgreSQL + pgvector.
-\end{itemize}
-
-\textbf{Chatbot (LangGraph Sandbox):}
-\begin{itemize}
-    \item \texttt{chatbot/graph.py} -- StateGraph định nghĩa (Router $\rightarrow$ Agents $\rightarrow$ Synthesizer).
-    \item \texttt{chatbot/state.py} -- ChatState schema dùng chung giữa các agent.
-    \item \texttt{chatbot/config.py} -- Cấu hình model và embedding.
-\end{itemize}
-
-\subsection{Thiết kế cơ sở dữ liệu}
-
-Hệ thống sử dụng PostgreSQL 16 với extension pgvector. Dưới đây là các bảng chính:
-
-\subsubsection{Bảng listings}
-
-Bảng chứa thông tin chi tiết của từng tin đăng bất động sản với hơn 75 trường dữ liệu. Các trường quan trọng:
-
-\begin{longtable}{|p{4cm}|p{3cm}|p{6cm}|}
-    \hline
-    \textbf{Tên trường} & \textbf{Kiểu dữ liệu} & \textbf{Mô tả} \\
-    \hline
-    id & UUID & Khóa chính \\
-    \hline
-    title & VARCHAR & Tiêu đề tin đăng \\
-    \hline
-    listing\_type & VARCHAR & Loại tin: `sale` hoặc `rent` \\
-    \hline
-    property\_type & VARCHAR & Loại hình: `apartment`, `house`, `land`, \dots \\
-    \hline
-    price\_billion & FLOAT & Giá (tỷ VND) \\
-    \hline
-    area\_m2 & FLOAT & Diện tích (m\textsuperscript{2}) \\
-    \hline
-    city & VARCHAR & Thành phố \\
-    \hline
-    district & VARCHAR & Quận/huyện \\
-    \hline
-    ward & VARCHAR & Phường/xã \\
-    \hline
-    latitude, longitude & FLOAT & Tọa độ địa lý \\
-    \hline
-    bedrooms, bathrooms & INTEGER & Số phòng ngủ, phòng tắm \\
-    \hline
-    legal\_status & VARCHAR & Tình trạng pháp lý \\
-    \hline
-    description & TEXT & Mô tả chi tiết \\
-    \hline
-    source\_url & VARCHAR & URL gốc trên batdongsan.com.vn \\
-    \hline
-    created\_at, updated\_at & TIMESTAMP & Thời gian tạo/cập nhật \\
-    \hline
-\end{longtable}
-
-\subsubsection{Bảng chunks}
-
-Bảng lưu các đoạn văn bản (chunks) đã được embedding phục vụ tìm kiếm ngữ nghĩa:
-
-\begin{longtable}{|p{4cm}|p{3cm}|p{6cm}|}
-    \hline
-    \textbf{Tên trường} & \textbf{Kiểu dữ liệu} & \textbf{Mô tả} \\
-    \hline
-    id & UUID & Khóa chính \\
-    \hline
-    listing\_id & UUID & FK đến bảng listings \\
-    \hline
-    chunk\_type & VARCHAR & Loại chunk: `overview`, `description`, `location`, `intent\_tags` \\
-    \hline
-    content & TEXT & Nội dung văn bản \\
-    \hline
-    embedding & VECTOR(1024) & Vector embedding BGE-M3 \\
-    \hline
-    created\_at & TIMESTAMP & Thời gian tạo \\
-    \hline
-\end{longtable}
-
-Bảng chunks sử dụng HNSW index trên cột `embedding` để tăng tốc tìm kiếm kNN:
-
-\begin{lstlisting}[language=SQL]
-CREATE INDEX ON chunks
-USING hnsw (embedding vector_cosine_ops)
-WITH (m = 16, ef_construction = 200);
-\end{lstlisting}
-
-\subsubsection{Các bảng khác}
+Sau khi hệ thống khởi động, có thể kiểm tra trạng thái qua các điểm cuối kiểm tra:
 
 \begin{itemize}
-    \item \textbf{users:} Lưu thông tin người dùng (email, hashed\_password, full\_name, created\_at).
-    \item \textbf{chat\_sessions:} Lưu phiên hội thoại (user\_id, title, created\_at).
-    \item \textbf{chat\_messages:} Lưu tin nhắn trong phiên (session\_id, role, content, agent\_used, metadata JSON).
-    \item \textbf{projects:} Lưu thông tin dự án bất động sản (name, developer, price\_range, location).
-    \item \textbf{articles:} Lưu bài viết tin tức và kiến thức pháp lý (title, content, category, source\_url).
-    \item \textbf{pipeline\_runs:} Lưu log thực thi pipeline ETL (dag\_id, status, started\_at, finished\_at).
+    \item \textbf{Máy chủ Dịch vụ:} \texttt{GET http://localhost:8000/health} -- trả về trạng thái cơ sở dữ liệu và Redis.
+    \item \textbf{Dịch vụ Tác tử:} \texttt{GET http://localhost:8100/internal/agent/health} -- yêu cầu khóa nội bộ.
+    \item \textbf{Giao diện người dùng:} Mở trình duyệt tại \texttt{http://localhost:3000}.
+    \item \textbf{Tài liệu API:} \texttt{http://localhost:8000/docs} -- giao diện Swagger với đầy đủ lược đồ.
 \end{itemize}
 
-\subsection{Thiết kế giao diện}
+\subsection{Nạp dữ liệu ban đầu}
 
-\subsubsection{Trang chủ}
+Sau khi hệ thống đã khởi động, cần nạp dữ liệu ban đầu vào PostgreSQL:
 
-Trang chủ hiển thị thanh tìm kiếm nổi bật, danh sách bất động sản nổi bật, các danh mục phổ biến và widget chatbot nổi góc phải.
+\begin{verbatim}
+python -m data_pipeline.load_db
+\end{verbatim}
 
-\subsubsection{Trang danh sách}
+Quy trình nạp dữ liệu gồm các bước: đọc dữ liệu từ các tệp CSV trong thư mục dữ liệu; làm sạch và chuẩn hóa dữ liệu (phân tích giá, diện tích, phân loại); làm giàu dữ liệu (mã hóa địa lý, gán nhãn nhu cầu); chia văn bản thành các đoạn ngữ nghĩa với bốn loại cho mỗi bất động sản; tạo véc-tơ đặc trưng 1024 chiều bằng mô hình BGE-M3; nạp vào PostgreSQL qua các mô-đun chuyên biệt; và tạo chỉ mục HNSW trên cột véc-tơ của bảng đoạn văn bản.
 
-Trang danh sách hiển thị:
-\begin{itemize}
-    \item \textbf{Filter Panel (bên trái):} Các bộ lọc theo loại hình, khoảng giá, diện tích, số phòng ngủ.
-    \item \textbf{Listing Grid (bên phải):} Lưới thẻ (card) hiển thị ảnh đại diện, tiêu đề, giá, diện tích, địa chỉ và số phòng ngủ.
-    \item \textbf{Phân trang:} Điều hướng giữa các trang kết quả.
-\end{itemize}
+\section{Kiểm thử hệ thống}
 
-\subsubsection{Trang chi tiết}
+\subsection{Chiến lược kiểm thử}
 
-Trang chi tiết hiển thị:
-\begin{itemize}
-    \item Ảnh bất động sản (carousel/slider).
-    \item Thông tin cơ bản: giá, diện tích, địa chỉ, loại hình, pháp lý.
-    \item Mô tả chi tiết.
-    \item Bản đồ vị trí (tích hợp Leaflet/Google Maps).
-    \item Danh sách bất động sản tương tự.
-\end{itemize}
+Hệ thống được kiểm thử theo chiến lược đa tầng, từ thấp đến cao.
 
-\subsubsection{Trang thị trường}
+Tầng thứ nhất là kiểm thử đơn vị: kiểm tra từng hàm, lớp, mô-đun độc lập, sử dụng pytest với đối tượng giả để cô lập các phụ thuộc ngoại vi (cơ sở dữ liệu, API, hệ thống tệp). Đây là tầng kiểm thử có số lượng ca kiểm thử lớn nhất và chạy nhanh nhất.
 
-Dashboard thị trường hiển thị:
-\begin{itemize}
-    \item Thẻ thống kê tổng quan (tổng số tin, giá trung bình, diện tích trung bình).
-    \item Biểu đồ cột giá trung bình theo quận (Recharts BarChart).
-    \item Biểu đồ tròn phân bố loại hình bất động sản (Recharts PieChart).
-    \item Bảng top thành phố/quận theo số lượng tin.
-\end{itemize}
+Tầng thứ hai là kiểm thử tích hợp: kiểm tra sự tương tác giữa các mô-đun với nhau và với các dịch vụ bên ngoài (PostgreSQL, Redis, Gemini API), sử dụng cơ sở dữ liệu kiểm thử hoặc dịch vụ giả.
 
-\subsubsection{Chat Widget}
+Tầng thứ ba là kiểm thử hợp đồng: kiểm tra tính tương thích giữa các dịch vụ qua hợp đồng API, đảm bảo thay đổi ở một dịch vụ không phá vỡ dịch vụ khác.
 
-Chat widget là thành phần nổi (floating) ở góc phải màn hình:
-\begin{itemize}
-    \item \textbf{Nút chat nổi:} Biểu tượng chat, khi click sẽ mở rộng thành panel chat.
-    \item \textbf{Panel chat:} Header hiển thị tên chatbot, body hiển thị lịch sử tin nhắn, input để nhập câu hỏi.
-    \item \textbf{Agent indicator:} Hiển thị agent nào đang xử lý câu hỏi.
-    \item \textbf{Suggested actions:} Các câu hỏi gợi ý sau mỗi phản hồi.
-\end{itemize}
+Tầng thứ tư là kiểm thử hệ thống: kiểm tra toàn bộ luồng hoạt động đầu cuối, từ giao diện người dùng đến máy chủ đến cơ sở dữ liệu, đảm bảo các chức năng hoạt động đúng như mong đợi.
 
-\section{Triển khai và kiểm thử}
+Tầng thứ năm là kiểm thử chấp nhận: kiểm tra hệ thống đáp ứng các yêu cầu nghiệp vụ đã đề ra, được thực hiện thủ công với các kịch bản thực tế.
 
-\subsection{Môi trường triển khai}
+\subsection{Công cụ và khung công tác kiểm thử}
 
-Hệ thống được triển khai trên môi trường Docker với các service:
-
-\begin{longtable}{|p{4cm}|p{5cm}|p{4cm}|}
-    \hline
-    \textbf{Service} & \textbf{Image} & \textbf{Port} \\
-    \hline
-    PostgreSQL + pgvector & pgvector/pgvector:pg16 & 5432 \\
-    \hline
-    Redis & redis:7-alpine & 6379 \\
-    \hline
-    Backend API & Dockerfile (Python 3.12 + FastAPI) & 8000 \\
-    \hline
-    Frontend & Dockerfile (Node.js 22 + Next.js) & 3000 \\
-    \hline
-\end{longtable}
-
-\subsubsection{Quy trình khởi động}
-
-\begin{enumerate}
-    \item Cấu hình biến môi trường trong file \texttt{.env}:
-    \begin{itemize}
-        \item \texttt{DATABASE\_URL}: Chuỗi kết nối PostgreSQL async.
-        \item \texttt{REDIS\_URL}: Chuỗi kết nối Redis.
-        \item \texttt{GEMINI\_API\_KEY}: API key Google Gemini.
-        \item \texttt{JWT\_SECRET\_KEY}: Khóa bí mật JWT.
-        \item \texttt{CORS\_ORIGINS}: Danh sách origin được phép.
-    \end{itemize}
-    \item Khởi động hạ tầng: \texttt{docker-compose up -d postgres redis}
-    \item Cài đặt dependencies và chạy backend: \texttt{cd backend \&\& pip install -r requirements.txt \&\& uvicorn app.main:app --reload --port 8000}
-    \item Cài đặt dependencies và chạy frontend: \texttt{cd frontend \&\& npm install \&\& npm run dev}
-    \item Chạy data pipeline để nạp dữ liệu: \texttt{python -m data\_pipeline.load\_db}
-\end{enumerate}
-
-\subsubsection{CI/CD và giám sát}
-
-\begin{itemize}
-    \item \textbf{Kiểm tra mã nguồn:} ESLint cho frontend (\texttt{npm run lint}), \texttt{python -m compileall} cho backend và data pipeline.
-    \item \textbf{Giám sát:} Prometheus metrics endpoint tại \texttt{/metrics}, theo dõi số lượng request, thời gian phản hồi và lỗi.
-    \item \textbf{Airflow DAGs:} Lập lịch crawl và ETL tự động:
-    \begin{itemize}
-        \item \texttt{daily\_listings\_dag}: Crawl tin đăng mới hàng ngày.
-        \item \texttt{weekly\_projects\_dag}: Crawl dự án hàng tuần.
-        \item \texttt{weekly\_news\_dag}: Crawl tin tức hàng tuần.
-        \item \texttt{monthly\_legal\_kb\_dag}: Cập nhật kiến thức pháp lý hàng tháng.
-    \end{itemize}
-\end{itemize}
-
-\subsection{Kết quả kiểm thử}
-
-\subsubsection{Kiểm thử API}
-
-Các endpoint API được kiểm thử thông qua file test trong \texttt{backend/tests/}:
-
-\begin{itemize}
-    \item \textbf{test\_chat\_router\_pipeline.py:} Kiểm thử luồng xử lý chat từ router đến agent response.
-    \item \textbf{test\_backend\_hybrid\_search.py:} Kiểm thử tìm kiếm lai SQL + vector.
-    \item \textbf{test\_cache.py:} Kiểm thử caching với Redis.
-    \item \textbf{test\_chunk.py:} Kiểm thử quy trình chunking và embedding.
-    \item \textbf{test\_clean.py:} Kiểm thử làm sạch dữ liệu.
-    \item \textbf{test\_enrich\_geocode.py:} Kiểm thử geocoding.
-    \item \textbf{test\_enrich\_intent.py:} Kiểm thử trích xuất intent tags.
-\end{itemize}
-
-\subsubsection{Kiểm thử pipeline}
-
-\begin{itemize}
-    \item \textbf{test\_dag\_structure.py:} Kiểm thử cấu trúc Airflow DAGs.
-    \item \textbf{test\_crawler\_core.py:} Kiểm thử logic crawl.
-    \item \textbf{test\_alerting.py:} Kiểm thử cơ chế cảnh báo pipeline.
-\end{itemize}
-
-\subsubsection{Kết quả}
-
-Hệ thống đáp ứng các yêu cầu chức năng và phi chức năng đã đề ra:
-\begin{itemize}
-    \item API listings phản hồi trong dưới 300ms với bộ lọc cơ bản.
-    \item Chatbot pipeline hoàn thành trong dưới 5 giây cho truy vấn thông thường.
-    \item Hệ thống fallback hoạt động ổn định khi thiếu GEMINI\_API\_KEY.
-    \item Dữ liệu được crawl và xử lý tự động theo lịch Airflow.
-\end{itemize}
+pytest là khung công tác kiểm thử chính cho toàn bộ mã nguồn Python (máy chủ, dịch vụ tác tử, đường ống dữ liệu, lập lịch), sử dụng các phần mở rộng: pytest-asyncio (hỗ trợ kiểm thử bất đồng bộ), pytest-cov (đo độ bao phủ). ESLint là công cụ phân tích tĩnh cho giao diện người dùng TypeScript, phát hiện lỗi cú pháp và vấn đề về phong cách mã nguồn. compileall là mô-đun chuẩn của Python dùng để kiểm tra cú pháp toàn bộ tệp mã nguồn, phát hiện lỗi nạp thư viện và lỗi cú pháp mà không cần chạy kiểm thử. Thư viện unittest.mock và pytest.monkeypatch được dùng để tạo đối tượng giả, giả lập các dịch vụ bên ngoài.
 
 \newpage
+

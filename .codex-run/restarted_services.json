@@ -1,0 +1,17 @@
+﻿[
+    {
+        "port":  8000,
+        "pid":  5724,
+        "name":  "backend-local"
+    },
+    {
+        "port":  8100,
+        "pid":  19344,
+        "name":  "agent-service-local"
+    },
+    {
+        "port":  3000,
+        "pid":  16396,
+        "name":  "frontend-local"
+    }
+]

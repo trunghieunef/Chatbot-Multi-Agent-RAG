@@ -28,6 +28,35 @@ def _format_exception(exc: BaseException) -> str:
     return "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
 
 
+def _valid_agent_response() -> dict:
+    return {
+        "request_id": "req-1",
+        "final_response": "ok",
+        "agents_used": ["property_search"],
+        "sources": [],
+        "suggested_actions": [],
+        "trace_summary": {
+            "intent": "property_search",
+            "agents": ["property_search"],
+            "source_count": 0,
+            "latency_ms": 1,
+            "warnings": [],
+        },
+        "full_trace": {},
+        "memory_proposals": [],
+        "readiness": {},
+        "evaluation_candidate": {},
+    }
+
+
+def _valid_agent_request() -> AgentChatRequest:
+    return AgentChatRequest(
+        request_id="req-1",
+        message="Tim nha",
+        session_id="session-1",
+    )
+
+
 def test_agent_service_settings_defaults(monkeypatch):
     for env_var in AGENT_SERVICE_SETTING_ENV_VARS:
         monkeypatch.delenv(env_var, raising=False)
@@ -37,7 +66,7 @@ def test_agent_service_settings_defaults(monkeypatch):
     assert settings.AGENT_SERVICE_URL == "http://localhost:8100"
     assert settings.AGENT_INTERNAL_KEY == "dev-agent-internal-key"
     assert settings.AGENT_SERVICE_TIMEOUT_SECONDS == 45.0
-    assert settings.CHATBOT_AGENT_SERVICE_ENABLED is False
+    assert settings.CHATBOT_AGENT_SERVICE_ENABLED is True
     assert settings.CHATBOT_LLM_JUDGE_ENABLED is False
     assert settings.CHATBOT_MEMORY_ENABLED is True
     assert settings.CHATBOT_ADMIN_ENABLED is True
@@ -185,3 +214,81 @@ async def test_agent_service_client_raises_safe_error_on_invalid_response():
     assert "gan song" not in formatted
     assert "budget-secret-9-ty" not in formatted
     assert "secret" not in formatted
+
+
+@pytest.mark.asyncio
+async def test_transient_network_error_retried_once_then_success():
+    class FlakyTransport(httpx.AsyncBaseTransport):
+        def __init__(self, outcomes):
+            self.outcomes = list(outcomes)
+            self.calls = 0
+
+        async def handle_async_request(self, request):
+            self.calls += 1
+            outcome = self.outcomes.pop(0)
+            if isinstance(outcome, Exception):
+                raise outcome
+            return outcome
+
+    transport = FlakyTransport(
+        [
+            httpx.ConnectError("boom"),
+            httpx.Response(200, json=_valid_agent_response()),
+        ]
+    )
+    client = AgentServiceClient(
+        base_url="http://agent",
+        internal_key="key",
+        timeout_seconds=1,
+        transport=transport,
+    )
+
+    result = await client.chat(_valid_agent_request())
+
+    assert result.request_id == "req-1"
+    assert transport.calls == 2
+
+
+@pytest.mark.asyncio
+async def test_http_status_error_is_not_retried_and_has_error_type():
+    class StatusTransport(httpx.AsyncBaseTransport):
+        def __init__(self):
+            self.calls = 0
+
+        async def handle_async_request(self, request):
+            self.calls += 1
+            return httpx.Response(404, json={"detail": "missing"})
+
+    transport = StatusTransport()
+    client = AgentServiceClient(
+        base_url="http://agent",
+        internal_key="key",
+        timeout_seconds=1,
+        transport=transport,
+    )
+
+    with pytest.raises(AgentServiceError) as exc:
+        await client.chat(_valid_agent_request())
+
+    assert str(exc.value) == "Agent Service request failed: HTTP 404"
+    assert exc.value.error_type == "http_status"
+    assert transport.calls == 1
+
+
+@pytest.mark.asyncio
+async def test_repeated_transient_error_has_error_type():
+    async def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ReadTimeout("slow")
+
+    client = AgentServiceClient(
+        base_url="http://agent",
+        internal_key="key",
+        timeout_seconds=1,
+        transport=httpx.MockTransport(handler),
+    )
+
+    with pytest.raises(AgentServiceError) as exc:
+        await client.chat(_valid_agent_request())
+
+    assert str(exc.value) == "Agent Service request failed: ReadTimeout"
+    assert exc.value.error_type == "transient_network"

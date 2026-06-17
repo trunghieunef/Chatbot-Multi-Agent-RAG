@@ -3,7 +3,8 @@
 import { useState, useRef, useEffect } from "react";
 import { BarChart3, FileText, Home, MapPin, MessageCircle, Scale, Send, Bot, TrendingUp, User, Sparkles, X } from "lucide-react";
 import { sendChatMessage } from "@/lib/api";
-import type { ChatMessageResponse, ChatSource, MemoryHint } from "@/lib/types";
+import { getListingSourceDetails, getMarketSourceSummary, getSourceKind, getSourceTitle } from "@/lib/chatSourceDisplay";
+import type { ChatMessageResponse, ChatSource, MemoryHint, StructuredWarning } from "@/lib/types";
 
 interface Message {
   role: "user" | "assistant";
@@ -132,14 +133,32 @@ export default function ChatWidget() {
     }
   };
 
+  const isStructuredWarning = (warning: unknown): warning is StructuredWarning =>
+    Boolean(
+      warning &&
+        typeof warning === "object" &&
+        "code" in warning &&
+        "message" in warning
+    );
+
   const getTraceWarnings = (trace: Message["trace_summary"]) =>
     Array.isArray(trace?.warnings)
-      ? trace.warnings.filter((warning): warning is string => Boolean(warning))
+      ? trace.warnings
+          .map((warning) => {
+            if (typeof warning === "string") return warning;
+            if (isStructuredWarning(warning)) return warning.message || warning.code;
+            return null;
+          })
+          .filter((warning): warning is string => Boolean(warning))
       : [];
 
   const formatCitation = (source: ChatSource) => {
     const citation = source.citation;
     if (!citation) return source.source || source.title || "Nguồn pháp lý";
+    if (typeof citation === "string") return citation;
+    if (!("doc_slug" in citation || "dieu_number" in citation || "khoan_number" in citation)) {
+      return source.source || source.title || "Nguồn pháp lý";
+    }
     const parts = [
       citation.doc_slug,
       citation.dieu_number ? `Điều ${citation.dieu_number}` : null,
@@ -163,7 +182,7 @@ export default function ChatWidget() {
 
       {/* Chat Panel */}
       {open && (
-        <div className="fixed bottom-6 right-6 z-50 flex w-[380px] max-w-[calc(100vw-2rem)] flex-col rounded-2xl border border-border bg-card shadow-2xl animate-slide-in overflow-hidden"
+        <div className="fixed bottom-4 left-4 right-4 z-50 flex flex-col rounded-2xl border border-border bg-card shadow-2xl animate-slide-in overflow-hidden sm:bottom-6 sm:left-auto sm:right-6 sm:w-[380px]"
              style={{ height: "min(560px, calc(100vh - 6rem))" }}>
           {/* Header */}
           <div className="flex items-center justify-between bg-gradient-to-r from-primary to-primary-hover px-4 py-3 text-primary-foreground">
@@ -275,23 +294,17 @@ export default function ChatWidget() {
                       <div className="mt-2 space-y-1.5 border-t border-border/70 pt-2">
                         {msg.sources.slice(0, 3).map((source, sourceIndex) => {
                           const key = `${source.type || "source"}-${source.product_id || source.id || sourceIndex}`;
-                          const isLegal = source.type === "legal_article";
-                          const isMarket = source.type?.includes("aggregate") || source.type === "district_comparison";
+                          const sourceKind = getSourceKind(source);
+                          const isLegal = sourceKind === "legal";
+                          const isMarket = sourceKind === "market";
                           const Icon = isLegal ? Scale : isMarket ? BarChart3 : Home;
+                          const listingDetails = getListingSourceDetails(source);
 
                           return (
                             <div key={key} className="rounded-md bg-card/70 p-2 text-[11px] leading-snug">
                               <div className="flex items-start gap-1.5 font-medium">
                                 <Icon size={12} className="mt-0.5 shrink-0" />
-                                <span className="line-clamp-2">
-                                  {isLegal
-                                    ? source.title || source.source || "Nguồn pháp lý"
-                                    : isMarket
-                                      ? source.type === "investment_aggregate"
-                                        ? "Tổng hợp đầu tư"
-                                        : "Thống kê thị trường"
-                                      : source.title || "Tin bất động sản"}
-                                </span>
+                                <span className="line-clamp-2">{getSourceTitle(source)}</span>
                               </div>
                               {isLegal ? (
                                 <div className="mt-1 flex items-center gap-1 text-muted-foreground">
@@ -302,21 +315,23 @@ export default function ChatWidget() {
                                 <div className="mt-1 flex items-center gap-1 text-muted-foreground">
                                   <TrendingUp size={11} className="shrink-0" />
                                   <span className="truncate">
-                                    {source.rental_yield_percent
-                                      ? `Rental yield ${source.rental_yield_percent}%/năm`
-                                      : source.count !== undefined
-                                        ? `${source.count} tin dữ liệu`
-                                        : "Dữ liệu tổng hợp"}
+                                    {getMarketSourceSummary(source)}
                                   </span>
                                 </div>
                               ) : (
                                 <>
                                   <div className="mt-1 flex items-center gap-1 text-muted-foreground">
                                     <MapPin size={11} className="shrink-0" />
-                                    <span className="truncate">{source.location || "Chưa rõ vị trí"}</span>
+                                    <span className="truncate">
+                                      {source.location
+                                        ? typeof source.location === "string"
+                                          ? source.location
+                                          : JSON.stringify(source.location)
+                                        : "Chưa rõ vị trí"}
+                                    </span>
                                   </div>
                                   <div className="mt-1 text-muted-foreground">
-                                    {[source.price_text, source.area_text].filter(Boolean).join(" · ")}
+                                    {listingDetails.join(" · ")}
                                   </div>
                                 </>
                               )}

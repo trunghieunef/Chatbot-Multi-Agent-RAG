@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import sys
+import re
+import unicodedata
 from typing import Any
 
 import httpx
@@ -23,6 +25,7 @@ def _get_query_embedder() -> BGEEmbedder:
             batch_size=settings.EMBEDDING_BATCH_SIZE,
             embedding_dim=settings.EMBEDDING_DIM,
             device=settings.HF_EMBEDDING_DEVICE or None,
+            local_files_only=settings.CHATBOT_EMBEDDING_LOCAL_FILES_ONLY,
         )
     return _QUERY_EMBEDDER
 
@@ -38,8 +41,64 @@ def _format_pgvector(values: list[float]) -> str:
     return "[" + ",".join(format(float(value), ".8f") for value in values) + "]"
 
 
+def _strip_accents(value: str | None) -> str:
+    normalized = unicodedata.normalize("NFD", value or "")
+    return "".join(
+        char for char in normalized if unicodedata.category(char) != "Mn"
+    ).lower()
+
+
+def _add_vietnamese_text_match_clause(
+    clauses: list[str],
+    params: dict[str, Any],
+    *,
+    column: str,
+    key: str,
+    value: Any,
+    exact_values: list[str] | None = None,
+) -> None:
+    normalized = _strip_accents(str(value or "").strip())
+    if not normalized:
+        return
+
+    parts = [f"unaccent(lower({column})) LIKE :{key}_norm"]
+    params[f"{key}_norm"] = f"%{normalized}%"
+    for index, exact_value in enumerate(exact_values or []):
+        clean = str(exact_value or "").strip()
+        if not clean:
+            continue
+        param_key = f"{key}_exact_{index}" if index else f"{key}_number"
+        parts.append(f"{column} = :{param_key}")
+        params[param_key] = clean
+    if parts:
+        clauses.append("(" + " OR ".join(parts) + ")")
+
+
+def _district_number(value: Any) -> str | None:
+    raw = str(value or "").strip()
+    normalized = _strip_accents(raw)
+    match = re.search(r"\b(?:quan|q)\s*\.?\s*(\d{1,2})\b", normalized)
+    if not match and re.fullmatch(r"\d{1,2}", normalized):
+        match = re.match(r"(\d{1,2})", normalized)
+    if not match:
+        return None
+    return match.group(1)
+
+
 def build_listing_filter_clauses(filters: dict[str, Any]) -> tuple[list[str], dict[str, Any]]:
-    clauses = ["is_active = true"]
+    clauses = [
+        "is_active = true",
+        "("
+        "expiry_date IS NULL OR expiry_date = '' OR "
+        "CASE "
+        "WHEN expiry_date ~ '^\\d{2}/\\d{2}/\\d{4}$' "
+        "THEN to_date(expiry_date, 'DD/MM/YYYY') >= CURRENT_DATE "
+        "WHEN expiry_date ~ '^\\d{4}-\\d{2}-\\d{2}$' "
+        "THEN to_date(expiry_date, 'YYYY-MM-DD') >= CURRENT_DATE "
+        "ELSE true "
+        "END"
+        ")",
+    ]
     params: dict[str, Any] = {}
 
     price_min = filters.get("price_min", filters.get("min_price"))
@@ -60,11 +119,23 @@ def build_listing_filter_clauses(filters: dict[str, Any]) -> tuple[list[str], di
         clauses.append("area <= :area_max")
         params["area_max"] = area_max
     if filters.get("district"):
-        clauses.append("district ILIKE :district")
-        params["district"] = f"%{filters['district']}%"
+        district_number = _district_number(filters["district"])
+        _add_vietnamese_text_match_clause(
+            clauses,
+            params,
+            column="district",
+            key="district",
+            value=filters["district"],
+            exact_values=[district_number] if district_number else None,
+        )
     if filters.get("city"):
-        clauses.append("city ILIKE :city")
-        params["city"] = f"%{filters['city']}%"
+        _add_vietnamese_text_match_clause(
+            clauses,
+            params,
+            column="city",
+            key="city",
+            value=filters["city"],
+        )
     if filters.get("bedrooms") is not None:
         clauses.append("bedrooms = :bedrooms")
         params["bedrooms"] = filters["bedrooms"]
@@ -72,8 +143,13 @@ def build_listing_filter_clauses(filters: dict[str, Any]) -> tuple[list[str], di
         clauses.append("listing_type = :listing_type")
         params["listing_type"] = filters["listing_type"]
     if filters.get("property_type"):
-        clauses.append("property_type ILIKE :property_type")
-        params["property_type"] = f"%{filters['property_type']}%"
+        _add_vietnamese_text_match_clause(
+            clauses,
+            params,
+            column="property_type",
+            key="property_type",
+            value=filters["property_type"],
+        )
 
     return clauses, params
 
@@ -85,14 +161,31 @@ def build_project_filter_clauses(filters: dict[str, Any]) -> tuple[list[str], di
         clauses.append("status = :status")
         params["status"] = filters["status"]
     if filters.get("city"):
-        clauses.append("city ILIKE :city")
-        params["city"] = f"%{filters['city']}%"
+        _add_vietnamese_text_match_clause(
+            clauses,
+            params,
+            column="city",
+            key="city",
+            value=filters["city"],
+        )
     if filters.get("district"):
-        clauses.append("district ILIKE :district")
-        params["district"] = f"%{filters['district']}%"
+        district_number = _district_number(filters["district"])
+        _add_vietnamese_text_match_clause(
+            clauses,
+            params,
+            column="district",
+            key="district",
+            value=filters["district"],
+            exact_values=[district_number] if district_number else None,
+        )
     if filters.get("project_type"):
-        clauses.append("project_type ILIKE :project_type")
-        params["project_type"] = f"%{filters['project_type']}%"
+        _add_vietnamese_text_match_clause(
+            clauses,
+            params,
+            column="project_type",
+            key="project_type",
+            value=filters["project_type"],
+        )
     return clauses or ["1=1"], params
 
 
@@ -125,8 +218,18 @@ async def sql_filter(parent_type: str, filters: dict[str, Any], limit: int = 500
         return []
 
     params["limit"] = limit
+    params["chunk_parent_type"] = parent_type
+    chunk_clause = (
+        "EXISTS ("
+        "SELECT 1 FROM chunks c "
+        "WHERE c.parent_type = :chunk_parent_type "
+        f"AND c.parent_id = {table}.id"
+        ")"
+    )
     query = text(
-        f"SELECT id FROM {table} WHERE {' AND '.join(clauses)} {order_by} LIMIT :limit"
+        f"SELECT id FROM {table} "
+        f"WHERE {' AND '.join([*clauses, chunk_clause])} "
+        f"{order_by} LIMIT :limit"
     )
     async with async_session() as session:
         result = await session.execute(query, params)

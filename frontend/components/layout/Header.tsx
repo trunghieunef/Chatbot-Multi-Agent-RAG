@@ -8,6 +8,8 @@ import { cn } from "@/lib/utils";
 const NAV_LINKS = [
   { href: "/nha-dat-ban", label: "Nhà đất bán" },
   { href: "/nha-dat-cho-thue", label: "Nhà đất cho thuê" },
+  { href: "/du-an", label: "Dự án" },
+  { href: "/tin-tuc", label: "Tin tức" },
   { href: "/thi-truong", label: "Thị trường" },
 ];
 

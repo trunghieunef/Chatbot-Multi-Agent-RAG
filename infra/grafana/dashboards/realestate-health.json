@@ -1,0 +1,108 @@
+{
+  "title": "RealEstate Service Health",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Services UP",
+      "targets": [
+        {"expr": "count(up == 1)", "refId": "A"}
+      ],
+      "gridPos": {"x": 0, "y": 0, "w": 6, "h": 4},
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "green", "value": 3}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Services DOWN",
+      "targets": [
+        {"expr": "count(up == 0) OR vector(0)", "refId": "A"}
+      ],
+      "gridPos": {"x": 6, "y": 0, "w": 6, "h": 4},
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "red", "value": 1}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Chat req/s",
+      "targets": [
+        {"expr": "round(rate(realestate_chat_requests_total[1m]), 0.01)", "refId": "A"}
+      ],
+      "gridPos": {"x": 12, "y": 0, "w": 6, "h": 4}
+    },
+    {
+      "type": "stat",
+      "title": "Alerts firing",
+      "targets": [
+        {"expr": "count(ALERTS{alertstate=\"firing\"}) OR vector(0)", "refId": "A"}
+      ],
+      "gridPos": {"x": 18, "y": 0, "w": 6, "h": 4},
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 1},
+              {"color": "red", "value": 5}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Service uptime",
+      "targets": [
+        {"expr": "up", "refId": "A"}
+      ],
+      "gridPos": {"x": 0, "y": 4, "w": 24, "h": 6}
+    },
+    {
+      "type": "timeseries",
+      "title": "Chat request rate",
+      "targets": [
+        {"expr": "sum by (agent) (rate(realestate_chat_requests_total[5m]))", "refId": "A"}
+      ],
+      "gridPos": {"x": 0, "y": 10, "w": 12, "h": 8}
+    },
+    {
+      "type": "timeseries",
+      "title": "Retrieval latency (p50/p95/p99)",
+      "targets": [
+        {"expr": "histogram_quantile(0.50, sum by (le) (rate(realestate_retrieval_latency_seconds_bucket[5m])))", "refId": "A", "legendFormat": "p50"},
+        {"expr": "histogram_quantile(0.95, sum by (le) (rate(realestate_retrieval_latency_seconds_bucket[5m])))", "refId": "B", "legendFormat": "p95"},
+        {"expr": "histogram_quantile(0.99, sum by (le) (rate(realestate_retrieval_latency_seconds_bucket[5m])))", "refId": "C", "legendFormat": "p99"}
+      ],
+      "gridPos": {"x": 12, "y": 10, "w": 12, "h": 8}
+    },
+    {
+      "type": "table",
+      "title": "Active alerts",
+      "targets": [
+        {"expr": "ALERTS{alertstate=\"firing\"}", "refId": "A", "format": "table"}
+      ],
+      "gridPos": {"x": 0, "y": 18, "w": 24, "h": 6}
+    }
+  ]
+}

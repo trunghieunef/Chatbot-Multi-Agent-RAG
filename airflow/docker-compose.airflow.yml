@@ -18,9 +18,12 @@ x-airflow-common: &airflow-common
     DATABASE_URL: postgresql+asyncpg://admin:${POSTGRES_PASSWORD:-realestate_secret_2026}@realestate_postgres:5432/realestate
     GEMINI_API_KEY: ${GEMINI_API_KEY}
     COHERE_API_KEY: ${COHERE_API_KEY}
+    AGENT_INTERNAL_KEY: ${AGENT_INTERNAL_KEY}
     SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
     ALERT_EMAIL_RECIPIENTS: ${ALERT_EMAIL_RECIPIENTS:-}
-    PYTHONPATH: /opt/project:/opt/project/backend
+    PIPELINE_WORKER_URL: http://pipeline-worker:8200
+    PIPELINE_WORKER_DATA_ROOT: /app/data
+    PYTHONPATH: /opt/airflow:/opt/project:/opt/project/backend
   volumes:
     - ../:/opt/project
     - ./dags:/opt/airflow/dags

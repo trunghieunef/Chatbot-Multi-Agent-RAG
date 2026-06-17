@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import csv
+import json
 import sys
 from pathlib import Path
 from typing import Any
@@ -31,9 +32,71 @@ if str(BACKEND) not in sys.path:
 
 from app.config import get_settings
 from app.database import async_session, engine
-from app.models import Article, Chunk
+from app.models import Article, ArticleImage, Chunk
 from data_pipeline.clean import row_to_article
 from data_pipeline.embed import BGEEmbedder
+
+
+ARTICLE_IMAGE_META_KEY = "_image_urls"
+
+
+def article_image_urls_from_row(row: dict[str, Any]) -> list[str]:
+    raw = row.get("image_urls") or ""
+    if not raw:
+        return []
+    if isinstance(raw, list):
+        values = raw
+    else:
+        text = str(raw).strip()
+        if not text:
+            return []
+        try:
+            parsed = json.loads(text)
+            values = parsed if isinstance(parsed, list) else []
+        except json.JSONDecodeError:
+            values = [part.strip() for part in text.replace("\n", ",").split(",")]
+
+    urls: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        url = str(value).strip()
+        if not url.startswith(("http://", "https://")) or url in seen:
+            continue
+        seen.add(url)
+        urls.append(url)
+    return urls
+
+
+def prepare_article_image_rows(
+    article: Article,
+    image_urls: list[str],
+    *,
+    source: str = "batdongsan",
+) -> list[dict[str, Any]]:
+    return [
+        {
+            "article_id": article.id,
+            "article_url": article.url,
+            "image_url": image_url,
+            "sort_order": index,
+            "is_primary": index == 0,
+            "source": source,
+        }
+        for index, image_url in enumerate(image_urls)
+    ]
+
+
+async def replace_article_images(
+    session,
+    article: Article,
+    image_urls: list[str],
+) -> None:
+    await session.execute(delete(ArticleImage).where(ArticleImage.article_id == article.id))
+    if image_urls:
+        session.add_all(
+            ArticleImage(**image_row)
+            for image_row in prepare_article_image_rows(article, image_urls)
+        )
 
 
 def build_article_chunks(
@@ -98,7 +161,14 @@ async def publish_article_batch(articles_data: list[dict[str, Any]]) -> list[Art
     persisted: list[Article] = []
     async with async_session() as session:
         for article_data in articles_data:
-            article = await upsert_article(session, article_data)
+            image_urls = list(article_data.get(ARTICLE_IMAGE_META_KEY) or [])
+            article_payload = {
+                key: value
+                for key, value in article_data.items()
+                if key != ARTICLE_IMAGE_META_KEY
+            }
+            article = await upsert_article(session, article_payload)
+            await replace_article_images(session, article, image_urls)
             persisted.append(article)
         await session.commit()
     return persisted
@@ -205,6 +275,7 @@ async def ingest_article_rows(
                 article_data = row_to_article(row)
                 if not article_data.get("url"):
                     continue
+                article_data[ARTICLE_IMAGE_META_KEY] = article_image_urls_from_row(row)
                 prepared.append(article_data)
             except asyncio.CancelledError:
                 raise

@@ -2,12 +2,12 @@ from chatbot.tools.hybrid_search import build_project_filter_clauses, build_arti
 
 
 def test_build_project_filter_clauses_supports_status_and_city():
-    clauses, params = build_project_filter_clauses({"status": "selling", "city": "Hồ Chí Minh"})
+    clauses, params = build_project_filter_clauses({"status": "selling", "city": "Ho Chi Minh"})
 
     sql = " ".join(clauses)
     assert "status = :status" in sql
-    assert "city ILIKE :city" in sql
-    assert params["city"] == "%Hồ Chí Minh%"
+    assert "unaccent(lower(city)) LIKE :city_norm" in sql
+    assert params["city_norm"] == "%ho chi minh%"
 
 
 def test_build_article_filter_clauses_supports_category():
