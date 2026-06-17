@@ -771,6 +771,17 @@ def safety_validator_node(state: AgentGraphState) -> AgentGraphState:
     ):
         added_warnings.append("financial_disclaimer_missing")
 
+    committee_review = dict(state.get("committee_review") or {})
+    recommendation = dict(committee_review.get("recommendation") or {})
+    if (
+        "investment_advisor" in agents_to_run
+        and recommendation.get("confidence") == "high"
+        and recommendation.get("required_confirmations")
+    ):
+        recommendation["confidence"] = "medium"
+        committee_review["recommendation"] = recommendation
+        added_warnings.append("committee_high_confidence_with_missing_inputs")
+
     for agent in agents_to_run:
         result = agent_results.get(agent) or {}
         claims = list(result.get("claims") or [])
@@ -799,6 +810,9 @@ def safety_validator_node(state: AgentGraphState) -> AgentGraphState:
         "sources": sources,
         "suggested_actions": suggested_actions,
         "warnings": warnings,
+        "committee_review": (
+            committee_review if committee_review else state.get("committee_review", {})
+        ),
         "trace_steps": _append_trace(
             state,
             "safety_validator",
