@@ -20,6 +20,8 @@ class AgentGraphState(TypedDict, total=False):
     intent: str
     agents_to_run: list[str]
     routing_filters: dict[str, Any]
+    needs_clarification: bool
+    clarifying_question: str | None
     compact_context: list[dict[str, str]]
     query_understanding: dict[str, Any]
     readiness: dict[str, Any]
@@ -33,6 +35,10 @@ class AgentGraphState(TypedDict, total=False):
     sources: list[AgentSource]
     suggested_actions: list[str]
     memory_proposals: list[MemoryProposal]
+    react_iteration: int
+    react_decision: dict[str, Any]
+    react_actions: list[dict[str, Any]]
+    loop_warnings: list[str | StructuredWarning]
     trace_steps: list[dict[str, Any]]
     warnings: list[str | StructuredWarning]
 

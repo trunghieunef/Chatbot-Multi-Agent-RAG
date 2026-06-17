@@ -16,6 +16,7 @@ from agent_service.agents.specialists import (
 from agent_service.contracts import (
     AgentSource,
     Evidence,
+    RetrievalTask,
     StructuredWarning,
 )
 from agent_service.config import get_agent_settings
@@ -26,6 +27,7 @@ from agent_service.graph.retrieval_planner import (
     execute_retrieval_plan,
 )
 from agent_service.graph.query_understanding import build_query_understanding
+from agent_service.graph.react_controller import decide_react_action
 from agent_service.graph.router import _strip_accents, route_request
 from agent_service.graph.state import AgentGraphState
 from agent_service.graph.synthesis import synthesize_final_answer
@@ -280,12 +282,34 @@ async def router_node(state: AgentGraphState) -> AgentGraphState:
         "intent": decision.intent,
         "agents_to_run": decision.agents,
         "routing_filters": decision.filters,
+        "needs_clarification": decision.needs_clarification,
+        "clarifying_question": decision.clarifying_question,
         "warnings": [*state.get("warnings", []), *decision.warnings],
         "trace_steps": _append_trace(
             state,
             "router",
             start_time,
             decision.model_dump(mode="json"),
+        ),
+    }
+
+
+def clarification_node(state: AgentGraphState) -> AgentGraphState:
+    start_time = time.perf_counter()
+    question = (
+        state.get("clarifying_question")
+        or "Ban co the bo sung them tieu chi de toi ho tro chinh xac hon khong?"
+    )
+    return {
+        "final_response": question,
+        "sources": [],
+        "suggested_actions": ["Bo sung ngan sach", "Bo sung khu vuc", "Noi ro mua hay thue"],
+        "warnings": state.get("warnings", []),
+        "trace_steps": _append_trace(
+            state,
+            "clarification",
+            start_time,
+            {"question": question},
         ),
     }
 
@@ -323,6 +347,36 @@ async def query_understanding_node(state: AgentGraphState) -> AgentGraphState:
     }
 
 
+def react_controller_node(state: AgentGraphState) -> AgentGraphState:
+    start_time = time.perf_counter()
+    iteration = int(state.get("react_iteration") or 0)
+    decision = decide_react_action(state)
+    warnings = _dedupe_warnings([*state.get("warnings", []), *decision.warnings])
+    return {
+        "react_iteration": iteration + 1,
+        "react_decision": decision.model_dump(mode="python"),
+        "react_actions": [
+            {
+                "action": decision.action,
+                "agents": decision.agents,
+                "retrieval_domains": decision.retrieval_domains,
+                "filters": decision.filters,
+            }
+        ],
+        "loop_warnings": decision.warnings,
+        "warnings": warnings,
+        "trace_steps": _append_trace(
+            state,
+            "react_controller",
+            start_time,
+            {
+                "iteration": iteration,
+                "decision": decision.model_dump(mode="json"),
+            },
+        ),
+    }
+
+
 async def retrieval_planner_node(state: AgentGraphState) -> AgentGraphState:
     start_time = time.perf_counter()
     plan = build_retrieval_plan(state)
@@ -337,6 +391,160 @@ async def retrieval_planner_node(state: AgentGraphState) -> AgentGraphState:
                 "planned_tasks": [task.task_id for task in plan],
                 "evidence_count": len(update.get("evidence_by_id", {})),
                 "retrieval_events": update.get("retrieval_events", []),
+            },
+        ),
+    }
+
+
+def _react_retrieval_task(
+    *,
+    domain: str,
+    query: str,
+    filters: dict[str, Any],
+    agents: list[str],
+    iteration: int,
+) -> RetrievalTask | None:
+    task_id = f"react_{iteration}_{domain}_1"
+    if domain == "property":
+        return RetrievalTask(
+            task_id=task_id,
+            domain="property",
+            tool="search_listings",
+            query=query,
+            filters=filters,
+            retrieved_for=agents or ["property_search"],
+            dependency_mode="none",
+            top_k=20,
+            rerank_top_k=5,
+        )
+    if domain == "legal":
+        return RetrievalTask(
+            task_id=task_id,
+            domain="legal",
+            tool="search_articles",
+            query=query,
+            filters={"category": "legal", **filters},
+            retrieved_for=agents or ["legal_advisor"],
+            dependency_mode="none",
+            top_k=20,
+            rerank_top_k=5,
+        )
+    if domain == "project":
+        return RetrievalTask(
+            task_id=task_id,
+            domain="project",
+            tool="search_projects",
+            query=query,
+            filters=filters,
+            retrieved_for=agents or ["project_agent"],
+            dependency_mode="none",
+            top_k=20,
+            rerank_top_k=5,
+        )
+    if domain == "news":
+        return RetrievalTask(
+            task_id=task_id,
+            domain="news",
+            tool="search_articles",
+            query=query,
+            filters={"exclude_category": "legal", **filters},
+            retrieved_for=agents or ["news_agent"],
+            dependency_mode="none",
+            top_k=20,
+            rerank_top_k=5,
+        )
+    if domain == "market":
+        return RetrievalTask(
+            task_id=task_id,
+            domain="market",
+            tool="lookup_market_metrics",
+            query=query,
+            filters=filters,
+            retrieved_for=agents or ["investment_advisor"],
+            dependency_mode="none",
+            top_k=10,
+            rerank_top_k=None,
+        )
+    return None
+
+
+async def react_retrieval_node(state: AgentGraphState) -> AgentGraphState:
+    start_time = time.perf_counter()
+    decision = state.get("react_decision") or {}
+    iteration = int(state.get("react_iteration") or 0)
+    understanding = state.get("query_understanding") or {}
+    query = understanding.get("rewritten_query") or state["request"].message
+    filters = dict(decision.get("filters") or {})
+    agents = list(decision.get("agents") or state.get("agents_to_run", []))
+    domains = list(decision.get("retrieval_domains") or [])
+    plan = [
+        task
+        for domain in domains
+        if (
+            task := _react_retrieval_task(
+                domain=domain,
+                query=query,
+                filters=filters,
+                agents=agents,
+                iteration=iteration,
+            )
+        )
+        is not None
+    ]
+
+    if not plan:
+        return {
+            "trace_steps": _append_trace(
+                state,
+                "react_retrieval",
+                start_time,
+                {
+                    "iteration": iteration,
+                    "planned_tasks": [],
+                    "evidence_delta": 0,
+                },
+            )
+        }
+
+    before_ids = set((state.get("evidence_by_id") or {}).keys())
+    update = await execute_retrieval_plan(plan, state)
+    evidence_by_id = {
+        **(state.get("evidence_by_id") or {}),
+        **update.get("evidence_by_id", {}),
+    }
+    evidence_for_agent = {
+        agent: list(ids)
+        for agent, ids in (state.get("evidence_for_agent") or {}).items()
+    }
+    for agent, ids in update.get("evidence_for_agent", {}).items():
+        target = evidence_for_agent.setdefault(agent, [])
+        for evidence_id in ids:
+            if evidence_id not in target:
+                target.append(evidence_id)
+
+    new_ids = sorted(set(evidence_by_id) - before_ids)
+    return {
+        "retrieval_plan": [*(state.get("retrieval_plan") or []), *plan],
+        "retrieval_results": {
+            **(state.get("retrieval_results") or {}),
+            **update.get("retrieval_results", {}),
+        },
+        "evidence_by_id": evidence_by_id,
+        "evidence_for_agent": evidence_for_agent,
+        "retrieval_events": [
+            *(state.get("retrieval_events") or []),
+            *update.get("retrieval_events", []),
+        ],
+        "warnings": _dedupe_warnings(update.get("warnings", state.get("warnings", []))),
+        "trace_steps": _append_trace(
+            {**state, **update},
+            "react_retrieval",
+            start_time,
+            {
+                "iteration": iteration,
+                "planned_tasks": [task.task_id for task in plan],
+                "evidence_delta": len(new_ids),
+                "new_evidence_ids": new_ids,
             },
         ),
     }

@@ -7,9 +7,12 @@ from langgraph.graph import END, StateGraph
 from agent_service.config import get_agent_settings
 from agent_service.contracts import AgentChatRequest, AgentChatResponse, TraceSummary
 from agent_service.graph.nodes import (
+    clarification_node,
     context_builder,
     memory_proposal_node,
     query_understanding_node,
+    react_controller_node,
+    react_retrieval_node,
     readiness_checker,
     retrieval_planner_node,
     router_node,
@@ -20,27 +23,96 @@ from agent_service.graph.nodes import (
 from agent_service.graph.state import AgentGraphState
 
 
+def _route_after_router(state: AgentGraphState) -> str:
+    return "clarification" if state.get("needs_clarification") else "query_understanding"
+
+
+def _warning_text(warning) -> str:
+    if hasattr(warning, "code"):
+        return str(warning.code)
+    if isinstance(warning, dict):
+        return str(warning.get("code") or warning.get("message") or warning)
+    return str(warning)
+
+
+def _route_after_safety(state: AgentGraphState) -> str:
+    settings = get_agent_settings()
+    if state.get("force_deterministic") or not settings.AGENT_REACT_ENABLED:
+        return "memory_proposals"
+
+    warning_texts = {_warning_text(warning) for warning in state.get("warnings", [])}
+    if warning_texts.intersection(
+        {
+            "final_response_missing_sources",
+            "agent_answer_missing_valid_evidence",
+        }
+    ):
+        return "react_controller"
+    return "memory_proposals"
+
+
+def _route_after_react_controller(state: AgentGraphState) -> str:
+    decision = state.get("react_decision") or {}
+    action = decision.get("action")
+    if action == "retrieve_more":
+        return "react_retrieval"
+    if action == "run_specialist":
+        return "specialist_agents"
+    if action == "ask_clarification":
+        return "clarification"
+    return "memory_proposals"
+
+
 def build_agent_graph():
     workflow = StateGraph(AgentGraphState)
     workflow.add_node("context_builder", context_builder)
     workflow.add_node("readiness_checker", readiness_checker)
     workflow.add_node("router", router_node)
+    workflow.add_node("clarification", clarification_node)
     workflow.add_node("query_understanding", query_understanding_node)
     workflow.add_node("retrieval_planner", retrieval_planner_node)
     workflow.add_node("specialist_agents", specialist_agents_node)
     workflow.add_node("synthesizer", synthesizer_node)
     workflow.add_node("safety_validator", safety_validator_node)
+    workflow.add_node("react_controller", react_controller_node)
+    workflow.add_node("react_retrieval", react_retrieval_node)
     workflow.add_node("memory_proposals", memory_proposal_node)
 
     workflow.set_entry_point("context_builder")
     workflow.add_edge("context_builder", "readiness_checker")
     workflow.add_edge("readiness_checker", "router")
-    workflow.add_edge("router", "query_understanding")
+    workflow.add_conditional_edges(
+        "router",
+        _route_after_router,
+        {
+            "clarification": "clarification",
+            "query_understanding": "query_understanding",
+        },
+    )
+    workflow.add_edge("clarification", "memory_proposals")
     workflow.add_edge("query_understanding", "retrieval_planner")
     workflow.add_edge("retrieval_planner", "specialist_agents")
     workflow.add_edge("specialist_agents", "synthesizer")
     workflow.add_edge("synthesizer", "safety_validator")
-    workflow.add_edge("safety_validator", "memory_proposals")
+    workflow.add_conditional_edges(
+        "safety_validator",
+        _route_after_safety,
+        {
+            "react_controller": "react_controller",
+            "memory_proposals": "memory_proposals",
+        },
+    )
+    workflow.add_conditional_edges(
+        "react_controller",
+        _route_after_react_controller,
+        {
+            "react_retrieval": "react_retrieval",
+            "specialist_agents": "specialist_agents",
+            "clarification": "clarification",
+            "memory_proposals": "memory_proposals",
+        },
+    )
+    workflow.add_edge("react_retrieval", "specialist_agents")
     workflow.add_edge("memory_proposals", END)
     return workflow.compile()
 
