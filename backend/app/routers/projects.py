@@ -6,7 +6,7 @@ Public endpoints for browsing real estate development projects.
 
 import math
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -92,3 +92,15 @@ async def get_projects(
         limit=limit,
         total_pages=math.ceil(total / limit) if total > 0 else 0,
     )
+
+
+@router.get("/{project_id}", response_model=ProjectCardResponse)
+async def get_project_detail(
+    project_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(Project).where(Project.id == project_id))
+    project = result.scalar_one_or_none()
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return ProjectCardResponse.model_validate(project)

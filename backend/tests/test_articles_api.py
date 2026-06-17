@@ -25,6 +25,13 @@ def test_article_card_response_derives_summary():
     assert len(response.summary) <= 163
 
 
+def test_article_card_response_keeps_body_for_detail_pages():
+    response = article_card_response(ArticleStub())
+
+    assert response.body.startswith("Noi dung bai viet")
+    assert response.summary
+
+
 def test_article_filters_exclude_legal_by_default():
     query = apply_article_filters(None, {"search": None, "category": None})
 

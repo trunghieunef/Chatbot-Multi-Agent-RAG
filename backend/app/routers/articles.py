@@ -6,7 +6,7 @@ Public endpoints for browsing market/news articles.
 
 import math
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -84,3 +84,15 @@ async def get_articles(
         limit=limit,
         total_pages=math.ceil(total / limit) if total > 0 else 0,
     )
+
+
+@router.get("/{article_id}", response_model=ArticleCardResponse)
+async def get_article_detail(
+    article_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(Article).where(Article.id == article_id))
+    article = result.scalar_one_or_none()
+    if article is None:
+        raise HTTPException(status_code=404, detail="Article not found")
+    return article_card_response(article)

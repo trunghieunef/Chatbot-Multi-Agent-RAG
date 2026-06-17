@@ -30,6 +30,14 @@ def test_project_card_response_accepts_model_attributes():
     assert response.amenities == ["pool", "park"]
 
 
+def test_project_card_response_has_detail_page_fields():
+    response = ProjectCardResponse.model_validate(ProjectStub())
+
+    assert response.description == "Project overview"
+    assert response.price_range == "3 - 8 ty"
+    assert response.area_range == "45 - 120 m2"
+
+
 def test_project_filters_apply_search_and_location():
     params = {
         "search": "festo",
