@@ -48,6 +48,19 @@ def _default_or_estimated_keys(assumptions: dict[str, dict[str, Any]]) -> list[s
     ]
 
 
+def _blackboard_evidence_ids(
+    agent_blackboard: dict[str, Any],
+    *,
+    author: str,
+) -> list[str]:
+    evidence_ids: list[str] = []
+    for entry in agent_blackboard.get("entries", []):
+        if entry.get("author") != author:
+            continue
+        evidence_ids.extend(str(value) for value in entry.get("evidence_ids", []))
+    return list(dict.fromkeys(evidence_ids))
+
+
 def build_committee_review(
     *,
     investment_case: dict[str, Any],
@@ -56,7 +69,6 @@ def build_committee_review(
     agent_blackboard: dict[str, Any],
     warnings: list[Any],
 ) -> dict[str, Any]:
-    del agent_blackboard
     del warnings
     missing_evidence = list(investment_case.get("missing_evidence") or [])
     property_ids = list(
@@ -68,6 +80,10 @@ def build_committee_review(
     legal_ids = list(
         (investment_case.get("legal_summary") or {}).get("evidence_ids") or []
     )
+    if not legal_ids:
+        legal_ids = _blackboard_evidence_ids(agent_blackboard, author="legal_advisor")
+    if legal_ids and "legal" in missing_evidence:
+        missing_evidence.remove("legal")
     metric_warnings = list(
         (investment_metrics.get("metric_warnings") or {}).get("warnings") or []
     )

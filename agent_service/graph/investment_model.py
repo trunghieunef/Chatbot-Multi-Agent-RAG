@@ -21,11 +21,17 @@ def _evidence_for_investment(
     *,
     evidence_by_id: dict[str, Evidence],
     evidence_for_agent: dict[str, list[str]],
+    agent_blackboard: dict[str, Any] | None = None,
 ) -> list[Evidence]:
     if "investment_advisor" in evidence_for_agent:
-        ids = evidence_for_agent["investment_advisor"]
+        ids = list(evidence_for_agent["investment_advisor"])
     else:
         ids = list(evidence_by_id)
+    for entry in (agent_blackboard or {}).get("entries", []):
+        if entry.get("type") != "specialist_result":
+            continue
+        ids.extend(str(evidence_id) for evidence_id in entry.get("evidence_ids", []))
+    ids = list(dict.fromkeys(ids))
     return [evidence_by_id[evidence_id] for evidence_id in ids if evidence_id in evidence_by_id]
 
 
@@ -56,10 +62,12 @@ def build_investment_case(
     *,
     evidence_by_id: dict[str, Evidence],
     evidence_for_agent: dict[str, list[str]],
+    agent_blackboard: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     evidence = _evidence_for_investment(
         evidence_by_id=evidence_by_id,
         evidence_for_agent=evidence_for_agent,
+        agent_blackboard=agent_blackboard,
     )
     property_items = _first_by_domain(evidence, "property")
     market_items = _first_by_domain(evidence, "market")

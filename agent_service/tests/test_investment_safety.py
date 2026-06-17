@@ -45,3 +45,44 @@ def test_safety_downgrades_high_confidence_committee_with_missing_inputs():
 
     assert "committee_high_confidence_with_missing_inputs" in result["warnings"]
     assert result["committee_review"]["recommendation"]["confidence"] == "medium"
+
+
+def test_safety_rerenders_scorecard_after_committee_confidence_downgrade():
+    result = safety_validator_node(
+        {
+            "final_response": (
+                "Scorecard dau tu\n"
+                "- Decision: consider\n"
+                "- Confidence: high\n"
+                "Luu y: khong phai loi khuyen tai chinh."
+            ),
+            "sources": [],
+            "suggested_actions": [],
+            "agents_to_run": ["investment_advisor"],
+            "warnings": [],
+            "agent_results": {},
+            "evidence_by_id": {},
+            "evidence_for_agent": {},
+            "committee_review": {
+                "recommendation": {
+                    "decision": "consider",
+                    "confidence": "high",
+                    "rationale": "Needs confirmation.",
+                    "required_confirmations": ["expected_monthly_rent"],
+                },
+                "perspectives": [],
+            },
+            "investment_assumptions": {
+                "expected_monthly_rent": {
+                    "value": None,
+                    "unit": "vnd_per_month",
+                    "source": "default",
+                }
+            },
+            "investment_metrics": {},
+            "trace_steps": [],
+        }
+    )
+
+    assert "- Confidence: medium" in result["final_response"]
+    assert "- Confidence: high" not in result["final_response"]

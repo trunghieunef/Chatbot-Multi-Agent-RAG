@@ -158,3 +158,40 @@ def test_build_investment_case_respects_explicit_empty_investment_assignment():
 
     assert case["evidence_ids"] == []
     assert "property" in case["missing_evidence"]
+
+
+def test_build_investment_case_includes_specialist_blackboard_evidence():
+    evidence_by_id = {
+        "ev_listing": _evidence(
+            "ev_listing",
+            domain="property",
+            facts={"title": "Can ho Quan 7", "price": 4.8, "area": 75},
+        ),
+        "ev_legal": _evidence(
+            "ev_legal",
+            domain="legal",
+            source_type="article",
+            facts={"title": "Phap ly can ho", "status": "has_legal_reference"},
+        ),
+    }
+
+    evidence_for_agent = {"investment_advisor": ["ev_listing"]}
+    case = build_investment_case(
+        evidence_by_id=evidence_by_id,
+        evidence_for_agent=evidence_for_agent,
+        agent_blackboard={
+            "entries": [
+                {
+                    "author": "legal_advisor",
+                    "type": "specialist_result",
+                    "evidence_ids": ["ev_legal"],
+                    "confidence": "medium",
+                    "content": {"status": "completed"},
+                }
+            ]
+        },
+    )
+
+    assert case["legal_summary"]["evidence_ids"] == ["ev_legal"]
+    assert "legal" not in case["missing_evidence"]
+    assert evidence_for_agent["investment_advisor"] == ["ev_listing"]

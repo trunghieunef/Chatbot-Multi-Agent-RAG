@@ -530,6 +530,7 @@ def investment_model_node(state: AgentGraphState) -> AgentGraphState:
     case = build_investment_case(
         evidence_by_id=state.get("evidence_by_id", {}),
         evidence_for_agent=state.get("evidence_for_agent", {}),
+        agent_blackboard=state.get("agent_blackboard", {}),
     )
     assumptions = resolve_investment_assumptions(
         case=case,
@@ -781,6 +782,11 @@ def safety_validator_node(state: AgentGraphState) -> AgentGraphState:
         recommendation["confidence"] = "medium"
         committee_review["recommendation"] = recommendation
         added_warnings.append("committee_high_confidence_with_missing_inputs")
+        final_response = format_investment_scorecard(
+            committee_review=committee_review,
+            investment_assumptions=state.get("investment_assumptions", {}),
+            investment_metrics=state.get("investment_metrics", {}),
+        )
 
     for agent in agents_to_run:
         result = agent_results.get(agent) or {}
