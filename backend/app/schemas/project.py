@@ -19,6 +19,8 @@ class ProjectCardResponse(BaseModel):
     description: str | None = None
     amenities: list[str] = Field(default_factory=list)
     url: str | None = None
+    primary_image_url: str | None = None
+    image_urls: list[str] = Field(default_factory=list)
     created_at: datetime | None = None
     updated_at: datetime | None = None
 

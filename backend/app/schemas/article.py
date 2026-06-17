@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ArticleCardResponse(BaseModel):
@@ -12,6 +12,8 @@ class ArticleCardResponse(BaseModel):
     source: str | None = None
     post_date: date | None = None
     url: str | None = None
+    primary_image_url: str | None = None
+    image_urls: list[str] = Field(default_factory=list)
     created_at: datetime | None = None
     updated_at: datetime | None = None
 

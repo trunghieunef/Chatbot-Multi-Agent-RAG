@@ -12,11 +12,37 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models.project import Project
+from app.models.project_image import ProjectImage
 from app.schemas.common import PaginatedResponse
 from app.schemas.project import ProjectCardResponse
 
 
 router = APIRouter(prefix="/projects", tags=["Projects"])
+
+
+def project_card_response(
+    project: Project,
+    image_urls: list[str] | None = None,
+) -> ProjectCardResponse:
+    response = ProjectCardResponse.model_validate(project)
+    urls = image_urls or []
+    response.image_urls = urls
+    response.primary_image_url = urls[0] if urls else None
+    return response
+
+
+async def _project_image_map(db: AsyncSession, project_ids: list[int]) -> dict[int, list[str]]:
+    if not project_ids:
+        return {}
+    result = await db.execute(
+        select(ProjectImage)
+        .where(ProjectImage.project_id.in_(project_ids))
+        .order_by(ProjectImage.project_id, ProjectImage.sort_order, ProjectImage.id)
+    )
+    images_by_project: dict[int, list[str]] = {project_id: [] for project_id in project_ids}
+    for image in result.scalars().all():
+        images_by_project.setdefault(image.project_id, []).append(image.image_url)
+    return images_by_project
 
 
 def apply_project_filters(query, params: dict):
@@ -84,9 +110,10 @@ async def get_projects(
     query = apply_project_sort(query, sort).offset((page - 1) * limit).limit(limit)
     result = await db.execute(query)
     projects = result.scalars().all()
+    image_map = await _project_image_map(db, [project.id for project in projects])
 
     return PaginatedResponse(
-        items=[ProjectCardResponse.model_validate(project) for project in projects],
+        items=[project_card_response(project, image_map.get(project.id, [])) for project in projects],
         total=total,
         page=page,
         limit=limit,
@@ -103,4 +130,5 @@ async def get_project_detail(
     project = result.scalar_one_or_none()
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
-    return ProjectCardResponse.model_validate(project)
+    image_map = await _project_image_map(db, [project.id])
+    return project_card_response(project, image_map.get(project.id, []))

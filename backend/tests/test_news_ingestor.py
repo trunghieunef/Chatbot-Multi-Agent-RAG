@@ -1,7 +1,11 @@
 import pytest
 
 from data_pipeline.ingestors import news_ingestor as ni
-from data_pipeline.ingestors.news_ingestor import build_article_chunks
+from data_pipeline.ingestors.news_ingestor import (
+    article_image_urls_from_row,
+    build_article_chunks,
+    prepare_article_image_rows,
+)
 
 
 class FailingEmbedder:
@@ -16,6 +20,11 @@ class StubEmbedder:
 
 async def noop_ensure_vector_extension():
     return None
+
+
+class ArticleImageStub:
+    id = 11
+    url = "https://example.test/article"
 
 
 def sample_article_row():
@@ -57,6 +66,30 @@ def test_news_empty_ingest_result_shape():
         "publish_errors": 0,
         "index_errors": 0,
     }
+
+
+def test_article_image_urls_from_row_accepts_json_and_dedupes():
+    row = {
+        "image_urls": '["https://cdn.example.test/a.jpg", "https://cdn.example.test/a.jpg", "ftp://bad.test/a.jpg", "https://cdn.example.test/b.jpg"]'
+    }
+
+    assert article_image_urls_from_row(row) == [
+        "https://cdn.example.test/a.jpg",
+        "https://cdn.example.test/b.jpg",
+    ]
+
+
+def test_prepare_article_image_rows_marks_first_image_primary():
+    rows = prepare_article_image_rows(
+        ArticleImageStub(),
+        ["https://cdn.example.test/a.jpg", "https://cdn.example.test/b.jpg"],
+    )
+
+    assert rows[0]["article_id"] == 11
+    assert rows[0]["article_url"] == "https://example.test/article"
+    assert rows[0]["sort_order"] == 0
+    assert rows[0]["is_primary"] is True
+    assert rows[1]["is_primary"] is False
 
 
 @pytest.mark.asyncio

@@ -32,6 +32,19 @@ def test_article_card_response_keeps_body_for_detail_pages():
     assert response.summary
 
 
+def test_article_card_response_includes_primary_image_url():
+    response = article_card_response(
+        ArticleStub(),
+        ["https://cdn.example.test/a.jpg", "https://cdn.example.test/b.jpg"],
+    )
+
+    assert response.primary_image_url == "https://cdn.example.test/a.jpg"
+    assert response.image_urls == [
+        "https://cdn.example.test/a.jpg",
+        "https://cdn.example.test/b.jpg",
+    ]
+
+
 def test_article_filters_exclude_legal_by_default():
     query = apply_article_filters(None, {"search": None, "category": None})
 

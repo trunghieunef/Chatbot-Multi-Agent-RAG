@@ -1,7 +1,11 @@
 import pytest
 
 from data_pipeline.ingestors import projects_ingestor as pi
-from data_pipeline.ingestors.projects_ingestor import build_project_chunks
+from data_pipeline.ingestors.projects_ingestor import (
+    build_project_chunks,
+    prepare_project_image_rows,
+    project_image_urls_from_row,
+)
 
 
 class FailingEmbedder:
@@ -16,6 +20,11 @@ class StubEmbedder:
 
 async def noop_ensure_vector_extension():
     return None
+
+
+class ProjectImageStub:
+    id = 22
+    slug = "sun-festo-town"
 
 
 def sample_project_row():
@@ -65,6 +74,30 @@ def test_project_empty_ingest_result_shape():
         "publish_errors": 0,
         "index_errors": 0,
     }
+
+
+def test_project_image_urls_from_row_accepts_json_and_dedupes():
+    row = {
+        "image_urls": '["https://cdn.example.test/p1.jpg", "https://cdn.example.test/p1.jpg", "data:image/png;base64,abc", "https://cdn.example.test/p2.jpg"]'
+    }
+
+    assert project_image_urls_from_row(row) == [
+        "https://cdn.example.test/p1.jpg",
+        "https://cdn.example.test/p2.jpg",
+    ]
+
+
+def test_prepare_project_image_rows_marks_first_image_primary():
+    rows = prepare_project_image_rows(
+        ProjectImageStub(),
+        ["https://cdn.example.test/p1.jpg", "https://cdn.example.test/p2.jpg"],
+    )
+
+    assert rows[0]["project_id"] == 22
+    assert rows[0]["project_slug"] == "sun-festo-town"
+    assert rows[0]["sort_order"] == 0
+    assert rows[0]["is_primary"] is True
+    assert rows[1]["is_primary"] is False
 
 
 @pytest.mark.asyncio

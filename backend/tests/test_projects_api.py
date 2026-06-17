@@ -1,4 +1,4 @@
-from app.routers.projects import apply_project_filters, apply_project_sort
+from app.routers.projects import apply_project_filters, apply_project_sort, project_card_response
 from app.schemas.project import ProjectCardResponse
 
 
@@ -36,6 +36,19 @@ def test_project_card_response_has_detail_page_fields():
     assert response.description == "Project overview"
     assert response.price_range == "3 - 8 ty"
     assert response.area_range == "45 - 120 m2"
+
+
+def test_project_card_response_includes_primary_image_url():
+    response = project_card_response(
+        ProjectStub(),
+        ["https://cdn.example.test/p1.jpg", "https://cdn.example.test/p2.jpg"],
+    )
+
+    assert response.primary_image_url == "https://cdn.example.test/p1.jpg"
+    assert response.image_urls == [
+        "https://cdn.example.test/p1.jpg",
+        "https://cdn.example.test/p2.jpg",
+    ]
 
 
 def test_project_filters_apply_search_and_location():

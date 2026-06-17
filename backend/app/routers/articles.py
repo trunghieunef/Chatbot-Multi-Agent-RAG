@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models.article import Article
+from app.models.article_image import ArticleImage
 from app.schemas.article import ArticleCardResponse
 from app.schemas.common import PaginatedResponse
 
@@ -28,10 +29,30 @@ def _summary(body: str | None, limit: int = 160) -> str | None:
     return f"{normalized[:limit].rstrip()}..."
 
 
-def article_card_response(article: Article) -> ArticleCardResponse:
+def article_card_response(
+    article: Article,
+    image_urls: list[str] | None = None,
+) -> ArticleCardResponse:
     response = ArticleCardResponse.model_validate(article)
+    urls = image_urls or []
     response.summary = _summary(response.body)
+    response.image_urls = urls
+    response.primary_image_url = urls[0] if urls else None
     return response
+
+
+async def _article_image_map(db: AsyncSession, article_ids: list[int]) -> dict[int, list[str]]:
+    if not article_ids:
+        return {}
+    result = await db.execute(
+        select(ArticleImage)
+        .where(ArticleImage.article_id.in_(article_ids))
+        .order_by(ArticleImage.article_id, ArticleImage.sort_order, ArticleImage.id)
+    )
+    images_by_article: dict[int, list[str]] = {article_id: [] for article_id in article_ids}
+    for image in result.scalars().all():
+        images_by_article.setdefault(image.article_id, []).append(image.image_url)
+    return images_by_article
 
 
 def apply_article_filters(query, params: dict):
@@ -76,9 +97,10 @@ async def get_articles(
     query = apply_article_sort(query, sort).offset((page - 1) * limit).limit(limit)
     result = await db.execute(query)
     articles = result.scalars().all()
+    image_map = await _article_image_map(db, [article.id for article in articles])
 
     return PaginatedResponse(
-        items=[article_card_response(article) for article in articles],
+        items=[article_card_response(article, image_map.get(article.id, [])) for article in articles],
         total=total,
         page=page,
         limit=limit,
@@ -95,4 +117,5 @@ async def get_article_detail(
     article = result.scalar_one_or_none()
     if article is None:
         raise HTTPException(status_code=404, detail="Article not found")
-    return article_card_response(article)
+    image_map = await _article_image_map(db, [article.id])
+    return article_card_response(article, image_map.get(article.id, []))
