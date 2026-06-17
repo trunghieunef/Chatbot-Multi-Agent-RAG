@@ -251,3 +251,55 @@ export interface ListingFilters {
   page?: number;
   limit?: number;
 }
+
+export interface ProjectCard {
+  id: number;
+  name: string;
+  slug: string | null;
+  developer: string | null;
+  location: string | null;
+  district: string | null;
+  city: string | null;
+  total_units: number | null;
+  price_range: string | null;
+  area_range: string | null;
+  status: string | null;
+  project_type: string | null;
+  description: string | null;
+  amenities: string[];
+  url: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface ProjectFilters {
+  search?: string;
+  city?: string;
+  district?: string;
+  project_type?: string;
+  status?: string;
+  sort?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface ArticleCard {
+  id: number;
+  title: string;
+  body: string | null;
+  summary: string | null;
+  category: string | null;
+  source: string | null;
+  post_date: string | null;
+  url: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface ArticleFilters {
+  search?: string;
+  category?: string;
+  sort?: string;
+  page?: number;
+  limit?: number;
+}

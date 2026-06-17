@@ -3,6 +3,8 @@
 import type {
   AdminPipelineReadinessItem,
   AdminTraceListItem,
+  ArticleCard,
+  ArticleFilters,
   ChatFeedbackRequest,
   ChatMessageRequest,
   ChatMessageResponse,
@@ -15,6 +17,8 @@ import type {
   MarketStats,
   PaginatedResponse,
   PriceByDistrict,
+  ProjectCard,
+  ProjectFilters,
   PropertyTypeCount,
   TokenResponse,
 } from "./types";
@@ -65,6 +69,18 @@ export async function getSimilarListings(
   limit = 6
 ): Promise<ListingCard[]> {
   return fetchJSON(`${BASE}/listings/similar/${id}?limit=${limit}`);
+}
+
+export async function getProjects(
+  filters: ProjectFilters = {}
+): Promise<PaginatedResponse<ProjectCard>> {
+  return fetchJSON(`${BASE}/projects${buildQuery({ ...filters })}`);
+}
+
+export async function getArticles(
+  filters: ArticleFilters = {}
+): Promise<PaginatedResponse<ArticleCard>> {
+  return fetchJSON(`${BASE}/articles${buildQuery({ ...filters })}`);
 }
 
 /* ─── Market ─── */
