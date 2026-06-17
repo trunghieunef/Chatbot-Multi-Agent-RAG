@@ -8,7 +8,9 @@ from agent_service.config import get_agent_settings
 from agent_service.contracts import AgentChatRequest, AgentChatResponse, TraceSummary
 from agent_service.graph.nodes import (
     clarification_node,
+    committee_review_node,
     context_builder,
+    investment_model_node,
     memory_proposal_node,
     query_understanding_node,
     react_controller_node,
@@ -63,6 +65,14 @@ def _route_after_react_controller(state: AgentGraphState) -> str:
     return "memory_proposals"
 
 
+def _route_after_specialists(state: AgentGraphState) -> str:
+    return (
+        "investment_model"
+        if "investment_advisor" in state.get("agents_to_run", [])
+        else "synthesizer"
+    )
+
+
 def build_agent_graph():
     workflow = StateGraph(AgentGraphState)
     workflow.add_node("context_builder", context_builder)
@@ -72,6 +82,8 @@ def build_agent_graph():
     workflow.add_node("query_understanding", query_understanding_node)
     workflow.add_node("retrieval_planner", retrieval_planner_node)
     workflow.add_node("specialist_agents", specialist_agents_node)
+    workflow.add_node("investment_model", investment_model_node)
+    workflow.add_node("committee_review", committee_review_node)
     workflow.add_node("synthesizer", synthesizer_node)
     workflow.add_node("safety_validator", safety_validator_node)
     workflow.add_node("react_controller", react_controller_node)
@@ -92,7 +104,16 @@ def build_agent_graph():
     workflow.add_edge("clarification", "memory_proposals")
     workflow.add_edge("query_understanding", "retrieval_planner")
     workflow.add_edge("retrieval_planner", "specialist_agents")
-    workflow.add_edge("specialist_agents", "synthesizer")
+    workflow.add_conditional_edges(
+        "specialist_agents",
+        _route_after_specialists,
+        {
+            "investment_model": "investment_model",
+            "synthesizer": "synthesizer",
+        },
+    )
+    workflow.add_edge("investment_model", "committee_review")
+    workflow.add_edge("committee_review", "synthesizer")
     workflow.add_edge("synthesizer", "safety_validator")
     workflow.add_conditional_edges(
         "safety_validator",
@@ -213,6 +234,11 @@ def _response_from_result(
             },
             "evidence_for_agent": result.get("evidence_for_agent", {}),
             "query_understanding": result.get("query_understanding", {}),
+            "agent_blackboard": result.get("agent_blackboard", {"entries": []}),
+            "investment_case": result.get("investment_case", {}),
+            "investment_assumptions": result.get("investment_assumptions", {}),
+            "investment_metrics": result.get("investment_metrics", {}),
+            "committee_review": result.get("committee_review", {}),
         },
         memory_proposals=result.get("memory_proposals", []),
         readiness=result.get("readiness", {}),

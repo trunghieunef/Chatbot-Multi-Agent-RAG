@@ -19,6 +19,13 @@ ALLOWED_FILTERS = {
     "min_area",
     "max_area",
     "bedrooms",
+    "equity_ratio",
+    "expected_monthly_rent",
+    "interest_rate_annual",
+    "loan_ratio",
+    "loan_term_years",
+    "operating_cost_ratio",
+    "vacancy_months_per_year",
 }
 
 

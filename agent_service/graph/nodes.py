@@ -20,6 +20,13 @@ from agent_service.contracts import (
     StructuredWarning,
 )
 from agent_service.config import get_agent_settings
+from agent_service.graph.blackboard import append_blackboard_entry
+from agent_service.graph.committee import build_committee_review
+from agent_service.graph.investment_model import (
+    build_investment_case,
+    calculate_investment_metrics,
+    resolve_investment_assumptions,
+)
 from agent_service.graph.memory_extraction import extract_memory_proposals
 from agent_service.graph.memory_filters import derive_memory_filters
 from agent_service.graph.retrieval_planner import (
@@ -30,7 +37,10 @@ from agent_service.graph.query_understanding import build_query_understanding
 from agent_service.graph.react_controller import decide_react_action
 from agent_service.graph.router import _strip_accents, route_request
 from agent_service.graph.state import AgentGraphState
-from agent_service.graph.synthesis import synthesize_final_answer
+from agent_service.graph.synthesis import (
+    format_investment_scorecard,
+    synthesize_final_answer,
+)
 from agent_service.llm.gemini import GeminiClient
 from agent_service.tools.readiness import build_readiness_snapshot
 
@@ -603,6 +613,52 @@ async def _run_one_specialist(
     return agent, result
 
 
+def _blackboard_from_agent_results(
+    state: AgentGraphState,
+    agent_results: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    update: dict[str, Any] = {
+        "agent_blackboard": state.get("agent_blackboard", {"entries": []})
+    }
+    working_state = {**state, **update}
+    for agent, result in agent_results.items():
+        evidence_ids = [str(value) for value in result.get("evidence_ids_used", [])]
+        confidence = _normalize_blackboard_confidence(result.get("confidence"))
+        update = append_blackboard_entry(
+            {**working_state, **update},
+            author=agent,
+            entry_type="specialist_result",
+            content={
+                "status": result.get("status"),
+                "content": result.get("content", ""),
+                "missing_evidence": result.get("missing_evidence", []),
+                "warnings": [
+                    warning.code if hasattr(warning, "code") else warning
+                    for warning in result.get("warnings", [])
+                ],
+            },
+            evidence_ids=evidence_ids,
+            confidence=confidence,
+            step_name="specialist_agents",
+        )
+        working_state = {**working_state, **update}
+    return update
+
+
+def _normalize_blackboard_confidence(value: Any) -> str:
+    if isinstance(value, str) and value in {"low", "medium", "high"}:
+        return value
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return "medium"
+    if numeric >= 0.75:
+        return "high"
+    if numeric >= 0.45:
+        return "medium"
+    return "low"
+
+
 async def specialist_agents_node(state: AgentGraphState) -> AgentGraphState:
     start_time = time.perf_counter()
     request = state["request"]
@@ -647,15 +703,100 @@ async def specialist_agents_node(state: AgentGraphState) -> AgentGraphState:
         )
 
     agent_results = dict(await asyncio.gather(*specialist_tasks)) if specialist_tasks else {}
+    blackboard_update = _blackboard_from_agent_results(state, agent_results)
     return {
         "agent_results": agent_results,
+        **blackboard_update,
         "trace_steps": _append_trace(
             state,
             "specialist_agents",
             start_time,
-            {"agents_completed": list(agent_results)},
+            {
+                "agents_completed": list(agent_results),
+                "blackboard_entries": len(
+                    blackboard_update.get("agent_blackboard", {}).get("entries", [])
+                ),
+            },
         ),
     }
+
+
+def investment_model_node(state: AgentGraphState) -> AgentGraphState:
+    start_time = time.perf_counter()
+    if "investment_advisor" not in state.get("agents_to_run", []):
+        return {
+            "trace_steps": _append_trace(
+                state,
+                "investment_model",
+                start_time,
+                {"skipped": True, "reason": "investment_advisor_not_selected"},
+            )
+        }
+
+    understanding = state.get("query_understanding") or {}
+    user_inputs = dict(understanding.get("filters") or {})
+    case = build_investment_case(
+        evidence_by_id=state.get("evidence_by_id", {}),
+        evidence_for_agent=state.get("evidence_for_agent", {}),
+        agent_blackboard=state.get("agent_blackboard", {}),
+    )
+    assumptions = resolve_investment_assumptions(
+        case=case,
+        user_inputs=user_inputs,
+        preferences=state["request"].user_preferences,
+    )
+    metrics = calculate_investment_metrics(
+        case=case,
+        assumptions=assumptions,
+    )
+    return {
+        "investment_case": case,
+        "investment_assumptions": assumptions,
+        "investment_metrics": metrics,
+        "trace_steps": _append_trace(
+            state,
+            "investment_model",
+            start_time,
+            {
+                "case_scope": case.get("case_scope"),
+                "metric_keys": list(metrics),
+                "missing_evidence": case.get("missing_evidence", []),
+            },
+        ),
+    }
+
+
+def committee_review_node(state: AgentGraphState) -> AgentGraphState:
+    start_time = time.perf_counter()
+    if "investment_advisor" not in state.get("agents_to_run", []):
+        return {
+            "trace_steps": _append_trace(
+                state,
+                "committee_review",
+                start_time,
+                {"skipped": True, "reason": "investment_advisor_not_selected"},
+            )
+        }
+    review = build_committee_review(
+        investment_case=state.get("investment_case", {}),
+        investment_assumptions=state.get("investment_assumptions", {}),
+        investment_metrics=state.get("investment_metrics", {}),
+        agent_blackboard=state.get("agent_blackboard", {}),
+        warnings=state.get("warnings", []),
+    )
+    return {
+        "committee_review": review,
+        "trace_steps": _append_trace(
+            state,
+            "committee_review",
+            start_time,
+            {
+                "perspective_count": len(review.get("perspectives", [])),
+                "decision": (review.get("recommendation") or {}).get("decision"),
+            },
+        ),
+    }
+
 
 def _is_evidence_assigned_to_agent(
     *,
@@ -750,10 +891,23 @@ async def synthesizer_node(state: AgentGraphState) -> AgentGraphState:
     warnings = _dedupe_warnings(warnings)
     final_response = "\n\n".join(parts) or "Chua co du thong tin de tra loi yeu cau nay."
     suggested_actions = ["So sanh lua chon", "Hoi them ve phap ly", "Xem xu huong khu vuc"]
+    has_committee_review = bool(state.get("committee_review"))
+    if has_committee_review:
+        final_response = format_investment_scorecard(
+            committee_review=state.get("committee_review", {}),
+            investment_assumptions=state.get("investment_assumptions", {}),
+            investment_metrics=state.get("investment_metrics", {}),
+        )
+        suggested_actions = [
+            "Xac nhan tien thue ky vong",
+            "Xac nhan ty le vay va lai suat",
+            "Kiem tra phap ly",
+        ]
     settings = get_agent_settings()
     use_llm_synthesis = (
         settings.AGENT_SPECIALIST_LLM_ENABLED
         and not state.get("force_deterministic", False)
+        and not has_committee_review
     )
     llm_client = GeminiClient() if use_llm_synthesis else None
     synthesis = await synthesize_final_answer(
@@ -826,6 +980,22 @@ def safety_validator_node(state: AgentGraphState) -> AgentGraphState:
     ):
         added_warnings.append("financial_disclaimer_missing")
 
+    committee_review = dict(state.get("committee_review") or {})
+    recommendation = dict(committee_review.get("recommendation") or {})
+    if (
+        "investment_advisor" in agents_to_run
+        and recommendation.get("confidence") == "high"
+        and recommendation.get("required_confirmations")
+    ):
+        recommendation["confidence"] = "medium"
+        committee_review["recommendation"] = recommendation
+        added_warnings.append("committee_high_confidence_with_missing_inputs")
+        final_response = format_investment_scorecard(
+            committee_review=committee_review,
+            investment_assumptions=state.get("investment_assumptions", {}),
+            investment_metrics=state.get("investment_metrics", {}),
+        )
+
     for agent in agents_to_run:
         result = agent_results.get(agent) or {}
         claims = list(result.get("claims") or [])
@@ -854,6 +1024,9 @@ def safety_validator_node(state: AgentGraphState) -> AgentGraphState:
         "sources": sources,
         "suggested_actions": suggested_actions,
         "warnings": warnings,
+        "committee_review": (
+            committee_review if committee_review else state.get("committee_review", {})
+        ),
         "trace_steps": _append_trace(
             state,
             "safety_validator",
