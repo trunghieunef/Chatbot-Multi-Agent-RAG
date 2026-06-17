@@ -272,6 +272,8 @@ export interface ProjectCard {
   updated_at: string | null;
 }
 
+export type ProjectDetail = ProjectCard;
+
 export interface ProjectFilters {
   search?: string;
   city?: string;
@@ -295,6 +297,8 @@ export interface ArticleCard {
   created_at: string | null;
   updated_at: string | null;
 }
+
+export type ArticleDetail = ArticleCard;
 
 export interface ArticleFilters {
   search?: string;

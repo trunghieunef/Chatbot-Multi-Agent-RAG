@@ -4,6 +4,7 @@ import type {
   AdminPipelineReadinessItem,
   AdminTraceListItem,
   ArticleCard,
+  ArticleDetail,
   ArticleFilters,
   ChatFeedbackRequest,
   ChatMessageRequest,
@@ -18,6 +19,7 @@ import type {
   PaginatedResponse,
   PriceByDistrict,
   ProjectCard,
+  ProjectDetail,
   ProjectFilters,
   PropertyTypeCount,
   TokenResponse,
@@ -77,10 +79,18 @@ export async function getProjects(
   return fetchJSON(`${BASE}/projects${buildQuery({ ...filters })}`);
 }
 
+export async function getProjectDetail(id: number): Promise<ProjectDetail> {
+  return fetchJSON(`${BASE}/projects/${id}`);
+}
+
 export async function getArticles(
   filters: ArticleFilters = {}
 ): Promise<PaginatedResponse<ArticleCard>> {
   return fetchJSON(`${BASE}/articles${buildQuery({ ...filters })}`);
+}
+
+export async function getArticleDetail(id: number): Promise<ArticleDetail> {
+  return fetchJSON(`${BASE}/articles/${id}`);
 }
 
 /* ─── Market ─── */

@@ -105,7 +105,7 @@ function articleSummary(article: ArticleCard): string {
 }
 
 function ArticleCardItem({ article }: { article: ArticleCard }) {
-  const href = article.url || `/tin-tuc?article=${article.id}`;
+  const href = `/tin-tuc/${article.id}`;
 
   return (
     <article className="group rounded-lg border border-border bg-card p-4 shadow-sm transition-all hover:border-primary/40 hover:shadow-md">
@@ -131,14 +131,12 @@ function ArticleCardItem({ article }: { article: ArticleCard }) {
         <span className="text-xs text-muted-foreground">
           {article.source || "batdongsan.com"}
         </span>
-        <a
+        <Link
           href={href}
-          target={article.url ? "_blank" : undefined}
-          rel={article.url ? "noreferrer" : undefined}
           className="inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline"
         >
           Đọc tiếp <ArrowRight size={14} />
-        </a>
+        </Link>
       </div>
     </article>
   );
@@ -325,14 +323,12 @@ export default function NewsPage() {
                   <p className="mt-3 line-clamp-3 text-sm leading-6 text-muted-foreground">
                     {articleSummary(featured)}
                   </p>
-                  <a
-                    href={featured.url || `/tin-tuc?article=${featured.id}`}
-                    target={featured.url ? "_blank" : undefined}
-                    rel={featured.url ? "noreferrer" : undefined}
+                  <Link
+                    href={`/tin-tuc/${featured.id}`}
                     className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline"
                   >
                     Đọc bài viết <ArrowRight size={14} />
-                  </a>
+                  </Link>
                 </div>
                 <div className="rounded-lg bg-muted p-4">
                   <p className="text-xs font-semibold uppercase text-muted-foreground">

@@ -95,7 +95,7 @@ function fieldLabel(value: string | null | undefined, fallback = "Đang cập nh
 }
 
 function ProjectCardItem({ project }: { project: ProjectCard }) {
-  const href = project.url || `/du-an?project=${project.slug || project.id}`;
+  const href = `/du-an/${project.id}`;
 
   return (
     <article className="group rounded-lg border border-border bg-card p-4 shadow-sm transition-all hover:border-primary/40 hover:shadow-md">
@@ -157,14 +157,12 @@ function ProjectCardItem({ project }: { project: ProjectCard }) {
         </div>
       )}
 
-      <a
+      <Link
         href={href}
-        target={project.url ? "_blank" : undefined}
-        rel={project.url ? "noreferrer" : undefined}
         className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline"
       >
         Xem dự án <ArrowRight size={14} />
-      </a>
+      </Link>
     </article>
   );
 }
