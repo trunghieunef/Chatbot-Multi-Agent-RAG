@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.database import async_session, init_db
-from app.routers import admin, auth, chat, listings, market, metrics, preferences
+from app.routers import admin, articles, auth, chat, listings, market, metrics, preferences, projects
 from app.services.agent_service.observability import mark_stale_eval_runs_failed
 
 
@@ -71,6 +71,8 @@ app.add_middleware(
 # ─── Routers ───────────────────────────────────────────────────
 app.include_router(listings.router, prefix="/api/v1")
 app.include_router(market.router, prefix="/api/v1")
+app.include_router(projects.router, prefix="/api/v1")
+app.include_router(articles.router, prefix="/api/v1")
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(chat.router, prefix="/api/v1")
 app.include_router(preferences.router, prefix="/api/v1")
