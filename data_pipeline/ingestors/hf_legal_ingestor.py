@@ -165,13 +165,41 @@ def fetch_content_for_ids(
     *,
     scan_limit: int | None = None,
 ) -> list[dict[str, Any]]:
-    """Load content config, keep only rows whose id is in *doc_ids*."""
+    """Load content config, keep only rows whose id is in *doc_ids*.
+
+    Tries streaming first; falls back to non‑streaming when pyarrow cannot
+    cast ``large_string`` columns (a known datasets / pyarrow version issue).
+    """
     try:
         from datasets import load_dataset
     except ImportError as exc:
         raise RuntimeError("Missing dependency datasets for Hugging Face ingestion.") from exc
 
-    ds = load_dataset(DATASET_NAME, "content", split="data", streaming=True)
+    def _iter_streaming() -> list[dict[str, Any]]:
+        ds = load_dataset(DATASET_NAME, "content", split="data", streaming=True)
+        rows: list[dict[str, Any]] = []
+        scanned = 0
+        for row in ds:
+            if scan_limit is not None and scanned >= scan_limit:
+                break
+            scanned += 1
+            row_dict = dict(row)
+            row_id = str(_clean_text(row_dict.get("id") or ""))
+            if row_id in doc_ids:
+                rows.append(row_dict)
+        return rows
+
+    # 1. Try streaming (fast, memory‑light but may hit large_string bug)
+    try:
+        return _iter_streaming()
+    except Exception as exc:
+        msg = str(exc)
+        if "large_string" not in msg and "ArrowInvalid" not in msg:
+            raise
+        print(f"[hf_legal] streaming failed ({exc}), falling back to non‑streaming…", file=sys.stderr)
+
+    # 2. Fallback: non‑streaming – loads all 179k rows once then filters
+    ds = load_dataset(DATASET_NAME, "content", split="data", streaming=False)
     rows: list[dict[str, Any]] = []
     scanned = 0
     for row in ds:
