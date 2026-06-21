@@ -31,31 +31,28 @@ export default function HomePage() {
   return (
     <>
       {/* ─── Hero ──────────────────────────────────────────── */}
-      <section className="relative overflow-hidden bg-gradient-to-br from-slate-900 via-slate-800 to-primary/20">
-        {/* Decorative blobs */}
-        <div className="absolute -top-20 -left-20 h-72 w-72 rounded-full bg-primary/20 blur-3xl" />
-        <div className="absolute -bottom-10 right-0 h-60 w-60 rounded-full bg-accent/20 blur-3xl" />
-
+      <section className="relative overflow-hidden bg-gradient-to-br from-accent-light via-background to-card">
+        <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-background/80 to-transparent" />
         <div className="relative mx-auto max-w-7xl px-4 py-16 sm:py-24">
           <div className="text-center mb-10 animate-fade-in-up">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-4 py-1.5 text-xs font-medium text-white/80 backdrop-blur mb-4">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-card/80 px-4 py-1.5 text-xs font-semibold text-accent shadow-sm ring-1 ring-border/70 backdrop-blur mb-4">
               <Sparkles size={12} /> Nền tảng BĐS tích hợp AI
             </span>
-            <h1 className="text-3xl sm:text-5xl font-extrabold text-white leading-tight mb-4">
+            <h1 className="text-3xl sm:text-5xl font-extrabold text-accent leading-tight mb-4">
               Tìm bất động sản
               <br />
-              <span className="bg-gradient-to-r from-red-400 to-orange-300 bg-clip-text text-transparent">
+              <span className="text-accent">
                 phù hợp chỉ trong vài giây
               </span>
             </h1>
-            <p className="mx-auto max-w-xl text-sm sm:text-base text-white/60">
+            <p className="mx-auto max-w-xl text-sm sm:text-base font-medium text-accent/80">
               Hơn {stats?.total_listings?.toLocaleString() || "---"} tin đăng từ
               khắp Việt Nam. Tư vấn thông minh bởi chatbot AI đa tác nhân.
             </p>
           </div>
 
           {/* Search Panel */}
-          <div className="mx-auto max-w-2xl rounded-2xl bg-white/10 backdrop-blur-xl border border-white/10 p-5 shadow-2xl animate-fade-in-up" style={{ animationDelay: "200ms" }}>
+          <div className="mx-auto max-w-2xl rounded-2xl bg-card/95 backdrop-blur-xl border border-white/40 p-5 shadow-2xl animate-fade-in-up" style={{ animationDelay: "200ms" }}>
             {/* Tabs */}
             <div className="flex gap-1 mb-4">
               {["Nhà đất bán", "Nhà đất cho thuê"].map((tab, i) => (
@@ -64,8 +61,8 @@ export default function HomePage() {
                   href={i === 0 ? "/nha-dat-ban" : "/nha-dat-cho-thue"}
                   className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
                     i === 0
-                      ? "bg-primary text-white"
-                      : "text-white/60 hover:text-white hover:bg-white/10"
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted"
                   }`}
                 >
                   {tab}
@@ -78,13 +75,13 @@ export default function HomePage() {
               <div className="relative flex-1">
                 <Search
                   size={16}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40"
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
                 />
                 <input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Tìm theo khu vực, dự án, đường phố..."
-                  className="w-full rounded-lg bg-white/10 border border-white/10 pl-10 pr-4 py-3 text-sm text-white placeholder:text-white/40 outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-colors"
+                  className="w-full rounded-lg bg-background border border-border pl-10 pr-4 py-3 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-colors"
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && search.trim()) {
                       window.location.href = `/nha-dat-ban?search=${encodeURIComponent(search)}`;
@@ -94,7 +91,7 @@ export default function HomePage() {
               </div>
               <Link
                 href={`/nha-dat-ban${search ? `?search=${encodeURIComponent(search)}` : ""}`}
-                className="rounded-lg bg-primary px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-primary-hover flex items-center gap-1.5"
+                className="rounded-lg bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary-hover flex items-center gap-1.5"
               >
                 Tìm kiếm
               </Link>
@@ -129,13 +126,13 @@ export default function HomePage() {
             ].map((s, i) => (
               <div
                 key={i}
-                className="rounded-xl bg-white/5 backdrop-blur border border-white/10 px-4 py-3 text-center"
+                className="rounded-xl bg-card/70 backdrop-blur border border-border/70 px-4 py-3 text-center shadow-sm"
               >
                 <div className="flex justify-center text-primary mb-1">
                   {s.icon}
                 </div>
-                <p className="text-lg font-bold text-white">{s.value}</p>
-                <p className="text-[11px] text-white/50">{s.label}</p>
+                <p className="text-lg font-bold text-accent">{s.value}</p>
+                <p className="text-[11px] text-muted-foreground">{s.label}</p>
               </div>
             ))}
           </div>
@@ -239,8 +236,8 @@ export default function HomePage() {
       {/* ─── CTA Section ───────────────────────────────────── */}
       <section className="py-16">
         <div className="mx-auto max-w-7xl px-4">
-          <div className="rounded-2xl bg-gradient-to-r from-slate-900 to-slate-800 p-8 sm:p-12 text-center relative overflow-hidden">
-            <div className="absolute top-0 right-0 h-40 w-40 rounded-full bg-primary/20 blur-3xl" />
+          <div className="rounded-2xl bg-gradient-to-r from-accent to-primary p-8 sm:p-12 text-center relative overflow-hidden">
+            <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-background/20 to-transparent" />
             <div className="relative">
               <h2 className="text-2xl sm:text-3xl font-bold text-white mb-3">
                 Chatbot AI tư vấn bất động sản 24/7

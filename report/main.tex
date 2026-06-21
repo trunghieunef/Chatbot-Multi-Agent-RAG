@@ -10,7 +10,7 @@
 \begin{document}
 
 \fontsize{13}{16}\selectfont  % Cỡ chữ mặc định 13pt
-\pagestyle{empty}             % Không đánh số trang
+\pagestyle{empty}             % Không đánh số trang cho front matter
 
 % ========== FRONT MATTER ==========
 \input{contents/01-cover}
@@ -21,6 +21,9 @@
 \input{contents/06-danhmuc}
 
 % ========== GIỚI THIỆU (không đánh số chương) ==========
+\pagestyle{plain}             % Đánh số trang từ đây trở đi
+\pagenumbering{arabic}        % Số Ả Rập: 1, 2, 3, ...
+\setcounter{page}{1}          % Bắt đầu từ trang 1
 \input{contents/00-gioithieu}
 
 % ========== MAIN CONTENT (Các chương) ==========
