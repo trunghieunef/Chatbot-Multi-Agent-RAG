@@ -48,6 +48,9 @@ Thumbs.db
 
 # ─── Legal knowledge base (large PDFs and ingestion logs) ────
 data/knowledge/raw/*
+
+# ─── LaTeX Report ───────────────────────────────────────────
+report/
 !data/knowledge/raw/.gitkeep
 data/knowledge/ingested/*
 !data/knowledge/ingested/.gitkeep
