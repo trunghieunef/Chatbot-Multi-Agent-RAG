@@ -1,6 +1,8 @@
 \babel@toc {vietnamese}{}\relax 
 \addvspace {10\p@ }
 \addvspace {10\p@ }
-\contentsline {table}{\numberline {2.1}{\ignorespaces Các yêu cầu phi chức năng của hệ thống}}{38}{table.2.1}%
+\contentsline {table}{\numberline {2.1}{\ignorespaces Các yêu cầu phi chức năng của hệ thống}}{32}{table.2.1}%
 \addvspace {10\p@ }
-\contentsline {table}{\numberline {3.1}{\ignorespaces Danh sách API endpoints chính của hệ thống (tiền tố mặc định: \texttt {/api/v1})}}{69}{table.3.1}%
+\contentsline {table}{\numberline {3.1}{\ignorespaces Các ca kiểm thử chính theo nhóm chức năng}}{63}{table.3.1}%
+\contentsline {table}{\numberline {3.2}{\ignorespaces Chỉ tiêu hiệu năng dự kiến}}{65}{table.3.2}%
+\contentsline {table}{\numberline {3.3}{\ignorespaces Danh sách API endpoints chính của hệ thống (tiền tố mặc định: \texttt {/api/v1})}}{79}{table.3.3}%

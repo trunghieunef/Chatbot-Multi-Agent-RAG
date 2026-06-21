@@ -215,6 +215,39 @@ services:
       redis:
         condition: service_healthy
 
+  # ================================================================
+  # Nginx Reverse Proxy + SSL
+  # ================================================================
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: realestate_nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+    volumes:
+      - ./infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./infra/nginx/docker-entrypoint.sh:/docker-entrypoint.sh:ro
+      - ./infra/nginx/certbot/www:/var/www/certbot:ro
+      - ./infra/nginx/certbot/conf:/etc/letsencrypt:ro
+    entrypoint: ["/bin/sh", "/docker-entrypoint.sh"]
+    depends_on:
+      - frontend
+      - backend
+    restart: unless-stopped
+
+  certbot:
+    image: certbot/certbot:latest
+    container_name: realestate_certbot
+    volumes:
+      - ./infra/nginx/certbot/www:/var/www/certbot
+      - ./infra/nginx/certbot/conf:/etc/letsencrypt
+    entrypoint: >
+      /bin/sh -c "trap exit TERM; while :; do sleep 12h & wait $${!}; certbot renew --quiet; done"
+    restart: unless-stopped
+
 volumes:
   pgdata:
   redisdata:

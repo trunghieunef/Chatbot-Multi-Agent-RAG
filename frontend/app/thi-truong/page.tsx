@@ -29,8 +29,8 @@ import type {
 } from "@/lib/types";
 
 const COLORS = [
-  "#e03c31", "#1e40af", "#10b981", "#f59e0b", "#8b5cf6",
-  "#ec4899", "#06b6d4", "#84cc16", "#f97316", "#6366f1",
+  "#8fb7d9", "#6fa0ca", "#d7e8f5", "#244761", "#dfd1bd",
+  "#bba98f", "#695f54", "#9fcfc3", "#e9c17d", "#8294a3",
 ];
 
 export default function MarketPage() {

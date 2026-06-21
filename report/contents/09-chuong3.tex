@@ -3,51 +3,51 @@
 % ============================================================
 \chapter{TRIỂN KHAI VÀ KIỂM THỬ}
 
-Chương này trình bày chi tiết quá trình triển khai hệ thống lên môi trường vận hành và chiến lược kiểm thử toàn diện được áp dụng trong đồ án. Phần đầu mô tả kiến trúc triển khai với Docker Compose, cấu hình từng dịch vụ, quy trình xây dựng và chạy hệ thống. Phần tiếp theo trình bày chiến lược kiểm thử đa tầng: từ kiểm thử đơn vị, kiểm thử tích hợp đến kiểm thử hệ thống và kiểm thử chấp nhận. Cuối cùng, chương tổng hợp kết quả kiểm thử, các vấn đề đã phát hiện và hướng khắc phục.
+Chương này trình bày chi tiết quá trình triển khai hệ thống lên môi trường vận hành và chiến lược kiểm thử toàn diện được áp dụng trong đồ án. Phần đầu mô tả kiến trúc triển khai với Docker Compose cho sáu dịch vụ, cấu hình chi tiết từng dịch vụ, quy trình xây dựng và chạy hệ thống. Phần tiếp theo trình bày chiến lược kiểm thử đa tầng: từ kiểm thử đơn vị, kiểm thử tích hợp đến kiểm thử hệ thống. Cuối cùng, chương tổng hợp kết quả kiểm thử, các vấn đề đã phát hiện và hướng khắc phục.
 
 \section{Triển khai hệ thống với Docker}
 
 \subsection{Kiến trúc triển khai}
 
-Hệ thống được triển khai theo mô hình container hóa với Docker Compose, bao gồm 5 service chính hoạt động trong cùng một mạng nội bộ (internal network). Mỗi service được đóng gói trong một Docker image riêng, đảm bảo tính nhất quán giữa môi trường phát triển và môi trường vận hành. Hình~\ref{fig:docker-architecture} mô tả tổng quan kiến trúc triển khai.
+Hệ thống được triển khai theo mô hình container hóa với Docker Compose, bao gồm 6 service chính hoạt động trong cùng một mạng nội bộ (internal network). Mỗi service được đóng gói trong một Docker image riêng, đảm bảo tính nhất quán giữa môi trường phát triển và môi trường vận hành. Hình~\ref{fig:docker-architecture} mô tả tổng quan kiến trúc triển khai.
 
 \begin{figure}[H]
     \centering
-    % Sơ đồ kiến trúc Docker triển khai
-    \begin{tabular}{|c|c|c|c|c|}
+    \begin{tabular}{|c|c|c|c|c|c|}
         \hline
-        \multicolumn{5}{|c|}{\textbf{Docker Compose -- Nền tảng Tư vấn Bất động sản}} \\
+        \multicolumn{6}{|c|}{\textbf{Docker Compose -- Nền tảng Tư vấn Bất động sản}} \\
         \hline
-        \textbf{Giao diện} & \textbf{Máy chủ} & \textbf{Dịch vụ Tác tử} & \textbf{PostgreSQL} & \textbf{Redis} \\
-        Next.js 16 & FastAPI & FastAPI + LangGraph & 16 + pgvector & 7 Alpine \\
-        Cổng 3000 & Cổng 8000 & Cổng 8100 & Cổng 5432 & Cổng 6379 \\
+        \textbf{Frontend} & \textbf{Backend} & \textbf{Agent Svc} & \textbf{Pipeline} & \textbf{PostgreSQL} & \textbf{Redis} \\
+        Next.js 16 & FastAPI & FastAPI+LangGraph & FastAPI & 16 + pgvector & 7 Alpine \\
+        Cổng 3000 & Cổng 8000 & Cổng 8100 & Cổng 8200 & Cổng 5432 & Cổng 6379 \\
         \hline
-        \multicolumn{5}{|c|}{\textbf{Mạng nội bộ: realestate\_network}} \\
+        \multicolumn{6}{|c|}{\textbf{Mạng nội bộ: realestate\_network}} \\
         \hline
-        \multicolumn{5}{|c|}{\textbf{Ổ đĩa: pgdata, redisdata}} \\
+        \multicolumn{6}{|c|}{\textbf{Ổ đĩa: pgdata, redisdata}} \\
         \hline
     \end{tabular}
-    \caption{Kiến trúc triển khai Docker Compose}
+    \caption{Kiến trúc triển khai Docker Compose với 6 dịch vụ}
     \label{fig:docker-architecture}
 \end{figure}
 
 \subsection{Cấu hình Docker Compose}
 
-Toàn bộ hệ thống được định nghĩa trong file \texttt{docker-compose.yml} tại thư mục gốc của dự án. Cấu hình này đảm bảo:
+Toàn bộ hệ thống được định nghĩa trong file \texttt{docker-compose.yml} tại thư mục gốc. Cấu hình này đảm bảo:
 
 \begin{itemize}
-    \item \textbf{Khởi động có thứ tự:} Các dịch vụ được khởi động theo đúng thứ tự phụ thuộc. PostgreSQL và Redis khởi động trước, sau đó đến Dịch vụ Tác tử, rồi Máy chủ Dịch vụ, và cuối cùng là Giao diện người dùng. Cơ chế phụ thuộc kết hợp với kiểm tra trạng thái đảm bảo dịch vụ chỉ khởi động khi các dịch vụ phụ thuộc đã sẵn sàng.
-    
-    \item \textbf{Kiểm tra trạng thái:} Mỗi dịch vụ được cấu hình kiểm tra trạng thái riêng:
+    \item \textbf{Khởi động có thứ tự:} Các dịch vụ khởi động theo đúng thứ tự phụ thuộc. PostgreSQL và Redis khởi động trước, sau đó đến Pipeline Worker và Agent Service, rồi Backend API, và cuối cùng là Frontend. Cơ chế \texttt{depends\_on} kết hợp với \texttt{condition: service\_healthy} đảm bảo dịch vụ chỉ khởi động khi các phụ thuộc đã sẵn sàng.
+
+    \item \textbf{Kiểm tra trạng thái (Healthcheck):} Mỗi dịch vụ được cấu hình healthcheck riêng:
     \begin{itemize}
-        \item \textbf{PostgreSQL:} \texttt{pg\_isready -U admin -d realestate} -- kiểm tra định kỳ mỗi 10 giây, tối đa 5 lần thử.
-        \item \textbf{Redis:} \texttt{redis-cli ping} -- kiểm tra định kỳ mỗi 10 giây, tối đa 5 lần thử.
-        \item \textbf{Dịch vụ Tác tử:} Gọi \texttt{/internal/agent/health} với khóa nội bộ -- kiểm tra mỗi 10 giây, tối đa 12 lần thử, có 30 giây khởi động ban đầu.
+        \item \textbf{PostgreSQL:} \texttt{pg\_isready -U admin -d realestate} -- kiểm tra mỗi 10 giây, tối đa 5 lần.
+        \item \textbf{Redis:} \texttt{redis-cli ping} -- kiểm tra mỗi 10 giây, tối đa 5 lần.
+        \item \textbf{Agent Service:} Gọi \texttt{/internal/agent/health} với internal key -- kiểm tra mỗi 10 giây, tối đa 12 lần, 30 giây khởi động ban đầu (cho phép tải mô hình BGE-M3 $\sim$2GB).
+        \item \textbf{Pipeline Worker:} Gọi \texttt{/internal/pipeline/health} -- kiểm tra mỗi 10 giây, tối đa 12 lần, 30 giây khởi động.
     \end{itemize}
-    
-    \item \textbf{Quản lý dữ liệu bền vững:} Hai ổ đĩa Docker được tạo để lưu trữ dữ liệu bền vững: \texttt{pgdata} lưu toàn bộ dữ liệu PostgreSQL (bao gồm cả dữ liệu quan hệ và chỉ mục véc-tơ) và \texttt{redisdata} lưu dữ liệu bộ nhớ đệm của Redis. Các ổ đĩa này tồn tại độc lập với vòng đời vùng chứa, đảm bảo dữ liệu không bị mất khi vùng chứa được tạo lại.
-    
-    \item \textbf{Biến môi trường:} Tất cả cấu hình nhạy cảm được truyền qua biến môi trường từ tệp \texttt{.env}, không được gán cứng trong tệp cấu hình Docker.
+
+    \item \textbf{Quản lý dữ liệu bền vững:} Hai ổ đĩa Docker: \texttt{pgdata} (toàn bộ dữ liệu PostgreSQL + chỉ mục HNSW) và \texttt{redisdata} (dữ liệu cache Redis). Các ổ đĩa tồn tại độc lập với vòng đời container.
+
+    \item \textbf{Biến môi trường:} Tất cả cấu hình nhạy cảm được truyền qua biến môi trường từ tệp \texttt{.env}, không được gán cứng trong cấu hình Docker.
 \end{itemize}
 
 \subsection{Cấu hình chi tiết từng dịch vụ}
@@ -68,7 +68,7 @@ postgres:
     - "5432:5432"
 \end{verbatim}
 
-PostgreSQL được triển khai với image \texttt{pgvector/pgvector:pg16}, tích hợp sẵn extension pgvector cho phép lưu trữ và tìm kiếm vector embedding. Database mặc định được đặt tên là \texttt{realestate} với user \texttt{admin}. Extension pgvector được tự động kích hoạt thông qua SQLAlchemy trong quá trình khởi tạo schema (hàm \texttt{init\_db()} trong \texttt{backend/app/database.py}).
+PostgreSQL được triển khai với image \texttt{pgvector/pgvector:pg16}, tích hợp sẵn extension pgvector. Extension được tự động kích hoạt qua SQLAlchemy trong quá trình khởi tạo schema (hàm \texttt{init\_db()}).
 
 \subsubsection{Redis}
 
@@ -82,7 +82,7 @@ redis:
     - redisdata:/data
 \end{verbatim}
 
-Redis sử dụng image Alpine nhẹ (chỉ khoảng 30MB), phù hợp với môi trường container hóa. Redis đảm nhận hai vai trò: caching embedding vector và caching kết quả hybrid search. Dữ liệu cache được lưu bền vững qua volume \texttt{redisdata}.
+Redis sử dụng image Alpine nhẹ ($\sim$30MB). Đảm nhận caching embedding vector và kết quả hybrid search.
 
 \subsubsection{Agent Service}
 
@@ -104,13 +104,28 @@ agent-service:
     AGENT_INTERNAL_KEY: ${AGENT_INTERNAL_KEY}
     GEMINI_API_KEY: ${GEMINI_API_KEY}
     GEMINI_MODEL: gemini-2.0-flash
+    GEMINI_JUDGE_MODEL: gemini-2.0-flash
+    HF_EMBEDDING_MODEL: BAAI/bge-m3
 \end{verbatim}
 
-Dịch vụ Tác tử được xây dựng từ Dockerfile riêng trong thư mục \texttt{agent\_service/}. Dockerfile dựa trên Python 3.12-slim, cài đặt các thư viện cần thiết (bao gồm LangGraph, sentence-transformers, httpx) và chạy ứng dụng qua Uvicorn trên cổng 8100. Biến môi trường \texttt{PYTHONPATH} được thiết lập để Dịch vụ Tác tử có thể nạp các mô-đun từ \texttt{backend/} (mô hình, cơ sở dữ liệu).
+Dịch vụ Tác tử được xây dựng từ Dockerfile trong \texttt{agent\_service/}, dựa trên Python 3.12-slim. Dockerfile cài đặt LangGraph, sentence-transformers, httpx và các thư viện cần thiết. Biến môi trường \texttt{PYTHONPATH} được thiết lập để Agent Service có thể nạp các mô-đun từ \texttt{backend/} (models, database).
 
-Điểm đặc biệt trong cấu hình Dịch vụ Tác tử là khoảng thời gian khởi động 30 giây trong kiểm tra trạng thái -- khoảng thời gian này cho phép dịch vụ tải mô hình véc-tơ BGE-M3 (dung lượng khoảng 2GB) trước khi bắt đầu nhận yêu cầu kiểm tra.
+Điểm đặc biệt: healthcheck có \texttt{start\_period: 30s} để cho phép tải mô hình BGE-M3 ($\sim$2GB) trước khi nhận request.
 
-\subsubsection{Máy chủ Dịch vụ}
+Các biến môi trường cấu hình chính của Agent Service:
+\begin{itemize}
+    \item \texttt{AGENT\_ROUTER\_MODE}: \texttt{rule} | \texttt{llm} | \texttt{hybrid} -- cơ chế định tuyến.
+    \item \texttt{AGENT\_QUERY\_REWRITE\_ENABLED}: Bật/tắt LLM query rewriting.
+    \item \texttt{AGENT\_SPECIALIST\_LLM\_ENABLED}: Bật/tắt LLM specialist agents.
+    \item \texttt{AGENT\_REACT\_ENABLED}: Bật/tắt cơ chế ReAct.
+    \item \texttt{AGENT\_REACT\_MAX\_ITERATIONS}: Số vòng lặp ReAct tối đa (mặc định 2).
+    \item \texttt{AGENT\_REQUEST\_TIMEOUT\_SECONDS}: Timeout cho request (mặc định 45s).
+    \item \texttt{AGENT\_LLM\_TIMEOUT\_SECONDS}: Timeout cho LLM call (mặc định 30s).
+    \item \texttt{AGENT\_LLM\_MONTHLY\_BUDGET\_USD}: Ngân sách LLM hàng tháng (mặc định \$100).
+    \item \texttt{AGENT\_LLM\_COST\_TRACKING\_ENABLED}: Bật/tắt theo dõi chi phí.
+\end{itemize}
+
+\subsubsection{Backend API}
 
 \begin{verbatim}
 backend:
@@ -130,16 +145,41 @@ backend:
     DATABASE_URL: postgresql+asyncpg://admin:...@postgres:5432/realestate
     REDIS_URL: redis://redis:6379/0
     AGENT_SERVICE_URL: http://agent-service:8100
-    CHATBOT_AGENT_SERVICE_ENABLED: ${CHATBOT_AGENT_SERVICE_ENABLED:-false}
+    AGENT_INTERNAL_KEY: ${AGENT_INTERNAL_KEY}
+    CHATBOT_AGENT_SERVICE_ENABLED: ${CHATBOT_AGENT_SERVICE_ENABLED:-true}
   volumes:
     - ./data:/app/data
 \end{verbatim}
 
-Máy chủ Dịch vụ sử dụng Dockerfile trong thư mục \texttt{backend/}, dựa trên Python 3.12-slim với các gói phụ thuộc hệ thống cho asyncpg và bcrypt. Máy chủ chỉ khởi động sau khi cả PostgreSQL, Redis và Dịch vụ Tác tử đều đã sẵn sàng.
+Backend API chỉ khởi động sau khi PostgreSQL, Redis và Agent Service đều đã sẵn sàng. Biến \texttt{CHATBOT\_AGENT\_SERVICE\_ENABLED} cho phép vận hành linh hoạt: khi bật, Backend chuyển yêu cầu chatbot sang Agent Service; khi tắt, sử dụng pipeline nội bộ. Volume \texttt{./data:/app/data} cho phép Backend truy cập dữ liệu CSV.
 
-Biến \texttt{CHATBOT\_AGENT\_SERVICE\_ENABLED} (mặc định: false) cho phép vận hành linh hoạt: khi bật, Máy chủ sẽ chuyển các yêu cầu chatbot sang Dịch vụ Tác tử để xử lý nâng cao; khi tắt, Máy chủ sử dụng đường ống nội bộ. Ổ đĩa \texttt{./data:/app/data} cho phép Máy chủ truy cập dữ liệu CSV và các tệp cấu hình từ máy chủ.
+\subsubsection{Pipeline Worker}
 
-\subsubsection{Giao diện người dùng}
+\begin{verbatim}
+pipeline-worker:
+  build:
+    context: .
+    dockerfile: pipeline_worker/Dockerfile
+  container_name: realestate_pipeline_worker
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  env_file: .env
+  environment:
+    DATABASE_URL: postgresql+asyncpg://admin:...@postgres:5432/realestate
+    REDIS_URL: redis://redis:6379/0
+    AGENT_INTERNAL_KEY: ${AGENT_INTERNAL_KEY}
+    GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+    HF_EMBEDDING_MODEL: BAAI/bge-m3
+  volumes:
+    - ./data:/app/data
+\end{verbatim}
+
+Pipeline Worker là dịch vụ chuyên trách các tác vụ xử lý dữ liệu nặng, tách biệt khỏi Backend và Agent Service. Worker chạy các module Python (crawler, data\_pipeline) dưới dạng subprocess, đảm bảo isolation về tài nguyên. Volume \texttt{./data:/app/data} cho phép Worker đọc/ghi dữ liệu CSV và tài liệu pháp lý.
+
+\subsubsection{Frontend}
 
 \begin{verbatim}
 frontend:
@@ -156,13 +196,19 @@ frontend:
     - backend
 \end{verbatim}
 
-Giao diện người dùng được xây dựng từ Dockerfile trong thư mục \texttt{frontend/}, sử dụng Node.js 22 Alpine. Quá trình xây dựng gồm hai bước: \texttt{npm ci} để cài đặt gói phụ thuộc và \texttt{npm run build} để tạo bản dựng sản xuất. Giao diện chạy ở chế độ sản xuất (\texttt{npm run start}) trên cổng 3000.
-
-Hai tham số xây dựng quan trọng được truyền vào: \texttt{INTERNAL\_API\_URL} là địa chỉ nội bộ để Next.js gọi Máy chủ Dịch vụ phía máy chủ (dùng trong Thành phần Máy chủ và kết xuất phía máy chủ), và \texttt{NEXT\_PUBLIC\_API\_URL} là địa chỉ công khai để phía trình duyệt gọi API.
+Frontend được xây dựng từ Node.js 22 Alpine. Quá trình build: \texttt{npm ci} $\rightarrow$ \texttt{npm run build}. Chạy ở chế độ production (\texttt{npm run start}) trên cổng 3000. Hai tham số build: \texttt{INTERNAL\_API\_URL} (địa chỉ nội bộ cho SSR) và \texttt{NEXT\_PUBLIC\_API\_URL} (địa chỉ công khai cho browser).
 
 \subsection{Mạng nội bộ và giao tiếp giữa các dịch vụ}
 
-Các dịch vụ trong Docker Compose giao tiếp với nhau thông qua tên dịch vụ (DNS nội bộ của Docker). Cụ thể: Giao diện gọi Máy chủ qua \texttt{http://backend:8000} (cho kết xuất phía máy chủ) và qua \texttt{/api/v1} (cho phía trình duyệt, được Next.js chuyển tiếp); Máy chủ gọi Dịch vụ Tác tử qua \texttt{http://agent-service:8100/internal/agent/chat} với khóa nội bộ trong tiêu đề \texttt{X-Internal-Agent-Key}; Máy chủ kết nối đến PostgreSQL qua chuỗi kết nối bất đồng bộ; cả Máy chủ và Dịch vụ Tác tử đều kết nối đến Redis.
+Các dịch vụ giao tiếp qua tên dịch vụ (DNS nội bộ của Docker):
+
+\begin{itemize}
+    \item \textbf{Frontend $\rightarrow$ Backend:} \texttt{http://backend:8000} (SSR) và \texttt{/api/v1} (browser, qua Next.js proxy).
+    \item \textbf{Backend $\rightarrow$ Agent Service:} \texttt{http://agent-service:8100/internal/agent/chat} với header \texttt{X-Internal-Agent-Key}.
+    \item \textbf{Backend $\rightarrow$ Pipeline Worker:} \texttt{http://pipeline-worker:8200/internal/pipeline/*} với internal key.
+    \item \textbf{Tất cả dịch vụ $\rightarrow$ PostgreSQL:} \texttt{postgresql+asyncpg://admin:...@postgres:5432/realestate}.
+    \item \textbf{Tất cả dịch vụ $\rightarrow$ Redis:} \texttt{redis://redis:6379/0}.
+\end{itemize}
 
 \subsection{Quy trình triển khai}
 
@@ -189,10 +235,15 @@ CORS_ORIGINS=http://localhost:3000
 # AI/ML
 GEMINI_API_KEY=<google_gemini_api_key>
 COHERE_API_KEY=<cohere_api_key>  # Optional
+HF_EMBEDDING_MODEL=BAAI/bge-m3
 
 # Agent Service
 AGENT_INTERNAL_KEY=<internal_key>
-CHATBOT_AGENT_SERVICE_ENABLED=false  # true de su dung Agent Service
+AGENT_ROUTER_MODE=hybrid
+AGENT_SPECIALIST_LLM_ENABLED=true
+AGENT_QUERY_REWRITE_ENABLED=true
+AGENT_REACT_ENABLED=true
+CHATBOT_AGENT_SERVICE_ENABLED=true
 
 # Frontend
 NEXT_PUBLIC_API_URL=/api/v1
@@ -200,86 +251,435 @@ NEXT_PUBLIC_API_URL=/api/v1
 
 \subsubsection{Xây dựng và khởi động}
 
-Quy trình triển khai đầy đủ gồm các bước sau:
-
 \begin{enumerate}
     \item \textbf{Xây dựng ảnh:}
     \begin{verbatim}
     docker-compose build
     \end{verbatim}
-    Lệnh này xây dựng ảnh Docker cho Máy chủ Dịch vụ, Dịch vụ Tác tử và Giao diện người dùng từ Dockerfile tương ứng. PostgreSQL và Redis sử dụng ảnh có sẵn từ Docker Hub.
-    
+    Xây dựng ảnh Docker cho Backend, Agent Service, Pipeline Worker và Frontend.
+
     \item \textbf{Khởi động toàn bộ hệ thống:}
     \begin{verbatim}
     docker-compose up -d
     \end{verbatim}
-    Docker Compose sẽ khởi động các dịch vụ theo thứ tự: PostgreSQL, Redis, Dịch vụ Tác tử, Máy chủ Dịch vụ, Giao diện người dùng. Tham số \texttt{-d} chạy ở chế độ nền.
-    
-    \item \textbf{Khởi động riêng các dịch vụ hạ tầng (cho phát triển):}
+    Docker Compose khởi động các dịch vụ theo thứ tự: PostgreSQL, Redis $\rightarrow$ Pipeline Worker, Agent Service $\rightarrow$ Backend $\rightarrow$ Frontend.
+
+    \item \textbf{Khởi động riêng hạ tầng (cho phát triển):}
     \begin{verbatim}
     docker-compose up -d postgres redis
     \end{verbatim}
-    Khi phát triển, chỉ cần chạy PostgreSQL và Redis qua Docker, còn Máy chủ và Giao diện chạy trực tiếp trên máy chủ để thuận tiện cho việc gỡ lỗi. Máy chủ: \texttt{uvicorn app.main:app --reload --port 8000}. Giao diện: \texttt{npm run dev}.
-    
-    \item \textbf{Khởi động lại một dịch vụ sau khi thay đổi mã nguồn:}
-    \begin{verbatim}
-    docker-compose up -d --build backend
-    \end{verbatim}
-    Lệnh này xây dựng lại ảnh và khởi động lại vùng chứa máy chủ.
-    
+    Khi phát triển, chỉ cần chạy PostgreSQL và Redis qua Docker, còn các service khác chạy trực tiếp: \texttt{uvicorn app.main:app --reload --port 8000} (Backend), \texttt{uvicorn agent\_service.main:app --reload --port 8100} (Agent Service).
+
     \item \textbf{Xem nhật ký:}
     \begin{verbatim}
-    docker-compose logs -f backend
+    docker-compose logs -f agent-service
     \end{verbatim}
-    Theo dõi nhật ký của một dịch vụ cụ thể.
-    
+
     \item \textbf{Dừng hệ thống:}
     \begin{verbatim}
     docker-compose down
     \end{verbatim}
-    Dừng và xóa tất cả vùng chứa. Dữ liệu trong ổ đĩa vẫn được giữ nguyên. Thêm \texttt{-v} để xóa cả ổ đĩa.
 \end{enumerate}
 
 \subsubsection{Kiểm tra trạng thái triển khai}
 
-Sau khi hệ thống khởi động, có thể kiểm tra trạng thái qua các điểm cuối kiểm tra:
+Sau khi khởi động, kiểm tra qua các health endpoints:
 
 \begin{itemize}
-    \item \textbf{Máy chủ Dịch vụ:} \texttt{GET http://localhost:8000/health} -- trả về trạng thái cơ sở dữ liệu và Redis.
-    \item \textbf{Dịch vụ Tác tử:} \texttt{GET http://localhost:8100/internal/agent/health} -- yêu cầu khóa nội bộ.
-    \item \textbf{Giao diện người dùng:} Mở trình duyệt tại \texttt{http://localhost:3000}.
-    \item \textbf{Tài liệu API:} \texttt{http://localhost:8000/docs} -- giao diện Swagger với đầy đủ lược đồ.
+    \item \textbf{Backend API:} \texttt{GET http://localhost:8000/health} -- trả về trạng thái database và Redis.
+    \item \textbf{Agent Service:} \texttt{GET http://localhost:8100/internal/agent/health} -- yêu cầu internal key, trả về service name, graph\_version, llm\_cost.
+    \item \textbf{Agent Readiness:} \texttt{GET http://localhost:8100/internal/agent/readiness} -- trạng thái sẵn sàng của 4 nguồn dữ liệu.
+    \item \textbf{Pipeline Worker:} \texttt{GET http://localhost:8200/internal/pipeline/health}.
+    \item \textbf{Frontend:} Mở \texttt{http://localhost:3000}.
+    \item \textbf{Swagger Docs:} \texttt{http://localhost:8000/docs} -- tài liệu API tương tác.
 \end{itemize}
 
-\subsection{Nạp dữ liệu ban đầu}
+\subsubsection{Nạp dữ liệu ban đầu}
 
-Sau khi hệ thống đã khởi động, cần nạp dữ liệu ban đầu vào PostgreSQL:
+Sau khi hệ thống khởi động, nạp dữ liệu vào PostgreSQL:
 
 \begin{verbatim}
 python -m data_pipeline.load_db
 \end{verbatim}
 
-Quy trình nạp dữ liệu gồm các bước: đọc dữ liệu từ các tệp CSV trong thư mục dữ liệu; làm sạch và chuẩn hóa dữ liệu (phân tích giá, diện tích, phân loại); làm giàu dữ liệu (mã hóa địa lý, gán nhãn nhu cầu); chia văn bản thành các đoạn ngữ nghĩa với bốn loại cho mỗi bất động sản; tạo véc-tơ đặc trưng 1024 chiều bằng mô hình BGE-M3; nạp vào PostgreSQL qua các mô-đun chuyên biệt; và tạo chỉ mục HNSW trên cột véc-tơ của bảng đoạn văn bản.
+Hoặc gọi Pipeline Worker API:
+
+\begin{verbatim}
+curl -X POST http://localhost:8200/internal/pipeline/ingest/listings \
+  -H "X-Internal-Agent-Key: <key>" \
+  -H "Content-Type: application/json" \
+  -d '{"csv_path": "data/apartments_cleaned.csv", "batch_size": 50}'
+\end{verbatim}
+
+\section{Hệ thống giám sát và quan sát}
+
+\subsection{Observability -- Theo dõi vết xử lý tác tử}
+
+Hệ thống tích hợp cơ chế observability toàn diện cho phép theo dõi toàn bộ luồng xử lý của mỗi request chatbot. Mỗi request được ghi nhận qua ba bảng chính:
+
+\begin{itemize}
+    \item \textbf{AgentTrace:} Lưu thông tin tổng quan của một request: request\_id, session\_id, user\_id, intent, agents\_used, trace\_summary (số steps, latency tổng, warnings), full\_trace (JSONB -- toàn bộ state cuối cùng), status (success/partial/error), graph\_version, prompt\_version, model\_name, created\_at.
+
+    \item \textbf{AgentTraceStep:} Lưu chi tiết từng bước trong đồ thị: trace\_id (FK đến AgentTrace), step\_name (context\_builder, router, specialist\_agents,\dots), status, latency\_ms, input/output (JSONB), error message nếu có.
+
+    \item \textbf{AgentLLMCall:} Log mỗi lần gọi Gemini: trace\_id, step\_name, node\_name, model\_name, latency\_ms, input\_tokens, output\_tokens, estimated\_cost\_usd, skipped\_reason (nếu không gọi được).
+\end{itemize}
+
+Ngoài ra còn có \textbf{AgentRetrievalEvent} ghi lại mỗi sự kiện truy xuất: tool\_name, domain, filters, result\_count, latency\_ms.
+
+\subsection{Đánh giá chất lượng tự động (LLM Judge)}
+
+Hệ thống tích hợp cơ chế đánh giá chất lượng phản hồi tự động qua endpoint \texttt{POST /internal/agent/evaluate}. Judge sử dụng Gemini 2.0 Flash với prompt tiếng Việt để chấm điểm phản hồi theo 5 metrics:
+
+\begin{enumerate}
+    \item \textbf{Groundedness (Tính căn cứ):} Phản hồi có được hỗ trợ bởi các nguồn tham khảo hay không.
+    \item \textbf{Helpfulness (Tính hữu ích):} Phản hồi có trực tiếp giúp ích cho người dùng bất động sản hay không.
+    \item \textbf{Citation Quality (Chất lượng trích dẫn):} Nguồn tham khảo có liên quan, rõ ràng và đúng với nội dung trả lời hay không.
+    \item \textbf{Safety (An toàn):} Tránh khẳng định pháp lý/tài chính tuyệt đối, thông tin nhạy cảm hoặc nội dung nguy hiểm.
+    \item \textbf{Trace Completeness (Tính đầy đủ của vết xử lý):} Trace có thể hiện đủ agent, bước RAG, cảnh báo và thông tin quan sát cần thiết hay không.
+\end{enumerate}
+
+Mỗi metric được chấm điểm từ 0.0 đến 1.0 kèm rationale giải thích. Kết quả được lưu vào bảng \textbf{EvalRun} để phân tích và cải thiện hệ thống. Ngoài ra, hệ thống còn có cơ chế cleanup tự động: các eval runs đang chạy quá 30 phút sẽ được đánh dấu failed.
+
+\subsection{Theo dõi chi phí LLM}
+
+Để kiểm soát chi phí sử dụng Gemini API, hệ thống tích hợp cơ chế cost tracking qua module \texttt{agent\_service/llm/cost.py}:
+
+\begin{itemize}
+    \item Mỗi lần gọi Gemini được ghi nhận: input\_tokens, output\_tokens, estimated\_cost\_usd.
+    \item Trước mỗi lần gọi, hệ thống kiểm tra AGENT\_LLM\_MONTHLY\_BUDGET\_USD.
+    \item Nếu vượt ngân sách, LLM bị vô hiệu hóa và hệ thống chuyển sang deterministic mode.
+    \item Cost summary được hiển thị trong health check endpoint.
+\end{itemize}
+
+\subsection{Prometheus + Grafana + Alertmanager}
+
+Hệ thống giám sát được triển khai qua bộ ba Prometheus (thu thập metrics), Grafana (trực quan hóa) và Alertmanager (cảnh báo):
+
+\begin{itemize}
+    \item \textbf{Prometheus:} Scrape các metrics endpoint từ Backend, Agent Service và Pipeline Worker. Các metrics chính: request count, latency histogram, error rate, pipeline run status.
+    \item \textbf{Grafana:} Dashboard hiển thị: số lượng chat request theo thời gian, latency phân bố, tỷ lệ lỗi, trạng thái pipeline, chi phí LLM.
+    \item \textbf{Alertmanager:} Cảnh báo khi: pipeline thất bại 2 lần liên tiếp, latency vượt ngưỡng, error rate $>5\%$, LLM budget còn dưới 10\%.
+\end{itemize}
+
+\subsection{Admin Dashboard}
+
+Backend cung cấp admin dashboard qua các API endpoints:
+
+\begin{itemize}
+    \item \texttt{GET /api/v1/admin/pipeline-readiness} -- Trạng thái sẵn sàng của 4 nguồn dữ liệu (listings, projects, news, legal).
+    \item \texttt{GET /api/v1/admin/agent-traces} -- Danh sách AgentTrace với phân trang, lọc theo status và thời gian.
+    \item \texttt{GET /api/v1/admin/agent-traces/\{id\}} -- Chi tiết một trace với đầy đủ steps, LLM calls, retrieval events.
+    \item \texttt{GET /api/v1/admin/chat-feedback} -- Phản hồi người dùng.
+    \item \texttt{GET /api/v1/admin/memory-proposals} -- Đề xuất ghi nhớ đang chờ xác nhận.
+\end{itemize}
 
 \section{Kiểm thử hệ thống}
 
 \subsection{Chiến lược kiểm thử}
 
-Hệ thống được kiểm thử theo chiến lược đa tầng, từ thấp đến cao.
+Hệ thống được kiểm thử theo chiến lược đa tầng, từ thấp đến cao:
 
-Tầng thứ nhất là kiểm thử đơn vị: kiểm tra từng hàm, lớp, mô-đun độc lập, sử dụng pytest với đối tượng giả để cô lập các phụ thuộc ngoại vi (cơ sở dữ liệu, API, hệ thống tệp). Đây là tầng kiểm thử có số lượng ca kiểm thử lớn nhất và chạy nhanh nhất.
+\begin{enumerate}
+    \item \textbf{Kiểm thử đơn vị (Unit Testing):} Kiểm tra từng hàm, lớp, mô-đun độc lập, sử dụng pytest với mock objects để cô lập phụ thuộc ngoại vi (cơ sở dữ liệu, API, hệ thống tệp). Đây là tầng có số lượng ca kiểm thử lớn nhất và chạy nhanh nhất.
 
-Tầng thứ hai là kiểm thử tích hợp: kiểm tra sự tương tác giữa các mô-đun với nhau và với các dịch vụ bên ngoài (PostgreSQL, Redis, Gemini API), sử dụng cơ sở dữ liệu kiểm thử hoặc dịch vụ giả.
+    \item \textbf{Kiểm thử tích hợp (Integration Testing):} Kiểm tra tương tác giữa các mô-đun với nhau và với các dịch vụ bên ngoài (PostgreSQL, Redis, Gemini API), sử dụng cơ sở dữ liệu kiểm thử hoặc service mocks.
 
-Tầng thứ ba là kiểm thử hợp đồng: kiểm tra tính tương thích giữa các dịch vụ qua hợp đồng API, đảm bảo thay đổi ở một dịch vụ không phá vỡ dịch vụ khác.
+    \item \textbf{Kiểm thử hệ thống (System Testing):} Kiểm tra toàn bộ luồng đầu cuối, từ frontend đến backend đến database, đảm bảo các chức năng hoạt động đúng như mong đợi.
 
-Tầng thứ tư là kiểm thử hệ thống: kiểm tra toàn bộ luồng hoạt động đầu cuối, từ giao diện người dùng đến máy chủ đến cơ sở dữ liệu, đảm bảo các chức năng hoạt động đúng như mong đợi.
+    \item \textbf{Kiểm thử chấp nhận (Acceptance Testing):} Kiểm tra hệ thống đáp ứng yêu cầu nghiệp vụ đã đề ra, thực hiện thủ công với các kịch bản thực tế.
 
-Tầng thứ năm là kiểm thử chấp nhận: kiểm tra hệ thống đáp ứng các yêu cầu nghiệp vụ đã đề ra, được thực hiện thủ công với các kịch bản thực tế.
+    \item \textbf{Kiểm thử hiệu năng (Performance Testing):} Đo lường thời gian phản hồi, throughput và mức tiêu thụ tài nguyên của hệ thống dưới các mức tải khác nhau, đảm bảo đáp ứng các yêu cầu phi chức năng đã đề ra.
+\end{enumerate}
 
-\subsection{Công cụ và khung công tác kiểm thử}
+\subsection{Công cụ và khung công tác}
 
-pytest là khung công tác kiểm thử chính cho toàn bộ mã nguồn Python (máy chủ, dịch vụ tác tử, đường ống dữ liệu, lập lịch), sử dụng các phần mở rộng: pytest-asyncio (hỗ trợ kiểm thử bất đồng bộ), pytest-cov (đo độ bao phủ). ESLint là công cụ phân tích tĩnh cho giao diện người dùng TypeScript, phát hiện lỗi cú pháp và vấn đề về phong cách mã nguồn. compileall là mô-đun chuẩn của Python dùng để kiểm tra cú pháp toàn bộ tệp mã nguồn, phát hiện lỗi nạp thư viện và lỗi cú pháp mà không cần chạy kiểm thử. Thư viện unittest.mock và pytest.monkeypatch được dùng để tạo đối tượng giả, giả lập các dịch vụ bên ngoài.
+\begin{itemize}
+    \item \textbf{pytest:} Khung công tác kiểm thử chính cho toàn bộ mã nguồn Python (backend, agent\_service, data\_pipeline). Sử dụng plugin: pytest-asyncio (hỗ trợ kiểm thử bất đồng bộ), pytest-cov (đo độ bao phủ), pytest-benchmark (đo hiệu năng vi mô).
+    \item \textbf{ESLint:} Phân tích tĩnh cho frontend TypeScript, phát hiện lỗi cú pháp và vấn đề về phong cách mã nguồn.
+    \item \textbf{compileall:} Mô-đun chuẩn của Python dùng để kiểm tra cú pháp toàn bộ tệp mã nguồn, phát hiện lỗi nạp thư viện mà không cần chạy kiểm thử.
+    \item \textbf{unittest.mock + pytest.monkeypatch:} Tạo mock objects cho dịch vụ bên ngoài.
+    \item \textbf{locust:} Công cụ kiểm thử tải (load testing) cho REST API, cho phép mô phỏng hàng trăm người dùng đồng thời và đo lường thời gian phản hồi.
+\end{itemize}
+
+\subsection{Kiểm thử chức năng theo phân tích yêu cầu}
+
+Dựa trên các nhóm chức năng đã phân tích trong Chương 2, em thiết kế các ca kiểm thử chính như bảng \ref{tab:test-cases}. Mỗi nhóm chức năng được kiểm thử ở cả ba mức: đơn vị, tích hợp và hệ thống.
+
+\begin{longtable}{|p{3.5cm}|p{5cm}|p{5cm}|}
+    \hline
+    \textbf{Nhóm chức năng} & \textbf{Ca kiểm thử chính} & \textbf{Tệp kiểm thử} \\
+    \hline
+    Xác thực \& tài khoản & 
+    \begin{itemize}
+        \item Đăng ký với email hợp lệ/thùng rác
+        \item Đăng nhập sai mật khẩu
+        \item JWT token hết hạn/tampered
+        \item Phân quyền admin/superuser
+    \end{itemize} & 
+    Kiểm thử tích hợp auth router \\
+    \hline
+    Duyệt \& tìm kiếm BĐS & 
+    \begin{itemize}
+        \item Lọc theo loại tin (bán/thuê)
+        \item Lọc đa tiêu chí (city, district, price, area, bedrooms)
+        \item Phân trang \& sắp xếp
+        \item Tìm kiếm full-text
+        \item Kết quả rỗng với bộ lọc quá hẹp
+    \end{itemize} & 
+    \texttt{test\_listings\_route\_order.py} \\
+    \texttt{test\_hybrid\_search.py} \\
+    \texttt{test\_backend\_hybrid\_search.py} \\
+    \hline
+    Chi tiết BĐS & 
+    \begin{itemize}
+        \item Hiển thị đủ 30 trường
+        \item Gợi ý BĐS tương tự
+        \item BĐS không tồn tại → 404
+    \end{itemize} & 
+    \texttt{test\_public\_content\_routes.py} \\
+    \hline
+    Thống kê thị trường & 
+    \begin{itemize}
+        \item API market stats có dữ liệu
+        \item Giá theo quận (price-by-district)
+        \item Phân bố loại hình (property-type-count)
+        \item Lọc theo thành phố
+    \end{itemize} & 
+    \texttt{test\_market\_stats.py} \\
+    \texttt{test\_market\_snapshot\_ingestor.py} \\
+    \hline
+    Chatbot đa tác tử & 
+    \begin{itemize}
+        \item Router phân loại đúng intent (6 loại)
+        \item Router chọn đúng agent mục tiêu
+        \item Multi-agent chạy song song
+        \item Phản hồi có trích dẫn nguồn
+        \item Fallback khi không có dữ liệu
+        \item Kiểm tra safety disclaimer
+        \item Giới hạn quota (20/200 lượt/ngày)
+        \item Chặn abuse (spam)
+    \end{itemize} & 
+    \texttt{test\_agent\_graph\_core.py} \\
+    \texttt{test\_router\_modes.py} \\
+    \texttt{test\_specialists\_parallel.py} \\
+    \texttt{test\_chat\_abuse\_guard.py} \\
+    \texttt{test\_chat\_quota.py} \\
+    \texttt{test\_production\_chatbot.py} \\
+    \hline
+    Investment Model & 
+    \begin{itemize}
+        \item Tính ROI, NPV, dòng tiền
+        \item Giả định mặc định \& tùy chỉnh
+        \item Thiếu evidence → missing\_evidence
+    \end{itemize} & 
+    \texttt{test\_investment\_model.py} \\
+    \texttt{test\_investment\_metrics.py} \\
+    \texttt{test\_investment\_calculators.py} \\
+    \hline
+    Committee Review & 
+    \begin{itemize}
+        \item Ba góc nhìn (Bull/Bear/Skeptic)
+        \item Mỗi góc nhìn có stance, risk\_level
+        \item Evidence IDs hợp lệ
+    \end{itemize} & 
+    \texttt{test\_committee\_review.py} \\
+    \hline
+    Blackboard System & 
+    \begin{itemize}
+        \item Ghi entry từ agent
+        \item Đọc entry từ agent khác
+        \item Validation evidence IDs
+        \item Deduplication entries
+    \end{itemize} & 
+    \texttt{test\_agent\_blackboard.py} \\
+    \texttt{test\_blackboard\_specialists.py} \\
+    \hline
+    ReAct Controller & 
+    \begin{itemize}
+        \item Thiếu evidence → retrieve\_more
+        \item Sau retrieve → chạy lại specialist
+        \item Giới hạn 2 vòng lặp
+        \item Fallback khi hết vòng lặp
+    \end{itemize} & 
+    \texttt{test\_react\_loop.py} \\
+    \hline
+    Memory System & 
+    \begin{itemize}
+        \item Extract district từ query
+        \item Tạo MemoryProposal
+        \item User confirm/reject proposal
+        \item Ưu tiên dùng precomputed tags
+    \end{itemize} & 
+    \texttt{test\_memory\_extraction.py} \\
+    \texttt{test\_memory\_preferences.py} \\
+    \texttt{test\_chunk\_uses\_precomputed\_tags.py} \\
+    \hline
+    Data Pipeline & 
+    \begin{itemize}
+        \item Clean: chuẩn hóa giá, diện tích
+        \item Chunk: 4 loại chunk/listing
+        \item Embed: BGE-M3 1024d
+        \item Load: upsert PostgreSQL
+        \item Ingestors: listings, projects, news
+    \end{itemize} & 
+    \texttt{test\_clean.py} \\
+    \texttt{test\_chunk.py} \\
+    \texttt{test\_embed.py} \\
+    \texttt{test\_listings\_ingestor.py} \\
+    \texttt{test\_projects\_ingestor.py} \\
+    \texttt{test\_news\_ingestor.py} \\
+    \hline
+    Legal KB & 
+    \begin{itemize}
+        \item Parse HTML \& PDF
+        \item Chunk theo Điều/Khoản
+        \item Citation đầy đủ
+        \item Manifest \& slug
+    \end{itemize} & 
+    \texttt{test\_legal\_chunker.py} \\
+    \texttt{test\_legal\_html\_parser.py} \\
+    \texttt{test\_legal\_pdf\_parser.py} \\
+    \texttt{test\_legal\_structure.py} \\
+    \texttt{test\_legal\_manifest.py} \\
+    \hline
+    Search \& Retrieval & 
+    \begin{itemize}
+        \item Hybrid search (SQL + vector)
+        \item Reranking (Cohere)
+        \item Redis caching
+        \item Retrieval planner đa nguồn
+    \end{itemize} & 
+    \texttt{test\_hybrid\_search.py} \\
+    \texttt{test\_hybrid\_search\_caching.py} \\
+    \texttt{test\_hybrid\_search\_multi\_parent.py} \\
+    \texttt{test\_retrieval\_parallel.py} \\
+    \hline
+    Observability \& Admin & 
+    \begin{itemize}
+        \item AgentTrace ghi đúng
+        \item AgentTraceStep đủ bước
+        \item Admin API auth
+        \item Metrics endpoint
+    \end{itemize} & 
+    \texttt{test\_agent\_observability\_persistence.py} \\
+    \texttt{test\_admin\_observability.py} \\
+    \texttt{test\_metrics\_endpoint.py} \\
+    \hline
+    Pipeline \& Crawler & 
+    \begin{itemize}
+        \item Crawler core (CSV, parser)
+        \item Pipeline runner
+        \item DAG structure
+        \item Pipeline Worker health
+    \end{itemize} & 
+    \texttt{test\_crawler\_core.py} \\
+    \texttt{test\_pipeline\_runner.py} \\
+    \texttt{test\_dag\_structure.py} \\
+    \texttt{test\_pipeline\_worker.py} \\
+    \hline
+    \caption{Các ca kiểm thử chính theo nhóm chức năng}
+    \label{tab:test-cases}
+\end{longtable}
+
+\subsection{Kiểm thử hiệu năng}
+
+Bên cạnh kiểm thử chức năng, em tiến hành kiểm thử hiệu năng ở hai cấp độ: vi mô (micro-benchmark) cho các hàm và mô-đun riêng lẻ, và vĩ mô (load testing) cho toàn bộ hệ thống API.
+
+\subsubsection*{Kiểm thử hiệu năng vi mô (Micro-benchmark)}
+
+Sử dụng \texttt{pytest-benchmark} để đo lường thời gian thực thi của các thao tác then chốt trong hệ thống:
+
+\begin{itemize}
+    \item \textbf{Embedding (BGE-M3):} Đo thời gian encode một batch 16 văn bản. Mục tiêu: $<2$s/batch trên CPU, đảm bảo pipeline indexing hoàn thành trong thời gian hợp lý cho 100.000+ listings.
+
+    \item \textbf{Hybrid Search:} Đo thời gian truy vấn PostgreSQL kết hợp WHERE filter và HNSW vector search. Mục tiêu: $<500$ms cho truy vấn cơ bản, $<1000$ms cho truy vấn phức tạp với JOIN và ORDER BY cosine distance.
+
+    \item \textbf{Chunking:} Đo thời gian \texttt{build\_listing\_chunks()} cho 10.000 listings. Mục tiêu: $<5$s, đảm bảo pipeline chunking không trở thành bottleneck.
+
+    \item \textbf{Redis Cache:} Đo hit rate và latency của embedding cache và search result cache. Mục tiêu: hit rate $>60\%$ cho truy vấn lặp, cache lookup $<5$ms.
+
+    \item \textbf{LangGraph Node:} Đo thời gian từng node trong đồ thị (context\_builder, router, retrieval\_planner, specialist\_agents, synthesizer) qua AgentTraceStep.latency\_ms. Mục tiêu: mỗi node $<2$s, tổng thời gian đồ thị $<10$s cho chế độ deterministic, $<45$s cho chế độ LLM.
+\end{itemize}
+
+\subsubsection*{Kiểm thử tải (Load Testing)}
+
+Sử dụng \texttt{locust} để mô phỏng nhiều người dùng đồng thời truy cập hệ thống, tập trung vào các API endpoint chính:
+
+\begin{itemize}
+    \item \textbf{Kịch bản 1 -- Duyệt listings (đọc):} 50 users đồng thời gọi \texttt{GET /api/v1/listings} với bộ lọc cơ bản (city, district, listing\_type). Mục tiêu: p95 latency $<500$ms, 0 lỗi.
+
+    \item \textbf{Kịch bản 2 -- Chatbot (agent pipeline):} 10 users đồng thời gọi \texttt{POST /api/v1/chat} với truy vấn đơn giản (``tìm căn hộ Quận 7''). Mục tiêu: p95 latency $<10$s, tỷ lệ timeout $<5\%$.
+
+    \item \textbf{Kịch bản 3 -- Hybrid search (đọc + vector):} 20 users đồng thời gọi \texttt{GET /api/v1/listings} với full-text search + bộ lọc. Mục tiêu: p95 latency $<1000$ms.
+
+    \item \textbf{Kịch bản 4 -- Hỗn hợp thực tế:} Mô phỏng traffic thực tế với 80\% đọc listings, 15\% chatbot, 5\% market stats. 100 users đồng thời trong 5 phút. Mục tiêu: p95 latency $<5$s tổng thể, error rate $<1\%$.
+\end{itemize}
+
+Kết quả kiểm thử tải được ghi nhận qua Prometheus metrics (request\_count, request\_duration\_seconds) và hiển thị trên Grafana dashboard, cho phép em xác định bottleneck và tối ưu hệ thống trước khi triển khai.
+
+\subsubsection*{Kết quả kiểm thử hiệu năng dự kiến}
+
+Dựa trên kiến trúc hệ thống và kết quả kiểm thử đơn vị, em kỳ vọng hệ thống đáp ứng các chỉ tiêu sau:
+
+\begin{longtable}{|p{5cm}|c|c|}
+    \hline
+    \textbf{Chỉ tiêu} & \textbf{Mục tiêu} & \textbf{Đo lường qua} \\
+    \hline
+    API listings (bộ lọc cơ bản) & $<500$ms & locust + Prometheus histogram \\
+    \hline
+    API listings (hybrid search) & $<1000$ms & locust + Prometheus histogram \\
+    \hline
+    Chatbot (deterministic, 1 agent) & $<5$s & AgentTraceStep.latency\_ms \\
+    \hline
+    Chatbot (LLM, multi-agent) & $<45$s & AgentTraceStep.latency\_ms \\
+    \hline
+    Chatbot (ReAct, 1 vòng lặp) & $<60$s & AgentTraceStep.latency\_ms \\
+    \hline
+    Embedding batch (16 texts) & $<2$s & pytest-benchmark \\
+    \hline
+    Chunking 10.000 listings & $<5$s & pytest-benchmark \\
+    \hline
+    Redis cache hit rate & $>60\%$ & Redis INFO stats \\
+    \hline
+    Throughput (100 users hỗn hợp) & $>50$ req/s & locust + Prometheus \\
+    \hline
+    Error rate (load test) & $<1\%$ & locust + Prometheus \\
+    \hline
+    \caption{Chỉ tiêu hiệu năng dự kiến}
+    \label{tab:perf-targets}
+\end{longtable}
+
+\subsection{Kết quả kiểm thử}
+
+Hệ thống có hơn 80 tệp kiểm thử bao phủ toàn bộ các mô-đun chính:
+
+\begin{itemize}
+    \item \textbf{Backend API (35+ tệp):} Kiểm thử các routers (listings, market, chat, auth, projects, articles, preferences, admin), services (chatbot pipeline, RAG, agent\_service client, observability), và models.
+
+    \item \textbf{Agent Service (20+ tệp):} Kiểm thử graph workflow (smoke test end-to-end và từng node), router (rule/LLM/hybrid modes), query understanding, retrieval planner (đa nguồn, song song), specialist agents (deterministic + LLM modes, song song), blackboard system, investment model (calculators, metrics, safety), committee review, synthesis, safety validator, react controller (vòng lặp, timeout), memory extraction, conversation context, và readiness cache.
+
+    \item \textbf{Data Pipeline (15+ tệp):} Kiểm thử clean, chunk (listing, legal), embed, enrich (geocode, intent), load\_db, và các ingestors (listings, projects, news, legal KB).
+
+    \item \textbf{Crawler (5+ tệp):} Kiểm thử core (csv\_writer, parser), sale/rent parsers, news parsers, project parsers.
+
+    \item \textbf{Frontend:} ESLint passing, kiểm thử API client và components.
+
+    \item \textbf{Infrastructure (10+ tệp):} Kiểm thử Docker config (agent\_service, pipeline\_worker, airflow), pipeline runner, DAG structure, metrics endpoint, alerting config.
+\end{itemize}
+
+\subsection{Các vấn đề đã phát hiện và hướng khắc phục}
+
+Trong quá trình kiểm thử, các vấn đề chính được phát hiện và khắc phục:
+
+\begin{itemize}
+    \item \textbf{LLM features bị tắt mặc định:} Router và specialist agents mặc định dùng rule-based/deterministic mode. Cần bật \texttt{AGENT\_ROUTER\_MODE=hybrid} và \texttt{AGENT\_SPECIALIST\_LLM\_ENABLED=true} trước khi public demo. Đã có đầy đủ code LLM router và LLM specialist wrapper, chỉ cần bật flag.
+
+    \item \textbf{Memory system còn sơ khai:} Chỉ extract được district từ query qua keyword matching. Cần tích hợp LLM-based memory extraction để hỗ trợ đầy đủ city, budget, property\_type, bedrooms. Đã có sẵn infrastructure (MemoryProposal model, user confirm/reject API).
+
+    \item \textbf{Thiếu kiểm thử hiệu năng:} Hệ thống chưa có bộ kiểm thử tải (load testing) và kiểm thử hiệu năng vi mô (micro-benchmark). Cần bổ sung locust cho load testing và pytest-benchmark cho micro-benchmark trước khi triển khai thực tế.
+
+    \item \textbf{Secret keys mặc định:} JWT\_SECRET\_KEY và AGENT\_INTERNAL\_KEY có giá trị mặc định trong code và docker-compose.yml, cần override qua \texttt{.env} khi triển khai thực tế.
+\end{itemize}
 
 \newpage
-
