@@ -27,3 +27,4 @@ def mark_ingested(digest: str, log_dir: str, *, info: dict[str, Any] | None = No
     os.makedirs(log_dir, exist_ok=True)
     payload = {"digest": digest, "info": info or {}}
     _log_path(digest, log_dir).write_text(json.dumps(payload, ensure_ascii=False, indent=2))
+    
