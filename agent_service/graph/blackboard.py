@@ -59,6 +59,78 @@ def append_blackboard_entry(
     return {"agent_blackboard": blackboard}
 
 
+def read_blackboard(
+    state: dict[str, Any],
+    *,
+    author: str | None = None,
+    entry_type: str | None = None,
+    min_confidence: Confidence = "low",
+    max_entries: int = 10,
+) -> list[dict[str, Any]]:
+    """Read entries from the blackboard, optionally filtered.
+
+    Agents use this to discover what other agents have found.
+    """
+    blackboard = state.get("agent_blackboard") or {}
+    entries = blackboard.get("entries", [])
+
+    confidence_order: dict[Confidence, int] = {"low": 0, "medium": 1, "high": 2}
+    min_level = confidence_order.get(min_confidence, 0)
+
+    filtered: list[dict[str, Any]] = []
+    for entry in entries:
+        if author is not None and entry.get("author") != author:
+            continue
+        if entry_type is not None and entry.get("type") != entry_type:
+            continue
+        entry_conf = entry.get("confidence", "low")
+        if confidence_order.get(entry_conf, 0) < min_level:
+            continue
+        filtered.append(dict(entry))
+
+    return filtered[-max_entries:]
+
+
+def query_blackboard(
+    state: dict[str, Any],
+    *,
+    query: str,
+    max_entries: int = 5,
+) -> list[dict[str, Any]]:
+    """Simple keyword search across blackboard entries.
+
+    For more advanced semantic search, agents should use the
+    ToolRegistry to call a dedicated search tool.
+    """
+    blackboard = state.get("agent_blackboard") or {}
+    entries = blackboard.get("entries", [])
+    if not query:
+        return entries[-max_entries:]
+
+    query_lower = query.lower()
+    scored: list[tuple[int, dict[str, Any]]] = []
+    for entry in entries:
+        score = 0
+        content = entry.get("content", "")
+        if isinstance(content, dict):
+            content_str = " ".join(
+                str(v) for v in content.values() if isinstance(v, (str, int, float))
+            )
+        else:
+            content_str = str(content)
+        if query_lower in content_str.lower():
+            score += 3
+        if query_lower in str(entry.get("author", "")).lower():
+            score += 2
+        if query_lower in str(entry.get("type", "")).lower():
+            score += 1
+        if score > 0:
+            scored.append((score, dict(entry)))
+
+    scored.sort(key=lambda item: item[0], reverse=True)
+    return [entry for _, entry in scored[:max_entries]]
+
+
 def entries_by_author(
     blackboard: dict[str, Any],
     author: str,
