@@ -137,3 +137,68 @@ class AgentChatResponse(BaseModel):
     readiness: dict[str, Any] = Field(default_factory=dict)
     evaluation_candidate: dict[str, Any] = Field(default_factory=dict)
     charts: list[dict[str, Any]] = Field(default_factory=list)
+
+
+# ── Agentic RAG: Agent autonomy contracts ──────────────────────────
+
+
+class ToolDef(BaseModel):
+    """Definition of a tool an agent can call."""
+    name: str
+    description: str = ""
+    parameters: dict[str, Any] = Field(default_factory=dict)
+    required_params: list[str] = Field(default_factory=list)
+    allowed_for: list[str] = Field(default_factory=list)
+
+
+class AgentThought(BaseModel):
+    """A single reasoning step in an agent's ReAct loop."""
+    iteration: int
+    reasoning: str
+    action: Literal["call_tool", "final_answer", "ask_clarification", "delegate"]
+    tool_name: str | None = None
+    tool_params: dict[str, Any] = Field(default_factory=dict)
+    target_agent: str | None = None
+    delegate_query: str | None = None
+    clarifying_question: str | None = None
+    confidence: float = 0.0
+
+
+class AgentAction(BaseModel):
+    """Result of executing an agent's action."""
+    iteration: int
+    action_type: Literal["call_tool", "final_answer", "ask_clarification", "delegate"]
+    status: Literal["success", "error", "timeout", "noop"]
+    tool_result: dict[str, Any] = Field(default_factory=dict)
+    error_message: str | None = None
+    evidence_ids: list[str] = Field(default_factory=list)
+    duration_ms: float = 0.0
+
+
+class AgentContext(BaseModel):
+    """Context passed to each agent at initialization."""
+    agent_name: str
+    query: str
+    normalized_query: str = ""
+    conversation_context: list[dict[str, str]] = Field(default_factory=list)
+    user_preferences: dict[str, Any] = Field(default_factory=dict)
+    readiness: dict[str, Any] = Field(default_factory=dict)
+    routing_filters: dict[str, Any] = Field(default_factory=dict)
+    query_understanding: dict[str, Any] = Field(default_factory=dict)
+    locale: str = "vi-VN"
+
+
+class AgentResult(BaseModel):
+    """Standardized output from any agent run."""
+    agent_name: str
+    status: Literal["completed", "partial", "no_evidence", "failed", "skipped"]
+    content: str
+    evidence_ids_used: list[str] = Field(default_factory=list)
+    sources: list[AgentSource] = Field(default_factory=list)
+    confidence: float | str | None = None
+    warnings: list[str | StructuredWarning] = Field(default_factory=list)
+    missing_evidence: list[str] = Field(default_factory=list)
+    iterations: int = 0
+    trace: list[dict[str, Any]] = Field(default_factory=list)
+    charts: list[dict[str, Any]] = Field(default_factory=list)
+    claims: list[dict[str, Any]] = Field(default_factory=list)
