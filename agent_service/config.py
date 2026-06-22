@@ -30,8 +30,8 @@ class AgentSettings(BaseSettings):
     AGENT_PROMPT_VERSION: str = "prompts-v1"
 
     GEMINI_API_KEY: str = ""
-    GEMINI_MODEL: str = "gemini-2.0-flash"
-    GEMINI_JUDGE_MODEL: str = "gemini-2.0-flash"
+    GEMINI_MODEL: str = "gemini-2.5-flash"
+    GEMINI_JUDGE_MODEL: str = "gemini-2.5-flash"
 
     COHERE_API_KEY: str = ""
     HF_EMBEDDING_MODEL: str = "BAAI/bge-m3"
@@ -45,9 +45,9 @@ class AgentSettings(BaseSettings):
     AGENT_SPECIALIST_LLM_ENABLED: bool = True
     AGENT_LLM_CONFIDENCE_THRESHOLD: float = 0.65
     AGENT_LLM_MAX_REWRITES: int = 3
-    AGENT_LLM_ROUTER_TIMEOUT_SECONDS: float = 5.0
-    AGENT_LLM_QUERY_TIMEOUT_SECONDS: float = 5.0
-    AGENT_SPECIALIST_LLM_TIMEOUT_SECONDS: float = 12.0
+    AGENT_LLM_ROUTER_TIMEOUT_SECONDS: float = 15.0
+    AGENT_LLM_QUERY_TIMEOUT_SECONDS: float = 15.0
+    AGENT_SPECIALIST_LLM_TIMEOUT_SECONDS: float = 30.0
     AGENT_TOTAL_TIMEOUT_SECONDS: float = 10.0
     AGENT_LLM_MONTHLY_BUDGET_USD: float = 100.0
     AGENT_LLM_COST_TRACKING_ENABLED: bool = True
