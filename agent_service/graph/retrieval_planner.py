@@ -46,26 +46,6 @@ def _extract_filters(query: str) -> dict[str, Any]:
     if "can ho" in normalized or "chung cu" in normalized:
         filters["property_type"] = "Can ho"
 
-    if any(
-        term in normalized
-        for term in ("ho chi minh", "tp hcm", "tphcm", "sai gon", "saigon")
-    ):
-        filters["city"] = "Ho Chi Minh"
-    elif any(
-        term in normalized
-        for term in ("ha noi", "hanoi", "hn")
-    ):
-        filters["city"] = "Ha Noi"
-
-    district_match = re.search(r"\b(?:quan|q)\s*(\d{1,2})\b", normalized)
-    if district_match:
-        filters["district"] = f"Quan {district_match.group(1)}"
-    else:
-        # Named districts: "quận đống đa", "quận cầu giấy", "ở cầu giấy"
-        named = re.search(r"(?:quan|quận|ở)\s+([a-zA-ZđĐàáảãạăắằẳẵặâấầẩẫậêếềểễệôốồổỗộơớờởỡợưứừửữự]+(?:\s+[a-zA-ZđĐàáảãạăắằẳẵặâấầẩẫậêếềểễệôốồổỗộơớờởỡợưứừửữự]+)?)", normalized)
-        if named:
-            filters["district"] = f"Quan {named.group(1).title()}"
-
     max_price_match = re.search(
         r"(?:duoi|toi da|khong qua)\s*(\d+(?:[\.,]\d+)?)\s*(?:ty|ti)",
         normalized,
