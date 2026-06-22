@@ -5,8 +5,13 @@ Loads settings from environment variables with sensible defaults.
 """
 
 from functools import lru_cache
+from pathlib import Path
+
 from pydantic import field_validator
 from pydantic_settings import BaseSettings
+
+
+ROOT_ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
 
 
 class Settings(BaseSettings):
@@ -50,7 +55,7 @@ class Settings(BaseSettings):
     CHATBOT_LLM_JUDGE_ENABLED: bool = False
     CHATBOT_EVAL_ENABLED: bool = False
     CHATBOT_EVAL_SAMPLE_RATE: float = 0.0
-    CHATBOT_EVAL_SYNC_FOR_TESTS: bool = False
+    CHATBOT_EVAL_SYNC_FOR_TESTS: bool = False   
     CHATBOT_MEMORY_ENABLED: bool = True
     CHATBOT_ADMIN_ENABLED: bool = True
     CHATBOT_TRACE_LEVEL: str = "full"
@@ -98,7 +103,7 @@ class Settings(BaseSettings):
         return [origin.strip() for origin in self.CORS_ORIGINS.split(",")]
 
     class Config:
-        env_file = ".env"
+        env_file = str(ROOT_ENV_FILE)
         case_sensitive = True
         extra = "ignore"  # Ignore extra env vars not defined in Settings
 

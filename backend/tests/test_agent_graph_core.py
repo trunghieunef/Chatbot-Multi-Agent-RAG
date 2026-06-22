@@ -36,7 +36,7 @@ def test_live_llm_requires_explicit_gemini_model(monkeypatch, tmp_path):
     monkeypatch.delenv("GEMINI_MODEL", raising=False)
 
     with pytest.raises(ValueError, match="GEMINI_MODEL"):
-        AgentSettings()
+        AgentSettings(_env_file=None)
 
 
 def test_strip_accents_handles_none():

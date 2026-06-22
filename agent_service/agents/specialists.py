@@ -659,23 +659,26 @@ def _extract_listing_prices(
 
 
 def _parse_vnd_price(text: str) -> float | None:
-    """Parse Vietnamese price text to millions VND."""
-    text = text.lower().strip()
+    """Parse Vietnamese price text to millions VND. Handles '1.6 tỷ', '2,5 tỷ', '800 triệu', etc."""
+    text = text.lower().strip().replace("~", "").replace("khoảng", "").replace("khoang", "")
+    # "1,6 tỷ" or "1.6 tỷ" or "1 tỷ 6"
     match = re.search(r"([\d,.]+)\s*(tỷ|ty|tỉ|ti|triệu|trieu|nghìn|ngan|tr)", text)
     if not match:
+        # Fallback: just a number
         match = re.search(r"([\d,.]+)", text)
         if match:
-            return float(match.group(1).replace(",", "."))
+            val = float(match.group(1).replace(",", "."))
+            return val * 1000 if val < 100 else val
         return None
     value = float(match.group(1).replace(",", "."))
     unit = match.group(2)
     if unit in ("tỷ", "ty", "tỉ", "ti"):
-        return value * 1000  # convert to millions
+        return value * 1000
     elif unit in ("triệu", "trieu"):
         return value
     elif unit in ("nghìn", "ngan", "tr"):
         return value / 1000
-    return value
+    return value * 1000 if value < 100 else value
 
 
 def _parse_area(text: str) -> float | None:
