@@ -42,11 +42,10 @@ class GeminiClient:
         self,
         prompt: str,
         timeout_seconds: float,
-        max_retries: int = 3,
+        max_retries: int = 2,
     ):
-        """Call Gemini with exponential backoff retry for 429 errors."""
+        """Call Gemini with exponential backoff retry for rate-limit errors."""
         from google import genai
-        import google.api_core.exceptions as google_exceptions
 
         http_options = {"timeout": int(timeout_seconds * 1000)}
         client = genai.Client(api_key=self.api_key, http_options=http_options)
@@ -66,32 +65,28 @@ class GeminiClient:
             except asyncio.TimeoutError:
                 last_error = "timeout"
                 logger.warning(
-                    "Gemini call timed out after %ss (attempt %d/%d)",
+                    "Gemini timeout after %ss (attempt %d/%d)",
                     timeout_seconds, attempt + 1, max_retries,
                 )
-            except google_exceptions.ResourceExhausted:
-                # 429 - rate limit
-                last_error = "429_rate_limit"
-                wait = min(2 ** attempt, 8)
+            except Exception as e:
+                err_str = str(e)[:500]
+                last_error = err_str
+                # 400 errors: don't retry
+                if "400" in err_str or "InvalidArgument" in err_str or "INVALID_ARGUMENT" in err_str:
+                    logger.error("Gemini 400 Bad Request (not retrying): %s", err_str)
+                    raise
+                # 429 or other transient errors: retry with backoff
+                is_rate_limit = "429" in err_str or "RESOURCE_EXHAUSTED" in err_str or "ResourceExhausted" in err_str
+                wait = min(2 ** attempt, 8) if is_rate_limit else 1
                 logger.warning(
-                    "Gemini 429 rate limit (attempt %d/%d), waiting %ds...",
-                    attempt + 1, max_retries, wait,
+                    "Gemini error (attempt %d/%d, %s): %s",
+                    attempt + 1, max_retries,
+                    "rate_limit" if is_rate_limit else "transient",
+                    err_str[:200],
                 )
                 await asyncio.sleep(wait)
-            except google_exceptions.InvalidArgument as e:
-                # 400 - bad request (don't retry)
-                logger.error("Gemini 400 Bad Request: %s", str(e)[:300])
-                raise
-            except Exception as e:
-                last_error = str(e)[:200]
-                logger.error(
-                    "Gemini call failed (attempt %d/%d): %s",
-                    attempt + 1, max_retries, last_error,
-                )
-                if attempt < max_retries - 1:
-                    await asyncio.sleep(1)
 
-        raise RuntimeError(f"Gemini call failed after {max_retries} retries: {last_error}")
+        raise RuntimeError(f"Gemini failed after {max_retries} retries: {last_error}")
 
     async def generate_text_with_usage(
         self,
