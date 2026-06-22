@@ -55,6 +55,11 @@ def _extract_filters(query: str) -> dict[str, Any]:
     district_match = re.search(r"\b(?:quan|q)\s*(\d{1,2})\b", normalized)
     if district_match:
         filters["district"] = f"Quan {district_match.group(1)}"
+    else:
+        # Named districts: "quận đống đa", "quận cầu giấy", "quan dong da"
+        named = re.search(r"(?:quan|quận)\s+([a-zA-ZđĐàáảãạăắằẳẵặâấầẩẫậêếềểễệôốồổỗộơớờởỡợưứừửữự]+(?:\s+[a-zA-ZđĐàáảãạăắằẳẵặâấầẩẫậêếềểễệôốồổỗộơớờởỡợưứừửữự]+)?)", normalized)
+        if named:
+            filters["district"] = f"Quan {named.group(1).title()}"
 
     max_price_match = re.search(
         r"(?:duoi|toi da|khong qua)\s*(\d+(?:[\.,]\d+)?)\s*(?:ty|ti)",
