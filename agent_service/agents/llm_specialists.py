@@ -140,7 +140,7 @@ def build_specialist_prompt(
     instructions = agent_instructions.get(agent_name, "")
 
     lines = [
-        "You are a real-estate specialist agent. Return JSON only.",
+        "You are a real-estate specialist agent. You MUST respond with ONLY a raw JSON object (no markdown, no code fences). Do NOT wrap the JSON in ``` or any other formatting.",
         f"Agent name: {agent_name}",
     ]
     if instructions:

@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 from dataclasses import dataclass
 from json import JSONDecodeError
 from typing import Any
@@ -157,8 +158,23 @@ class GeminiClient:
         if not text:
             return {}
 
+        # Strip markdown code blocks if present
+        text = text.strip()
+        if text.startswith("```"):
+            # Remove ```json or ``` and trailing ```
+            text = re.sub(r"^```(?:json)?\s*", "", text)
+            text = re.sub(r"\s*```$", "", text)
+
         try:
             parsed = json.loads(text)
         except JSONDecodeError:
-            return {}
+            # Try to extract first JSON object with regex
+            match = re.search(r"\{.*\}", text, re.DOTALL)
+            if match:
+                try:
+                    parsed = json.loads(match.group(0))
+                except JSONDecodeError:
+                    return {}
+            else:
+                return {}
         return parsed if isinstance(parsed, dict) else {}
