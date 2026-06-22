@@ -12,6 +12,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { getArticleDetail, getArticles, getProjects } from "@/lib/api";
+import { formatDescription } from "@/lib/utils";
 import type { ArticleCard, ArticleDetail, ProjectCard } from "@/lib/types";
 
 function categoryLabel(category: string | null): string {
@@ -95,7 +96,7 @@ export default function ArticleDetailPage() {
 
   const paragraphs = useMemo(() => {
     const content = article?.body || article?.summary || "";
-    return content
+    return formatDescription(content)
       .split(/\n+/)
       .map((line) => line.trim())
       .filter(Boolean);

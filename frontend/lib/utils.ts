@@ -10,6 +10,16 @@ export function formatPrice(price: number | null | undefined): string {
   return `${(price * 1000).toFixed(0)} triệu`;
 }
 
+/** Split description by | (pipe) into separate lines for display. */
+export function formatDescription(text: string | null | undefined): string {
+  if (!text) return "";
+  return text
+    .split("|")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .join("\n");
+}
+
 export function truncate(str: string | null | undefined, max = 80): string {
   if (!str) return "";
   return str.length > max ? str.slice(0, max) + "…" : str;

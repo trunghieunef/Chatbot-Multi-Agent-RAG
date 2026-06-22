@@ -15,6 +15,7 @@ import {
   Ruler,
 } from "lucide-react";
 import { getProjectDetail, getProjects } from "@/lib/api";
+import { formatDescription } from "@/lib/utils";
 import type { ProjectCard, ProjectDetail } from "@/lib/types";
 
 function statusLabel(status: string | null): string {
@@ -93,7 +94,7 @@ export default function ProjectDetailPage() {
   }, [project]);
 
   const descriptionParagraphs = useMemo(() => {
-    const content = project?.description || "";
+    const content = formatDescription(project?.description);
     return content
       .split(/\n+/)
       .map((line) => line.trim())
