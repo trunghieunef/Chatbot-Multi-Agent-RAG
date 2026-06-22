@@ -23,8 +23,8 @@ class PropertySearchAgent(BaseAgent):
       5. final_answer: Format listings with prices and area
     """
 
-    def __init__(self, max_iterations: int = 3):
-        super().__init__(agent_name="property_search", max_iterations=max_iterations)
+    def __init__(self, max_iterations: int = 3, use_llm: bool = False):
+        super().__init__(agent_name="property_search", max_iterations=max_iterations, use_llm=use_llm)
 
     async def think(
         self,

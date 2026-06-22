@@ -33,8 +33,8 @@ class LegalAdvisorAgent(BaseAgent):
         "giay chung nhan", "muaban", "chothue",
     ]
 
-    def __init__(self, max_iterations: int = 3):
-        super().__init__(agent_name="legal_advisor", max_iterations=max_iterations)
+    def __init__(self, max_iterations: int = 3, use_llm: bool = False):
+        super().__init__(agent_name="legal_advisor", max_iterations=max_iterations, use_llm=use_llm)
 
     def _is_in_domain(self, query: str) -> bool:
         query_lower = query.lower()

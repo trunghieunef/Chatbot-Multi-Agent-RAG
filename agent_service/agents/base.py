@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 from agent_service.contracts import (
     AgentAction,
@@ -11,8 +12,12 @@ from agent_service.contracts import (
     AgentResult,
     AgentThought,
     StructuredWarning,
+    ToolDef,
 )
 from agent_service.graph.blackboard import read_blackboard
+
+if TYPE_CHECKING:
+    from agent_service.llm.gemini import GeminiClient
 
 
 def _warning(code: str, message: str) -> StructuredWarning:
@@ -37,10 +42,13 @@ class BaseAgent(ABC):
         *,
         agent_name: str,
         max_iterations: int = 3,
+        use_llm: bool = False,
     ):
         self.agent_name = agent_name
         self.max_iterations = max_iterations
+        self.use_llm = use_llm
         self._tool_registry: Any = None
+        self._llm_client: GeminiClient | None = None
 
     # ── Subclass interface ──────────────────────────────────────
 
@@ -128,6 +136,170 @@ class BaseAgent(ABC):
     def _read_blackboard(self, state: dict[str, Any]) -> list[dict[str, Any]]:
         return read_blackboard(state, min_confidence="low", max_entries=20)
 
+    # ── LLM-powered thinking ─────────────────────────────────────
+
+    @staticmethod
+    def _role_description(agent_name: str) -> str:
+        """Return the agent's role description in Vietnamese."""
+        roles: dict[str, str] = {
+            "property_search": (
+                "Bạn là chuyên gia tìm kiếm bất động sản. "
+                "Nhiệm vụ: tìm listing phù hợp với tiêu chí người dùng, "
+                "so sánh giá với trung bình khu vực, trình bày kết quả rõ ràng."
+            ),
+            "market_analysis": (
+                "Bạn là chuyên gia phân tích thị trường bất động sản. "
+                "Nhiệm vụ: phân tích xu hướng giá, so sánh khu vực, "
+                "đưa ra nhận định có dẫn chứng từ dữ liệu."
+            ),
+            "legal_advisor": (
+                "Bạn là cố vấn pháp lý bất động sản. "
+                "CHỈ trả lời câu hỏi pháp lý liên quan đến bất động sản. "
+                "Nếu câu hỏi ngoài domain, từ chối lịch sự. "
+                "Luôn kèm disclaimer: không thay thế luật sư chuyên nghiệp."
+            ),
+            "investment_advisor": (
+                "Bạn là cố vấn đầu tư bất động sản. "
+                "Nhiệm vụ: phân tích cơ hội đầu tư, so sánh ROI, "
+                "đánh giá rủi ro. Luôn kèm disclaimer: không phải lời khuyên tài chính."
+            ),
+            "project_agent": (
+                "Bạn là chuyên gia đánh giá dự án bất động sản. "
+                "Nhiệm vụ: tìm thông tin dự án, đánh giá chủ đầu tư, tiến độ, pháp lý."
+            ),
+            "news_agent": (
+                "Bạn là chuyên gia phân tích tin tức bất động sản. "
+                "Nhiệm vụ: tóm tắt tin tức, phân tích tác động đến thị trường."
+            ),
+        }
+        return roles.get(agent_name, f"Bạn là chuyên gia bất động sản với vai trò: {agent_name}.")
+
+    def _build_think_prompt(
+        self,
+        context: AgentContext,
+        iteration: int,
+        previous_actions: list[AgentAction],
+        blackboard_entries: list[dict[str, Any]],
+        tools: list[ToolDef],
+    ) -> str:
+        """Build the prompt for the LLM to decide the next action."""
+        role = self._role_description(self.agent_name)
+
+        action_history = []
+        for action in previous_actions[-5:]:
+            action_history.append({
+                "iteration": action.iteration,
+                "action_type": action.action_type,
+                "status": action.status,
+                "tool_name": (
+                    action.tool_result.get("tool", "")
+                    if action.action_type == "call_tool" else None
+                ),
+                "result_summary": str(action.tool_result)[:300] if action.tool_result else "",
+                "error": action.error_message,
+            })
+
+        bb_summary = [
+            {"author": e.get("author"), "type": e.get("type"),
+             "content": str(e.get("content", ""))[:200]}
+            for e in blackboard_entries[-5:]
+        ]
+
+        tool_list = [
+            {"name": t.name, "description": t.description, "params": t.parameters}
+            for t in tools
+        ]
+
+        lines = [
+            "Bạn là một AI agent trong hệ thống tư vấn bất động sản Agentic RAG.",
+            "Bạn phải trả về CHỈ MỘT JSON object (không markdown, không code fence).",
+            "",
+            role,
+            "",
+            f"### Ngữ cảnh (iteration {iteration + 1})",
+            f"- Truy vấn gốc: {context.query}",
+            f"- Truy vấn chuẩn hóa: {context.normalized_query}",
+            f"- Bộ lọc: {json.dumps(context.routing_filters, ensure_ascii=False)}",
+            f"- Sở thích người dùng: {json.dumps(context.user_preferences, ensure_ascii=False)}",
+            "",
+            "### Lịch sử hành động",
+            json.dumps(action_history, ensure_ascii=False, indent=2) if action_history else "[]",
+            "",
+            "### Bảng đen (kết quả từ agent khác)",
+            json.dumps(bb_summary, ensure_ascii=False, indent=2) if bb_summary else "[]",
+            "",
+            "### Công cụ có sẵn",
+            json.dumps(tool_list, ensure_ascii=False, indent=2),
+            "",
+            "### Hành động tiếp theo",
+            "Chọn MỘT trong các hành động sau:",
+            '- "call_tool": Gọi một công cụ để lấy dữ liệu. Chọn tool_name từ danh sách trên.',
+            '- "final_answer": Đã có đủ dữ liệu để trả lời. Đưa ra kết luận cuối cùng.',
+            '- "ask_clarification": Cần hỏi lại người dùng để làm rõ yêu cầu.',
+            "",
+            "Trả về JSON với định dạng CHÍNH XÁC sau:",
+            "{",
+            '  "iteration": <số nguyên, iteration hiện tại>',
+            '  "reasoning": "<lý do chọn hành động này, bằng tiếng Việt>",',
+            '  "action": "call_tool" | "final_answer" | "ask_clarification"',
+            '  "tool_name": "<tên công cụ>"  // chỉ khi action="call_tool"',
+            '  "tool_params": {}  // chỉ khi action="call_tool", tham số cho công cụ',
+            '  "clarifying_question": "<câu hỏi>"  // chỉ khi action="ask_clarification"',
+            '  "confidence": <số thực 0.0-1.0>',
+            "}",
+            "",
+            'QUAN TRỌNG: Nếu đã có đủ dữ liệu (xem lịch sử hành động), hãy chọn "final_answer".',
+            "KHÔNG gọi tool khi đã có kết quả từ tool đó ở lần trước.",
+        ]
+
+        return "\n".join(lines)
+
+    async def _llm_think(
+        self,
+        context: AgentContext,
+        iteration: int,
+        previous_actions: list[AgentAction],
+        blackboard_entries: list[dict[str, Any]],
+    ) -> AgentThought:
+        """Use Gemini to decide the next action in the ReAct loop.
+
+        Falls back to deterministic think() if LLM is unavailable or fails.
+        """
+        if self._llm_client is None:
+            return await self.think(context, iteration, previous_actions, blackboard_entries)
+
+        tools = (
+            self._tool_registry.list_for_agent(self.agent_name)
+            if self._tool_registry else []
+        )
+        if not tools:
+            return await self.think(context, iteration, previous_actions, blackboard_entries)
+
+        prompt = self._build_think_prompt(
+            context, iteration, previous_actions, blackboard_entries, tools
+        )
+
+        try:
+            raw = await self._llm_client.generate_json(
+                prompt,
+                timeout_seconds=15.0,
+            )
+            if not raw or not raw.get("action"):
+                return await self.think(context, iteration, previous_actions, blackboard_entries)
+
+            thought = AgentThought(
+                iteration=iteration,
+                reasoning=raw.get("reasoning", "LLM decided next action."),
+                action=raw.get("action", "final_answer"),
+                tool_name=raw.get("tool_name"),
+                tool_params=raw.get("tool_params", {}),
+                clarifying_question=raw.get("clarifying_question"),
+                confidence=float(raw.get("confidence", 0.5)),
+            )
+            return thought
+        except Exception:
+            return await self.think(context, iteration, previous_actions, blackboard_entries)
+
     # ── ReAct loop ───────────────────────────────────────────────
 
     async def run(
@@ -136,6 +308,7 @@ class BaseAgent(ABC):
         state: dict[str, Any],
         *,
         tool_registry: Any | None = None,
+        llm_client: Any | None = None,
         timeout_seconds: float = 30.0,
     ) -> AgentResult:
         """Execute the full ReAct loop.
@@ -144,12 +317,14 @@ class BaseAgent(ABC):
             context: AgentContext with query, filters, preferences.
             state: Full graph state (for blackboard access).
             tool_registry: ToolRegistry instance for tool calling.
+            llm_client: GeminiClient for LLM-powered thinking (optional).
             timeout_seconds: Max time for the entire agent run.
 
         Returns:
             AgentResult with content, sources, evidence_ids, etc.
         """
         self._tool_registry = tool_registry
+        self._llm_client = llm_client
         thoughts: list[AgentThought] = []
         actions: list[AgentAction] = []
         started = time.perf_counter()
@@ -167,9 +342,14 @@ class BaseAgent(ABC):
 
             try:
                 blackboard_entries = self._read_blackboard(state)
-                thought = await self.think(
-                    context, iteration, actions, blackboard_entries
-                )
+                if self.use_llm and self._llm_client is not None:
+                    thought = await self._llm_think(
+                        context, iteration, actions, blackboard_entries
+                    )
+                else:
+                    thought = await self.think(
+                        context, iteration, actions, blackboard_entries
+                    )
                 thoughts.append(thought)
             except Exception as exc:
                 return AgentResult(

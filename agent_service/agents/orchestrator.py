@@ -23,6 +23,7 @@ from agent_service.contracts import (
 from agent_service.graph.blackboard import append_blackboard_entry, read_blackboard
 from agent_service.graph.router import route_request
 from agent_service.tools.registry import ToolRegistry
+from agent_service.llm.gemini import GeminiClient
 
 
 AGENT_CLASSES: dict[str, type[BaseAgent]] = {
@@ -51,10 +52,15 @@ class OrchestratorAgent:
         *,
         tool_registry: ToolRegistry | None = None,
         max_agent_iterations: int = 3,
+        use_llm: bool = False,
     ):
         self.tool_registry = tool_registry or ToolRegistry()
         self.max_agent_iterations = max_agent_iterations
         self.settings = get_agent_settings()
+        self.use_llm = use_llm and bool(self.settings.GEMINI_API_KEY)
+        self._llm_client: GeminiClient | None = (
+            GeminiClient() if self.use_llm else None
+        )
 
     async def run(self, request: AgentChatRequest) -> AgentChatResponse:
         started = time.perf_counter()
@@ -116,7 +122,7 @@ class OrchestratorAgent:
             if agent_cls is None:
                 continue
 
-            agent = agent_cls(max_iterations=self.max_agent_iterations)
+            agent = agent_cls(max_iterations=self.max_agent_iterations, use_llm=self.use_llm)
             context = AgentContext(
                 agent_name=agent_name,
                 query=request.message,
@@ -130,6 +136,7 @@ class OrchestratorAgent:
                     context,
                     state,
                     tool_registry=self.tool_registry,
+                    llm_client=self._llm_client,
                     timeout_seconds=self.settings.AGENT_SPECIALIST_LLM_TIMEOUT_SECONDS,
                 )
             )

@@ -24,8 +24,8 @@ class InvestmentAdvisorAgent(BaseAgent):
       3. final_answer: ROI analysis with disclaimers
     """
 
-    def __init__(self, max_iterations: int = 3):
-        super().__init__(agent_name="investment_advisor", max_iterations=max_iterations)
+    def __init__(self, max_iterations: int = 3, use_llm: bool = False):
+        super().__init__(agent_name="investment_advisor", max_iterations=max_iterations, use_llm=use_llm)
 
     async def think(
         self,

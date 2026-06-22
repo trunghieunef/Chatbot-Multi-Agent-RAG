@@ -21,8 +21,8 @@ class MarketAnalysisAgent(BaseAgent):
       3. final_answer: Interpret trends, compare areas, provide context
     """
 
-    def __init__(self, max_iterations: int = 3):
-        super().__init__(agent_name="market_analysis", max_iterations=max_iterations)
+    def __init__(self, max_iterations: int = 3, use_llm: bool = False):
+        super().__init__(agent_name="market_analysis", max_iterations=max_iterations, use_llm=use_llm)
 
     async def think(
         self,

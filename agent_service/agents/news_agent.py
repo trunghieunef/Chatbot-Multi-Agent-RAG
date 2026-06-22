@@ -23,8 +23,8 @@ class NewsAgent(BaseAgent):
       2. final_answer: Summarize news with impact analysis
     """
 
-    def __init__(self, max_iterations: int = 2):
-        super().__init__(agent_name="news_agent", max_iterations=max_iterations)
+    def __init__(self, max_iterations: int = 2, use_llm: bool = False):
+        super().__init__(agent_name="news_agent", max_iterations=max_iterations, use_llm=use_llm)
 
     async def think(
         self,

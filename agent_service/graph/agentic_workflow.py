@@ -174,5 +174,6 @@ async def run_agentic_graph(request: AgentChatRequest) -> AgentChatResponse:
     orchestrator = OrchestratorAgent(
         tool_registry=registry,
         max_agent_iterations=settings.AGENT_REACT_MAX_ITERATIONS,
+        use_llm=settings.AGENT_SPECIALIST_LLM_ENABLED,
     )
     return await orchestrator.run(request)

@@ -23,8 +23,8 @@ class ProjectAgent(BaseAgent):
       2. final_answer: Summarize project info with caveats
     """
 
-    def __init__(self, max_iterations: int = 2):
-        super().__init__(agent_name="project_agent", max_iterations=max_iterations)
+    def __init__(self, max_iterations: int = 2, use_llm: bool = False):
+        super().__init__(agent_name="project_agent", max_iterations=max_iterations, use_llm=use_llm)
 
     async def think(
         self,
