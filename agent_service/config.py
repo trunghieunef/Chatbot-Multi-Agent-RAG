@@ -58,6 +58,13 @@ class AgentSettings(BaseSettings):
     AGENT_REACT_CONTROLLER_MODE: str = "llm"
     AGENT_REACT_TIMEOUT_SECONDS: float = 5.0
 
+    # ── Agentic RAG settings ──────────────────────────────────
+    AGENT_MAX_ITERATIONS: int = 3
+    AGENT_TOOL_TIMEOUT_SECONDS: float = 15.0
+    AGENT_ORCHESTRATOR_MODE: str = "parallel"
+    AGENT_BLACKBOARD_ENABLED: bool = True
+    AGENT_AGENTIC_MODE: bool = False  # Toggle: False = old graph, True = agentic
+
     @field_validator("DEBUG", mode="before")
     @classmethod
     def parse_debug(cls, value):
