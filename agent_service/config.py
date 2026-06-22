@@ -30,8 +30,8 @@ class AgentSettings(BaseSettings):
     AGENT_PROMPT_VERSION: str = "prompts-v1"
 
     GEMINI_API_KEY: str = ""
-    GEMINI_MODEL: str = "gemini-2.0-flash"
-    GEMINI_JUDGE_MODEL: str = "gemini-2.0-flash"
+    GEMINI_MODEL: str = "gemini-2.5-flash"
+    GEMINI_JUDGE_MODEL: str = "gemini-2.5-flash"
 
     COHERE_API_KEY: str = ""
     HF_EMBEDDING_MODEL: str = "BAAI/bge-m3"
@@ -45,9 +45,9 @@ class AgentSettings(BaseSettings):
     AGENT_SPECIALIST_LLM_ENABLED: bool = True
     AGENT_LLM_CONFIDENCE_THRESHOLD: float = 0.65
     AGENT_LLM_MAX_REWRITES: int = 3
-    AGENT_LLM_ROUTER_TIMEOUT_SECONDS: float = 5.0
-    AGENT_LLM_QUERY_TIMEOUT_SECONDS: float = 5.0
-    AGENT_SPECIALIST_LLM_TIMEOUT_SECONDS: float = 12.0
+    AGENT_LLM_ROUTER_TIMEOUT_SECONDS: float = 15.0
+    AGENT_LLM_QUERY_TIMEOUT_SECONDS: float = 15.0
+    AGENT_SPECIALIST_LLM_TIMEOUT_SECONDS: float = 30.0
     AGENT_TOTAL_TIMEOUT_SECONDS: float = 10.0
     AGENT_LLM_MONTHLY_BUDGET_USD: float = 100.0
     AGENT_LLM_COST_TRACKING_ENABLED: bool = True
@@ -57,6 +57,13 @@ class AgentSettings(BaseSettings):
     AGENT_REACT_MAX_ITERATIONS: int = 2
     AGENT_REACT_CONTROLLER_MODE: str = "llm"
     AGENT_REACT_TIMEOUT_SECONDS: float = 5.0
+
+    # ── Agentic RAG settings ──────────────────────────────────
+    AGENT_MAX_ITERATIONS: int = 3
+    AGENT_TOOL_TIMEOUT_SECONDS: float = 15.0
+    AGENT_ORCHESTRATOR_MODE: str = "parallel"
+    AGENT_BLACKBOARD_ENABLED: bool = True
+    AGENT_AGENTIC_MODE: bool = False  # Toggle: False = old graph, True = agentic
 
     @field_validator("DEBUG", mode="before")
     @classmethod

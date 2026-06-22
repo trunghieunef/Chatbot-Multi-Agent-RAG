@@ -6,6 +6,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from agent_service.config import get_agent_settings
+from agent_service.contracts import StructuredWarning
 from agent_service.llm.gemini import GeminiClient
 
 
@@ -190,9 +191,21 @@ async def route_with_llm(
     agents, dropped = sanitize_agents(decision.agents)
     warnings = list(decision.warnings)
     if dropped:
-        warnings.append({"code": "llm_router_unknown_agents", "agents": dropped})
+        warnings.append(
+            StructuredWarning(
+                code="llm_router_unknown_agents",
+                domain=None,
+                message=f"Unknown agents dropped: {', '.join(dropped)}",
+            )
+        )
     if decision.confidence < settings.AGENT_LLM_CONFIDENCE_THRESHOLD:
-        warnings.append("llm_router_low_confidence")
+        warnings.append(
+            StructuredWarning(
+                code="llm_router_low_confidence",
+                domain=None,
+                message=f"Confidence {decision.confidence} below threshold {settings.AGENT_LLM_CONFIDENCE_THRESHOLD}",
+            )
+        )
     return decision.model_copy(
         update={
             "agents": agents,

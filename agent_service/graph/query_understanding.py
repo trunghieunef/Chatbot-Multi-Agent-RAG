@@ -5,6 +5,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from agent_service.config import get_agent_settings
+from agent_service.contracts import StructuredWarning
 from agent_service.llm.gemini import GeminiClient
 
 
@@ -103,12 +104,24 @@ async def build_query_understanding(
             inferred_filters = validate_filters(raw.inferred_filters)
             dropped = sorted(set(raw.inferred_filters) - set(inferred_filters))
             if dropped:
-                warnings.append({"code": "query_understanding_invalid_filters", "filters": dropped})
+                warnings.append(
+                    StructuredWarning(
+                        code="query_understanding_invalid_filters",
+                        domain=None,
+                        message=f"Ignored invalid filters: {', '.join(dropped)}",
+                    )
+                )
             rewritten_query = raw.rewritten_query or request.message
             expanded_queries = raw.expanded_queries[: settings.AGENT_LLM_MAX_REWRITES]
             missing_slots = raw.missing_slots
         except Exception:
-            warnings.append("query_understanding_invalid_json")
+            warnings.append(
+                StructuredWarning(
+                    code="query_understanding_invalid_json",
+                    domain=None,
+                    message="LLM returned invalid JSON for query understanding",
+                )
+            )
 
     filters = merge_query_filters(deterministic_filters, inferred_filters)
     return QueryUnderstanding(

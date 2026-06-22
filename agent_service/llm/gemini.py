@@ -2,12 +2,20 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
+import re
 from dataclasses import dataclass
 from json import JSONDecodeError
 from typing import Any
 
 from agent_service.config import get_agent_settings
 from agent_service.llm.cost import get_runtime_cost_summary, record_runtime_llm_cost
+
+logger = logging.getLogger(__name__)
+
+# Limit concurrent Gemini calls to avoid 429 rate limits
+_MAX_CONCURRENT_LLM_CALLS = 2
+_llm_semaphore = asyncio.Semaphore(_MAX_CONCURRENT_LLM_CALLS)
 
 
 @dataclass(frozen=True)
@@ -17,6 +25,7 @@ class GeminiResult:
     output_tokens: int | None = None
     estimated_cost_usd: float = 0.0
     skipped_reason: str | None = None
+    error_message: str | None = None
 
 
 class GeminiClient:
@@ -29,6 +38,56 @@ class GeminiClient:
         )
         self.model = model or settings.GEMINI_MODEL
         self.timeout_seconds = settings.AGENT_LLM_TIMEOUT_SECONDS
+
+    async def _call_gemini_with_retry(
+        self,
+        prompt: str,
+        timeout_seconds: float,
+        max_retries: int = 2,
+    ):
+        """Call Gemini with exponential backoff retry for rate-limit errors."""
+        from google import genai
+
+        http_options = {"timeout": int(timeout_seconds * 1000)}
+        client = genai.Client(api_key=self.api_key, http_options=http_options)
+
+        last_error = None
+        for attempt in range(max_retries):
+            try:
+                def generate_sync():
+                    return client.models.generate_content(
+                        model=self.model, contents=prompt
+                    )
+
+                return await asyncio.wait_for(
+                    asyncio.to_thread(generate_sync),
+                    timeout=timeout_seconds,
+                )
+            except asyncio.TimeoutError:
+                last_error = "timeout"
+                logger.warning(
+                    "Gemini timeout after %ss (attempt %d/%d)",
+                    timeout_seconds, attempt + 1, max_retries,
+                )
+            except Exception as e:
+                err_str = str(e)[:500]
+                last_error = err_str
+                # 400 errors: don't retry
+                if "400" in err_str or "InvalidArgument" in err_str or "INVALID_ARGUMENT" in err_str:
+                    logger.error("Gemini 400 Bad Request (not retrying): %s", err_str)
+                    raise
+                # 429 or other transient errors: retry with backoff
+                is_rate_limit = "429" in err_str or "RESOURCE_EXHAUSTED" in err_str or "ResourceExhausted" in err_str
+                wait = min(2 ** attempt, 8) if is_rate_limit else 1
+                logger.warning(
+                    "Gemini error (attempt %d/%d, %s): %s",
+                    attempt + 1, max_retries,
+                    "rate_limit" if is_rate_limit else "transient",
+                    err_str[:200],
+                )
+                await asyncio.sleep(wait)
+
+        raise RuntimeError(f"Gemini failed after {max_retries} retries: {last_error}")
 
     async def generate_text_with_usage(
         self,
@@ -51,24 +110,18 @@ class GeminiClient:
             if summary.get("budget_exceeded"):
                 return GeminiResult(text="", skipped_reason="llm_budget_exceeded")
 
+        timeout = timeout_seconds or self.timeout_seconds
         try:
-            from google import genai
-
-            timeout = timeout_seconds or self.timeout_seconds
-            http_options = {"timeout": int(timeout * 1000)}
-            client = genai.Client(api_key=self.api_key, http_options=http_options)
-
-            def generate_sync():
-                return client.models.generate_content(model=self.model, contents=prompt)
-
-            response = await asyncio.wait_for(
-                asyncio.to_thread(generate_sync),
-                timeout=timeout,
-            )
-        except asyncio.TimeoutError:
-            return GeminiResult(text="")
-        except Exception:
-            return GeminiResult(text="")
+            async with _llm_semaphore:
+                response = await self._call_gemini_with_retry(
+                    prompt, timeout_seconds=timeout,
+                )
+        except RuntimeError as e:
+            logger.error("Gemini call ultimately failed: %s", e)
+            return GeminiResult(text="", error_message=str(e)[:500])
+        except Exception as e:
+            logger.error("Gemini unexpected error: %s", e)
+            return GeminiResult(text="", error_message=str(e)[:500])
         usage = getattr(response, "usage_metadata", None) or getattr(
             response,
             "usageMetadata",
@@ -105,8 +158,23 @@ class GeminiClient:
         if not text:
             return {}
 
+        # Strip markdown code blocks if present
+        text = text.strip()
+        if text.startswith("```"):
+            # Remove ```json or ``` and trailing ```
+            text = re.sub(r"^```(?:json)?\s*", "", text)
+            text = re.sub(r"\s*```$", "", text)
+
         try:
             parsed = json.loads(text)
         except JSONDecodeError:
-            return {}
+            # Try to extract first JSON object with regex
+            match = re.search(r"\{.*\}", text, re.DOTALL)
+            if match:
+                try:
+                    parsed = json.loads(match.group(0))
+                except JSONDecodeError:
+                    return {}
+            else:
+                return {}
         return parsed if isinstance(parsed, dict) else {}
