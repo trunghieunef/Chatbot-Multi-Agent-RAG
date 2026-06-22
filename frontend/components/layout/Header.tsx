@@ -1,9 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import { Menu, X } from "lucide-react";
+import { usePathname } from "next/navigation";
+import { useState, useEffect, useCallback } from "react";
+import { Menu, X, User, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getMe } from "@/lib/api";
+import type { AuthUser } from "@/lib/types";
 
 const NAV_LINKS = [
   { href: "/nha-dat-ban", label: "Nhà đất bán" },
@@ -15,6 +18,32 @@ const NAV_LINKS = [
 
 export default function Header() {
   const [open, setOpen] = useState(false);
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const pathname = usePathname();
+
+  const checkAuth = useCallback(() => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      setUser(null);
+      return;
+    }
+    getMe()
+      .then(setUser)
+      .catch(() => {
+        localStorage.removeItem("token");
+        setUser(null);
+      });
+  }, []);
+
+  useEffect(() => {
+    checkAuth();
+  }, [pathname, checkAuth]);
+
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    setUser(null);
+    window.location.href = "/";
+  };
 
   return (
     <header className="sticky top-0 z-50 glass shadow-sm">
@@ -47,18 +76,41 @@ export default function Header() {
 
         {/* Desktop Actions */}
         <div className="hidden md:flex items-center gap-2">
-          <Link
-            href="/dang-nhap"
-            className="rounded-lg px-4 py-2 text-sm font-medium text-foreground/80 transition-colors hover:bg-muted"
-          >
-            Đăng nhập
-          </Link>
-          <Link
-            href="/dang-ky"
-            className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary-hover"
-          >
-            Đăng ký
-          </Link>
+          {user ? (
+            <>
+              <Link
+                href="/tro-ly-ai"
+                className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-foreground/80 transition-colors hover:bg-muted"
+              >
+                <User size={16} />
+                <span className="max-w-[120px] truncate">
+                  {user.full_name || user.email}
+                </span>
+              </Link>
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-destructive"
+              >
+                <LogOut size={16} />
+                Đăng xuất
+              </button>
+            </>
+          ) : (
+            <>
+              <Link
+                href="/dang-nhap"
+                className="rounded-lg px-4 py-2 text-sm font-medium text-foreground/80 transition-colors hover:bg-muted"
+              >
+                Đăng nhập
+              </Link>
+              <Link
+                href="/dang-ky"
+                className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary-hover"
+              >
+                Đăng ký
+              </Link>
+            </>
+          )}
         </div>
 
         {/* Mobile Toggle */}
@@ -90,20 +142,45 @@ export default function Header() {
             </Link>
           ))}
           <hr className="my-2 border-border" />
-          <Link
-            href="/dang-nhap"
-            onClick={() => setOpen(false)}
-            className="rounded-lg px-3 py-2.5 text-sm font-medium text-foreground/80 hover:bg-muted transition-colors"
-          >
-            Đăng nhập
-          </Link>
-          <Link
-            href="/dang-ky"
-            onClick={() => setOpen(false)}
-            className="rounded-lg bg-primary px-3 py-2.5 text-center text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary-hover"
-          >
-            Đăng ký
-          </Link>
+          {user ? (
+            <>
+              <Link
+                href="/tro-ly-ai"
+                onClick={() => setOpen(false)}
+                className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium text-foreground/80 hover:bg-muted transition-colors"
+              >
+                <User size={16} />
+                {user.full_name || user.email}
+              </Link>
+              <button
+                onClick={() => {
+                  handleLogout();
+                  setOpen(false);
+                }}
+                className="flex items-center gap-1.5 rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-destructive transition-colors"
+              >
+                <LogOut size={16} />
+                Đăng xuất
+              </button>
+            </>
+          ) : (
+            <>
+              <Link
+                href="/dang-nhap"
+                onClick={() => setOpen(false)}
+                className="rounded-lg px-3 py-2.5 text-sm font-medium text-foreground/80 hover:bg-muted transition-colors"
+              >
+                Đăng nhập
+              </Link>
+              <Link
+                href="/dang-ky"
+                onClick={() => setOpen(false)}
+                className="rounded-lg bg-primary px-3 py-2.5 text-center text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary-hover"
+              >
+                Đăng ký
+              </Link>
+            </>
+          )}
         </nav>
       </div>
     </header>

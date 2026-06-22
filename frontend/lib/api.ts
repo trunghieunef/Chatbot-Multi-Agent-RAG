@@ -6,6 +6,7 @@ import type {
   ArticleCard,
   ArticleDetail,
   ArticleFilters,
+  AuthUser,
   ChatFeedbackRequest,
   ChatHistoryResponse,
   ChatMessageRequest,
@@ -244,5 +245,11 @@ export async function register(body: {
   return fetchJSON(`${BASE}/auth/register`, {
     method: "POST",
     body: JSON.stringify(body),
+  });
+}
+
+export async function getMe(): Promise<AuthUser> {
+  return fetchJSON(`${BASE}/auth/me`, {
+    headers: authHeaders(),
   });
 }
