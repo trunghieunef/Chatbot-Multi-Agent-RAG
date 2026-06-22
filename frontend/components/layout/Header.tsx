@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { Menu, X, User, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getMe } from "@/lib/api";
@@ -21,23 +21,25 @@ export default function Header() {
   const [user, setUser] = useState<AuthUser | null>(null);
   const pathname = usePathname();
 
-  const checkAuth = useCallback(() => {
+  useEffect(() => {
+    let cancelled = false;
     const token = localStorage.getItem("token");
     if (!token) {
       setUser(null);
       return;
     }
     getMe()
-      .then(setUser)
+      .then((u) => {
+        if (!cancelled) setUser(u);
+      })
       .catch(() => {
         localStorage.removeItem("token");
-        setUser(null);
+        if (!cancelled) setUser(null);
       });
-  }, []);
-
-  useEffect(() => {
-    checkAuth();
-  }, [pathname, checkAuth]);
+    return () => {
+      cancelled = true;
+    };
+  }, [pathname]);
 
   const handleLogout = () => {
     localStorage.removeItem("token");
