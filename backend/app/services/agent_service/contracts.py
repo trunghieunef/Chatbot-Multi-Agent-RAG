@@ -136,6 +136,7 @@ class AgentChatResponse(BaseModel):
     memory_proposals: list[MemoryProposal] = Field(default_factory=list)
     readiness: dict[str, Any] = Field(default_factory=dict)
     evaluation_candidate: dict[str, Any] = Field(default_factory=dict)
+    charts: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class AgentStreamEvent(BaseModel):

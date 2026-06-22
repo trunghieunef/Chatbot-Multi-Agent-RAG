@@ -1,8 +1,19 @@
 from __future__ import annotations
 
+import re
+import unicodedata
+from statistics import mean
 from typing import Any
 
 from agent_service.contracts import StructuredWarning
+
+
+def _strip_accents(value: str) -> str:
+    normalized = unicodedata.normalize("NFD", value or "")
+    stripped = "".join(
+        char for char in normalized if unicodedata.category(char) != "Mn"
+    )
+    return stripped.replace("đ", "d").replace("Đ", "D").lower()
 
 
 def _readiness_status(readiness: dict[str, Any], key: str) -> str:
@@ -212,11 +223,25 @@ async def run_property_agent(
         )
 
     lines = [_describe_evidence(record) for record in property_evidence]
-    content = (
-        "Cac listing phu hop voi yeu cau:\n"
-        + "\n".join(f"- {line}" for line in lines)
-        + "\nThong tin duoc rut ra tu nguon listing kem theo; can kiem tra lai tinh trang va gia truoc khi giao dich."
-    )
+
+    # ── Compute price/m² and ranking ──────────────────────────────────
+    listings_with_price = _extract_listing_prices(property_evidence)
+    comparisons = _compare_with_market(listings_with_price, preferences)
+
+    content = "🏠 **Kết quả tìm kiếm bất động sản:**\n\n"
+    for i, listing in enumerate(comparisons[:10], 1):
+        content += _format_listing_card(i, listing)
+
+    if comparisons:
+        content += (
+            "\n> ℹ️ Giá/m² tính từ diện tích và giá listing. "
+            "Giá thực tế có thể thay đổi khi thương lượng. "
+            "Nên kiểm tra trực tiếp và xác minh pháp lý trước khi giao dịch."
+        )
+    else:
+        content += "\n".join(f"- {line}" for line in lines)
+        content += "\nThong tin duoc rut ra tu nguon listing kem theo."
+
     return _agent_result(
         agent_name="property_search",
         status="completed",
@@ -276,27 +301,61 @@ async def run_market_agent(
     readiness: dict[str, Any],
 ) -> dict[str, Any]:
     market_evidence = [item for item in evidence if _evidence_domain(item) == "market"]
-    content = "Phan tich thi truong hien chi la snapshot tai thoi diem truy van, khong phai chuoi thoi gian day du."
-    if market_evidence:
-        content += "\nCac diem du lieu lien quan:\n" + "\n".join(
-            f"- {_describe_evidence(record)}" for record in market_evidence
+
+    # ── 1. Extract timeseries from evidence facts ──────────────────────
+    timeseries = _extract_timeseries_from_evidence(market_evidence)
+
+    # ── 2. Analyze trend (user's reference logic, adapted) ─────────────
+    trend = analyze_market_evidence(timeseries) if timeseries else None
+
+    # ── 3. Build response ──────────────────────────────────────────────
+    warnings: list[Any] = []
+    if not timeseries:
+        warnings.append(
+            _warning(
+                "market_no_timeseries",
+                "market",
+                "Không có dữ liệu chuỗi thời gian cho khu vực/loại hình này.",
+            )
         )
-    return _agent_result(
+
+    if not market_evidence and not timeseries:
+        source_ready = _readiness_status(readiness, "market_snapshots") == "ready"
+        return _agent_result(
+            agent_name="market_analysis",
+            status="no_evidence",
+            content=(
+                "Chưa có dữ liệu thị trường cho khu vực này. "
+                "Vui lòng thử khu vực khác hoặc quay lại sau khi dữ liệu được cập nhật."
+            ),
+            confidence="low",
+            warnings=[
+                _warning(
+                    "market_no_data" if source_ready else "market_source_not_ready",
+                    "market",
+                    "No market data found for this segment.",
+                )
+            ],
+            missing_evidence=["market"],
+        )
+
+    content = _format_timeseries_response(timeseries, trend, market_evidence)
+
+    # Build chart data for frontend rendering
+    chart = _build_timeseries_chart(timeseries, trend) if timeseries else None
+
+    result = _agent_result(
         agent_name="market_analysis",
-        status="completed" if market_evidence else "no_evidence",
+        status="completed",
         content=content,
         evidence_ids_used=_used_ids(market_evidence),
         sources=_sources_from_evidence(market_evidence, "market_snapshot"),
-        confidence="medium" if market_evidence else "low",
-        warnings=[
-            _warning(
-                "market_snapshot_not_time_series",
-                "market",
-                "Market evidence is a current snapshot, not a full time series.",
-            )
-        ],
-        missing_evidence=[] if market_evidence else ["market"],
+        confidence="high" if trend else "medium",
+        warnings=warnings if warnings else None,
     )
+    if chart:
+        result["chart"] = chart
+    return result
 
 
 async def run_news_agent(
@@ -370,11 +429,7 @@ async def run_legal_agent(
             missing_evidence=["legal"],
         )
 
-    content = (
-        "Thong tin phap ly tham khao:\n"
-        + "\n".join(f"- {_describe_evidence(record)}" for record in legal_evidence)
-        + "\nNoi dung nay chi de tham khao, khong thay the tu van phap ly chuyen nghiep."
-    )
+    content = _format_legal_response(legal_evidence, query)
     return _agent_result(
         agent_name="legal_advisor",
         status="completed",
@@ -384,6 +439,357 @@ async def run_legal_agent(
         confidence="high",
     )
 
+
+# ── Market Agent helpers ──────────────────────────────────────────────────
+
+def _extract_timeseries_from_evidence(
+    evidence: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Extract timeseries data from market evidence facts.
+
+    Evidence records from ``lookup_market_timeseries`` contain facts with
+    snapshot_month, avg_price_per_m2, median_price_per_m2, etc.
+    """
+    rows: list[dict[str, Any]] = []
+    for item in evidence:
+        facts = _evidence_facts(item)
+        if facts.get("snapshot_month"):
+            rows.append(facts)
+    return rows
+
+
+def analyze_market_evidence(
+    market_evidence: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Analyze timeseries evidence for trend, change %, and volatility.
+
+    Adapted from the project's reference implementation.  Expects evidence
+    dicts with at least ``snapshot_month`` and ``median_price_per_m2``.
+    """
+    sorted_data = sorted(
+        market_evidence,
+        key=lambda x: x.get("snapshot_month") or "",
+    )
+
+    if len(sorted_data) < 2:
+        return {
+            "trend": "unknown",
+            "change_percent": None,
+            "confidence": "low",
+            "warnings": [
+                _warning(
+                    "insufficient_time_series",
+                    "market",
+                    "Need at least two market snapshots to compute trend.",
+                )
+            ],
+            "missing_evidence": ["time_series"],
+        }
+
+    first = sorted_data[0]
+    last = sorted_data[-1]
+
+    first_price = first.get("median_price_per_m2") or first.get("avg_price_per_m2")
+    last_price = last.get("median_price_per_m2") or last.get("avg_price_per_m2")
+
+    if not first_price or not last_price:
+        return {
+            "trend": "unknown",
+            "change_percent": None,
+            "confidence": "low",
+            "warnings": [
+                _warning(
+                    "missing_price_per_m2",
+                    "market",
+                    "Market snapshots do not contain enough price_per_m2 data.",
+                )
+            ],
+            "missing_evidence": ["median_price_per_m2"],
+        }
+
+    change_percent = ((last_price - first_price) / first_price) * 100
+
+    if change_percent > 3:
+        trend = "increasing"
+    elif change_percent < -3:
+        trend = "decreasing"
+    else:
+        trend = "stable"
+
+    # Compute additional metrics
+    prices = [r.get("median_price_per_m2") or r.get("avg_price_per_m2", 0) for r in sorted_data]
+    prices = [p for p in prices if p]
+
+    return {
+        "trend": trend,
+        "change_percent": round(change_percent, 2),
+        "first_price": first_price,
+        "last_price": last_price,
+        "first_month": first.get("snapshot_month"),
+        "last_month": last.get("snapshot_month"),
+        "min_price": round(min(prices), 2) if prices else None,
+        "max_price": round(max(prices), 2) if prices else None,
+        "avg_price": round(sum(prices) / len(prices), 2) if prices else None,
+        "data_points": len(sorted_data),
+        "total_listings": sum(r.get("listing_count", 0) for r in sorted_data),
+        "confidence": "medium",
+    }
+
+
+def _format_timeseries_response(
+    timeseries: list[dict[str, Any]],
+    trend: dict[str, Any] | None,
+    evidence: list[dict[str, Any]],
+) -> str:
+    """Format market timeseries analysis as Vietnamese text."""
+    lines = ["📊 **Phân tích thị trường**\n"]
+
+    if trend and trend["trend"] != "unknown":
+        arrow = "📈" if trend["trend"] == "increasing" else "📉" if trend["trend"] == "decreasing" else "➡️"
+        trend_label = {
+            "increasing": "tăng", "decreasing": "giảm", "stable": "đi ngang",
+        }.get(trend["trend"], trend["trend"])
+
+        lines.append(
+            f"{arrow} Xu hướng: **{trend_label}** "
+            f"({trend['change_percent']:+.2f}% từ {trend.get('first_month', '?')} đến {trend.get('last_month', '?')})"
+        )
+        if trend.get("avg_price"):
+            lines.append(f"- Giá trung bình: **{trend['avg_price']:,.0f} triệu/m²**")
+        if trend.get("min_price") and trend.get("max_price"):
+            lines.append(f"- Khoảng giá: {trend['min_price']:,.0f} → {trend['max_price']:,.0f} triệu/m²")
+        if trend.get("total_listings"):
+            lines.append(f"- Tổng số tin: {trend['total_listings']:,} ({trend.get('data_points', 0)} tháng)")
+        lines.append(f"- Độ tin cậy: {trend.get('confidence', 'medium')}")
+    else:
+        lines.append("⚠️ Chưa đủ dữ liệu chuỗi thời gian để phân tích xu hướng.")
+
+    if evidence:
+        lines.append("\n📋 **Dữ liệu hiện tại:**")
+        for record in evidence[:5]:
+            lines.append(f"- {_describe_evidence(record)}")
+
+    lines.append(
+        "\n> ℹ️ Dữ liệu từ thị trường, chỉ mang tính tham khảo. "
+        "Giá thực tế có thể khác tùy vị trí cụ thể."
+    )
+    return "\n".join(lines)
+
+
+def _build_timeseries_chart(
+    timeseries: list[dict[str, Any]],
+    trend: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    """Build chart data payload for frontend rendering.
+
+    Returns a dict compatible with Chart.js / Recharts line chart.
+    """
+    if len(timeseries) < 2:
+        return None
+
+    labels = [r.get("snapshot_month", "") for r in timeseries]
+    prices = [r.get("avg_price_per_m2") or r.get("median_price_per_m2") for r in timeseries]
+    counts = [r.get("listing_count", 0) for r in timeseries]
+
+    return {
+        "type": "line",
+        "title": "Biến động giá bất động sản theo thời gian",
+        "x_axis": {
+            "label": "Tháng",
+            "values": labels,
+        },
+        "series": [
+            {
+                "name": "Giá trung bình (triệu/m²)",
+                "values": [round(p, 2) if p else None for p in prices],
+                "color": "#2563eb",
+                "y_axis": "left",
+            },
+            {
+                "name": "Số lượng tin đăng",
+                "values": counts,
+                "color": "#16a34a",
+                "y_axis": "right",
+            },
+        ],
+        "trend": {
+            "direction": trend.get("trend", "unknown") if trend else "unknown",
+            "change_percent": trend.get("change_percent") if trend else None,
+        } if trend else None,
+    }
+
+
+# ── Property Agent helpers ────────────────────────────────────────────────
+
+def _extract_listing_prices(
+    evidence: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Extract price and area from listing evidence for comparison."""
+    results: list[dict[str, Any]] = []
+    for item in evidence:
+        facts = _evidence_facts(item)
+        price = _number(facts.get("price") or facts.get("price_vnd"))
+        area = _number(facts.get("area") or facts.get("area_m2"))
+        price_text = facts.get("price_text", "")
+        area_text = facts.get("area_text", "")
+
+        # Parse Vietnamese price text: "2.5 tỷ" → 2500, "1.2 triệu/tháng" → 1.2
+        if price is None and price_text:
+            price = _parse_vnd_price(price_text)
+        if area is None and area_text:
+            area = _parse_area(area_text)
+
+        title = facts.get("title") or item.get("title") or "N/A"
+        location = _record_location(item) or ""
+
+        price_per_m2 = round(price / area, 2) if price and area and area > 0 else None
+
+        results.append({
+            "title": title,
+            "location": location,
+            "price": price,
+            "area": area,
+            "price_text": price_text,
+            "area_text": area_text,
+            "price_per_m2": price_per_m2,
+            "product_id": item.get("product_id") or item.get("id"),
+            "url": item.get("url") or "",
+        })
+    return results
+
+
+def _parse_vnd_price(text: str) -> float | None:
+    """Parse Vietnamese price text to millions VND."""
+    text = text.lower().strip()
+    match = re.search(r"([\d,.]+)\s*(tỷ|ty|tỉ|ti|triệu|trieu|nghìn|ngan|tr)", text)
+    if not match:
+        match = re.search(r"([\d,.]+)", text)
+        if match:
+            return float(match.group(1).replace(",", "."))
+        return None
+    value = float(match.group(1).replace(",", "."))
+    unit = match.group(2)
+    if unit in ("tỷ", "ty", "tỉ", "ti"):
+        return value * 1000  # convert to millions
+    elif unit in ("triệu", "trieu"):
+        return value
+    elif unit in ("nghìn", "ngan", "tr"):
+        return value / 1000
+    return value
+
+
+def _parse_area(text: str) -> float | None:
+    """Parse Vietnamese area text to m²."""
+    match = re.search(r"([\d,.]+)\s*(m2|m²|m)", text.lower())
+    if match:
+        return float(match.group(1).replace(",", "."))
+    return None
+
+
+def _compare_with_market(
+    listings: list[dict[str, Any]],
+    preferences: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Rank listings and add market comparison tags."""
+    # Sort by price_per_m2 if available
+    with_price = [l for l in listings if l["price_per_m2"]]
+    without_price = [l for l in listings if not l["price_per_m2"]]
+
+    with_price.sort(key=lambda x: x["price_per_m2"] or 0)
+
+    # Add comparison tags
+    all_prices = [l["price_per_m2"] for l in with_price if l["price_per_m2"]]
+    avg_price = mean(all_prices) if all_prices else None
+
+    for listing in with_price:
+        if avg_price and listing["price_per_m2"]:
+            delta = ((listing["price_per_m2"] - avg_price) / avg_price) * 100
+            if delta < -10:
+                listing["tag"] = "💰 Rẻ hơn TB khu vực"
+            elif delta > 10:
+                listing["tag"] = "📌 Cao hơn TB khu vực"
+            else:
+                listing["tag"] = "✅ Giá ngang TB khu vực"
+            listing["delta_pct"] = round(delta, 1)
+        else:
+            listing["tag"] = ""
+
+    return with_price + without_price
+
+
+def _format_listing_card(index: int, listing: dict[str, Any]) -> str:
+    """Format a single listing as a rich card."""
+    lines = [f"**{index}. {listing['title']}**"]
+    if listing.get("location"):
+        lines.append(f"   📍 {listing['location']}")
+    if listing.get("price_text"):
+        lines.append(f"   💵 {listing['price_text']}")
+    if listing.get("area_text"):
+        lines.append(f"   📐 {listing['area_text']}")
+    if listing.get("price_per_m2"):
+        lines.append(f"   📊 {listing['price_per_m2']:,.0f} triệu/m²")
+    if listing.get("tag"):
+        lines.append(f"   {listing['tag']}")
+    if listing.get("url"):
+        lines.append(f"   🔗 {listing['url']}")
+    return "\n".join(lines)
+
+
+# ── Legal Agent helpers ───────────────────────────────────────────────────
+
+def _format_legal_response(
+    evidence: list[dict[str, Any]],
+    query: str,
+) -> str:
+    """Format legal advice with citations and validity check."""
+    lines = ["⚖️ **Thông tin pháp lý tham khảo:**\n"]
+
+    for i, record in enumerate(evidence[:8], 1):
+        facts = _evidence_facts(record)
+        source = record.get("source", {})
+        title = facts.get("title") or source.get("title") or record.get("title") or f"Văn bản #{i}"
+        citation = facts.get("citation") or record.get("citation") or ""
+        text = facts.get("text") or record.get("text") or _describe_evidence(record)
+
+        # Build citation reference
+        cit_parts = []
+        if isinstance(citation, dict):
+            chuong = citation.get("chuong", "")
+            dieu = citation.get("dieu_number", "") or citation.get("dieu", "")
+            khoan = citation.get("khoan_number", "") or citation.get("khoan", "")
+            if chuong:
+                cit_parts.append(f"Chương {chuong}")
+            if dieu:
+                cit_parts.append(f"Điều {dieu}")
+            if khoan:
+                cit_parts.append(f"Khoản {khoan}")
+        cit_ref = ", ".join(cit_parts) if cit_parts else ""
+
+        lines.append(f"**{i}. {title}**")
+        if cit_ref:
+            lines.append(f"   📖 {cit_ref}")
+        lines.append(f"   {text[:300]}{'...' if len(text) > 300 else ''}")
+
+        # Validity check from metadata
+        metadata = record.get("metadata_json") or record.get("metadata") or {}
+        ngay_hh = metadata.get("hf_ngay_ban_hanh") or metadata.get("ngay_ban_hanh") or ""
+        if ngay_hh:
+            lines.append(f"   📅 Ban hành: {ngay_hh}")
+
+        lines.append("")
+
+    lines.append(
+        "---\n"
+        "> ⚠️ **Lưu ý quan trọng:**\n"
+        "> - Thông tin trên chỉ mang tính tham khảo, không thay thế tư vấn pháp lý chuyên nghiệp\n"
+        "> - Văn bản pháp luật có thể đã được sửa đổi, bổ sung\n"
+        "> - Cần đối chiếu với văn bản hiện hành trước khi áp dụng\n"
+        "> - Nên tham khảo ý kiến luật sư hoặc chuyên gia pháp lý cho trường hợp cụ thể"
+    )
+    return "\n".join(lines)
+
+
+# ── Investment helpers ────────────────────────────────────────────────────
 
 def _number(value: Any) -> float | None:
     try:
@@ -426,6 +832,83 @@ def _investment_calculations(
             )
         calculations.append(calculation)
     return calculations
+
+
+def _estimate_roi(
+    calculations: list[dict[str, Any]],
+    market_evidence: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Estimate ROI attractiveness for each listing."""
+    results = []
+    for calc in calculations:
+        price_m2 = calc.get("listing_price_per_m2_million", 0)
+        delta = calc.get("market_delta_percent")
+
+        # Attractiveness: lower delta = better buy (below market)
+        if delta is not None:
+            if delta < -15:
+                score = 9
+                trend = "up"
+                label = "Rất hấp dẫn (thấp hơn TB)"
+            elif delta < -5:
+                score = 7
+                trend = "up"
+                label = "Hấp dẫn (dưới giá TB)"
+            elif delta < 5:
+                score = 6
+                trend = "flat"
+                label = "Giá hợp lý (ngang TB)"
+            elif delta < 15:
+                score = 4
+                trend = "down"
+                label = "Cao hơn TB, cân nhắc"
+            else:
+                score = 2
+                trend = "down"
+                label = "Đắt hơn nhiều so với TB"
+        else:
+            score = 5
+            trend = "flat"
+            label = "Chưa đủ dữ liệu so sánh"
+
+        results.append({
+            "title": calc.get("title", "N/A"),
+            "price_per_m2": price_m2,
+            "delta_pct": delta,
+            "attractiveness_score": score,
+            "trend": trend,
+            "trend_label": label,
+        })
+    return results
+
+
+def _assess_risk(
+    calculations: list[dict[str, Any]],
+    market_evidence: list[dict[str, Any]],
+    news_evidence: list[dict[str, Any]],
+) -> str:
+    """Assess investment risk based on available data."""
+    risks = []
+
+    # Market data risk
+    if not market_evidence:
+        risks.append("⚠️ Thiếu dữ liệu thị trường để so sánh — rủi ro thông tin cao")
+
+    # Price volatility risk
+    high_delta = [c for c in calculations if c.get("market_delta_percent") and abs(c["market_delta_percent"]) > 20]
+    if high_delta:
+        risks.append(f"📊 {len(high_delta)} listing có giá chênh lệch >20% so với TB khu vực")
+
+    # Legal risk
+    risks.append("⚖️ Cần kiểm tra pháp lý: sổ đỏ, quy hoạch, tranh chấp")
+
+    # Market liquidity
+    risks.append("💧 Rủi ro thanh khoản: BĐS không dễ bán nhanh như chứng khoán")
+
+    if news_evidence:
+        risks.append("📰 Có tin tức liên quan — cần đánh giá tác động thị trường")
+
+    return "\n".join(f"- {r}" for r in risks)
 
 async def run_investment_agent(
     *,
@@ -494,16 +977,20 @@ async def run_investment_agent(
             f"- {_describe_evidence(item)}" for item in market_evidence
         )
     if calculations:
-        content += "\nTinh toan dau tu co ban:\n" + "\n".join(
-            (
-                f"- {item['title']}: {item['listing_price_per_m2_million']} trieu/m2"
-                + (
-                    f", chenh lech {item['market_delta_percent']}% so voi trung binh khu vuc"
-                    if "market_delta_percent" in item
-                    else ", chua co trung binh khu vuc de so sanh"
-                )
-            )
-            for item in calculations
+        rois = _estimate_roi(calculations, market_evidence)
+        content += "\n💰 **Ước tính đầu tư:**\n" + "\n".join(
+            f"- {r['title']}: Giá {r['price_per_m2']} tr/m² | "
+            f"{'📈' if r.get('trend','') == 'up' else '📉' if r.get('trend','') == 'down' else '➡️'} "
+            f"Xu hướng {r.get('trend_label','chưa rõ')} | "
+            f"Điểm hấp dẫn: {r.get('attractiveness_score','?')}/10"
+            for r in rois[:5]
+        )
+        risk = _assess_risk(calculations, market_evidence, news_evidence)
+        content += f"\n\n⚠️ **Đánh giá rủi ro:**\n{risk}"
+
+        content += (
+            "\n\n> ⚠️ Đây KHÔNG phải lời khuyên tài chính. "
+            "Cần tự thẩm định dòng tiền, pháp lý và khả năng vay trước khi đầu tư."
         )
     if project_evidence:
         content += "\nBang chung du an lien quan:\n" + "\n".join(

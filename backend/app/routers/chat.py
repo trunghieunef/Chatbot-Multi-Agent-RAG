@@ -779,6 +779,7 @@ async def send_message(
         suggested_actions=suggested_actions,
         trace_summary=trace_summary,
         memory_hints=memory_hints,
+        charts=agent_response.charts,
         request_id=request_id,
         created_at=assistant_msg.created_at,
     )

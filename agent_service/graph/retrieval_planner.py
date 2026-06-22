@@ -152,6 +152,28 @@ def build_retrieval_plan(state: AgentGraphState) -> list[RetrievalTask]:
             )
         )
 
+    if (
+        "market_analysis" in agents
+        and caps["market"]["market_aggregate_ready"]
+        and listing_filters.get("city")
+    ):
+        ts_filters = dict(listing_filters)
+        ts_filters.setdefault("months", 6)
+        plan.append(
+            RetrievalTask(
+                task_id="market_timeseries_1",
+                domain="market",
+                tool="lookup_market_timeseries",
+                query=query,
+                filters=ts_filters,
+                retrieved_for=["market_analysis"],
+                depends_on=[],
+                dependency_mode="none",
+                top_k=10,
+                rerank_top_k=None,
+            )
+        )
+
     if "legal_advisor" in agents and caps["legal"]["semantic_index_ready"]:
         plan.append(
             RetrievalTask(
@@ -504,9 +526,14 @@ async def _execute_single_retrieval_task(
 
     try:
         if task.domain == "market":
-            from agent_service.tools.market import lookup_market_metrics
+            if task.tool == "lookup_market_timeseries":
+                from agent_service.tools.market import lookup_market_timeseries
 
-            records = await lookup_market_metrics(task.filters)
+                records = await lookup_market_timeseries(task.filters)
+            else:
+                from agent_service.tools.market import lookup_market_metrics
+
+                records = await lookup_market_metrics(task.filters)
             if not records:
                 warning = structured_warning(
                     code="investment_market_data_missing",
