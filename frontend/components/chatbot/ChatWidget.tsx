@@ -1,92 +1,24 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
-import { BarChart3, FileText, Home, MapPin, MessageCircle, Scale, Send, Bot, TrendingUp, User, Sparkles, X } from "lucide-react";
-import { sendChatMessage } from "@/lib/api";
+import { useState } from "react";
+import { BarChart3, FileText, Home, MapPin, Maximize2, MessageCircle, Scale, Send, Bot, TrendingUp, User, Sparkles, X } from "lucide-react";
+import { useChat } from "@/lib/useChat";
 import { getListingSourceDetails, getMarketSourceSummary, getSourceKind, getSourceTitle } from "@/lib/chatSourceDisplay";
-import type { ChatMessageResponse, ChatSource, MemoryHint, StructuredWarning } from "@/lib/types";
-
-interface Message {
-  role: "user" | "assistant";
-  content: string;
-  agent_used?: string | null;
-  agents_used?: string[] | null;
-  sources?: ChatSource[] | null;
-  suggested_actions?: string[] | null;
-  trace_summary?: ChatMessageResponse["trace_summary"];
-  memory_hints?: ChatMessageResponse["memory_hints"];
-  feedback_id?: string | null;
-  request_id?: string | null;
-}
+import { useRouter } from "next/navigation";
+import type { ChatSource, MemoryHint, StructuredWarning } from "@/lib/types";
+import type { Message } from "@/lib/useChat";
 
 export default function ChatWidget() {
+  const router = useRouter();
+  const {
+    messages,
+    input,
+    loading,
+    scrollRef,
+    setInput,
+    send,
+  } = useChat({ mode: "mini" });
   const [open, setOpen] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      role: "assistant",
-      content:
-        "Xin chào! Tôi là trợ lý AI tư vấn bất động sản. Bạn muốn tìm kiếm nhà đất, hỏi về thị trường, hay cần tư vấn pháp lý?",
-      suggested_actions: [
-        "Tìm căn hộ 2PN Quận 7",
-        "Xu hướng giá nhà 2024",
-        "Thủ tục mua nhà lần đầu",
-      ],
-    },
-  ]);
-  const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const scrollRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    scrollRef.current?.scrollTo({
-      top: scrollRef.current.scrollHeight,
-      behavior: "smooth",
-    });
-  }, [messages]);
-
-  async function handleSend(text?: string) {
-    const msg = text || input.trim();
-    if (!msg || loading) return;
-
-    setInput("");
-    setMessages((prev) => [...prev, { role: "user", content: msg }]);
-    setLoading(true);
-
-    try {
-      const res: ChatMessageResponse = await sendChatMessage({
-        message: msg,
-        session_id: sessionId || undefined,
-      });
-      setSessionId(res.session_id);
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          content: res.content,
-          agent_used: res.agent_used,
-          agents_used: res.agents_used,
-          sources: res.sources,
-          suggested_actions: res.suggested_actions,
-          trace_summary: res.trace_summary,
-          memory_hints: res.memory_hints,
-          feedback_id: res.feedback_id,
-          request_id: res.request_id,
-        },
-      ]);
-    } catch {
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          content:
-            "Xin lỗi, đã có lỗi xảy ra. Backend có thể chưa khởi động. Vui lòng thử lại.",
-        },
-      ]);
-    } finally {
-      setLoading(false);
-    }
-  }
 
   const agentLabels: Record<string, string> = {
     property_search: "Tìm kiếm",
@@ -193,12 +125,21 @@ export default function ChatWidget() {
                 <p className="text-[10px] opacity-80">Online · Trả lời ngay</p>
               </div>
             </div>
-            <button
-              onClick={() => setOpen(false)}
-              className="rounded-lg p-1 transition-colors hover:bg-white/20"
-            >
-              <X size={18} />
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => router.push("/tro-ly-ai")}
+                className="rounded-lg p-1 transition-colors hover:bg-white/20"
+                title="Mo rong"
+              >
+                <Maximize2 size={16} />
+              </button>
+              <button
+                onClick={() => setOpen(false)}
+                className="rounded-lg p-1 transition-colors hover:bg-white/20"
+              >
+                <X size={18} />
+              </button>
+            </div>
           </div>
 
           {/* Messages */}
@@ -348,7 +289,7 @@ export default function ChatWidget() {
                     {msg.suggested_actions.map((action, j) => (
                       <button
                         key={j}
-                        onClick={() => handleSend(action)}
+                        onClick={() => send(action)}
                         className="rounded-full border border-border bg-card px-3 py-1 text-xs text-foreground transition-colors hover:bg-primary hover:text-primary-foreground hover:border-primary"
                       >
                         {action}
@@ -379,7 +320,7 @@ export default function ChatWidget() {
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                handleSend();
+                send();
               }}
               className="flex items-center gap-2"
             >

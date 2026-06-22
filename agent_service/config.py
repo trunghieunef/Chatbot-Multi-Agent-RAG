@@ -1,13 +1,21 @@
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+ROOT_ENV_FILE = Path(__file__).resolve().parents[1] / ".env"
+
+
 class AgentSettings(BaseSettings):
     """Settings for the internal Agent Service."""
 
-    model_config = SettingsConfigDict(env_file=".env", case_sensitive=True, extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=str(ROOT_ENV_FILE),
+        case_sensitive=True,
+        extra="ignore",
+    )
 
     SERVICE_NAME: str = "agent-service"
     DEBUG: bool = True
@@ -31,10 +39,10 @@ class AgentSettings(BaseSettings):
 
     AGENT_REQUEST_TIMEOUT_SECONDS: float = 45.0
     AGENT_LLM_TIMEOUT_SECONDS: float = 30.0
-    AGENT_ROUTER_MODE: str = "rule"
-    AGENT_QUERY_REWRITE_ENABLED: bool = False
-    AGENT_MEMORY_FILTERS_ENABLED: bool = False
-    AGENT_SPECIALIST_LLM_ENABLED: bool = False
+    AGENT_ROUTER_MODE: str = "llm"
+    AGENT_QUERY_REWRITE_ENABLED: bool = True
+    AGENT_MEMORY_FILTERS_ENABLED: bool = True
+    AGENT_SPECIALIST_LLM_ENABLED: bool = True
     AGENT_LLM_CONFIDENCE_THRESHOLD: float = 0.65
     AGENT_LLM_MAX_REWRITES: int = 3
     AGENT_LLM_ROUTER_TIMEOUT_SECONDS: float = 5.0
@@ -45,9 +53,9 @@ class AgentSettings(BaseSettings):
     AGENT_LLM_COST_TRACKING_ENABLED: bool = True
     AGENT_LLM_INPUT_PRICE_PER_MILLION_USD: float = 0.0
     AGENT_LLM_OUTPUT_PRICE_PER_MILLION_USD: float = 0.0
-    AGENT_REACT_ENABLED: bool = False
+    AGENT_REACT_ENABLED: bool = True
     AGENT_REACT_MAX_ITERATIONS: int = 2
-    AGENT_REACT_CONTROLLER_MODE: str = "rule"
+    AGENT_REACT_CONTROLLER_MODE: str = "llm"
     AGENT_REACT_TIMEOUT_SECONDS: float = 5.0
 
     @field_validator("DEBUG", mode="before")

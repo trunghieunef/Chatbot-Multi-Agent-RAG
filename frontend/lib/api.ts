@@ -6,9 +6,12 @@ import type {
   ArticleCard,
   ArticleDetail,
   ArticleFilters,
+  AuthUser,
   ChatFeedbackRequest,
+  ChatHistoryResponse,
   ChatMessageRequest,
   ChatMessageResponse,
+  ChatSessionResponse,
   CityCount,
   DistrictCount,
   ListingCard,
@@ -163,6 +166,40 @@ export async function sendChatFeedback(
   });
 }
 
+/* Chat sessions */
+
+export async function getChatSessions(): Promise<ChatSessionResponse[]> {
+  return fetchJSON(`${BASE}/chat/sessions`, {
+    headers: authHeaders(),
+  });
+}
+
+export async function getChatSessionHistory(
+  sessionId: string
+): Promise<ChatHistoryResponse> {
+  return fetchJSON(`${BASE}/chat/sessions/${sessionId}`, {
+    headers: authHeaders(),
+  });
+}
+
+export async function deleteChatSession(sessionId: string): Promise<void> {
+  await fetch(`${BASE}/chat/sessions/${sessionId}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
+}
+
+export async function renameChatSession(
+  sessionId: string,
+  title: string
+): Promise<ChatSessionResponse> {
+  return fetchJSON(`${BASE}/chat/sessions/${sessionId}`, {
+    method: "PATCH",
+    headers: authHeaders(),
+    body: JSON.stringify({ title }),
+  });
+}
+
 /* Admin */
 
 export async function getAdminChatTraces(): Promise<AdminTraceListItem[]> {
@@ -208,5 +245,11 @@ export async function register(body: {
   return fetchJSON(`${BASE}/auth/register`, {
     method: "POST",
     body: JSON.stringify(body),
+  });
+}
+
+export async function getMe(): Promise<AuthUser> {
+  return fetchJSON(`${BASE}/auth/me`, {
+    headers: authHeaders(),
   });
 }

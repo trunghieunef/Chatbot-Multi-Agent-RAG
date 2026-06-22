@@ -39,6 +39,7 @@ class ChatMessageResponse(BaseModel):
     suggested_actions: list[str] | None = None
     trace_summary: dict | None = None
     memory_hints: list[dict] | None = None
+    charts: list[dict] | None = None
     feedback_id: str | None = None
     request_id: str | None = None
     created_at: datetime | None = None
@@ -63,3 +64,8 @@ class ChatHistoryResponse(BaseModel):
     """Full chat history for a session."""
     session: ChatSessionResponse
     messages: list[ChatMessageResponse]
+
+
+class ChatSessionUpdate(BaseModel):
+    """Request to update a chat session (rename)."""
+    title: str = Field(..., min_length=1, max_length=300)

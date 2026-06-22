@@ -220,6 +220,11 @@ export interface ChatSessionResponse {
   updated_at: string | null;
 }
 
+export interface ChatHistoryResponse {
+  session: ChatSessionResponse;
+  messages: ChatMessageResponse[];
+}
+
 export interface AuthUser {
   id: number;
   email: string;

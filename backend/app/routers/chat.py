@@ -32,6 +32,7 @@ from app.schemas.chat import (
     ChatMessageRequest,
     ChatMessageResponse,
     ChatSessionResponse,
+    ChatSessionUpdate,
 )
 from app.services.agent_service.client import (
     AgentServiceError,
@@ -779,6 +780,7 @@ async def send_message(
         suggested_actions=suggested_actions,
         trace_summary=trace_summary,
         memory_hints=memory_hints,
+        charts=agent_response.charts,
         request_id=request_id,
         created_at=assistant_msg.created_at,
     )
@@ -864,4 +866,67 @@ async def get_session_history(
             )
             for m in messages
         ],
+    )
+
+
+@router.delete("/sessions/{session_id}", status_code=204)
+async def delete_session(
+    session_id: uuid.UUID,
+    user: User | None = Depends(get_optional_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete a chat session and all its messages. Must be session owner."""
+    result = await db.execute(
+        select(ChatSession).where(ChatSession.id == session_id)
+    )
+    session = result.scalar_one_or_none()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    verify_session_ownership(session, user)
+
+    # Cascade delete messages first, then session
+    await db.execute(
+        ChatMessage.__table__.delete().where(ChatMessage.session_id == session_id)
+    )
+    await db.delete(session)
+    await db.commit()
+
+
+@router.patch(
+    "/sessions/{session_id}",
+    response_model=ChatSessionResponse,
+)
+async def rename_session(
+    session_id: uuid.UUID,
+    body: ChatSessionUpdate,
+    user: User | None = Depends(get_optional_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Rename a chat session. Must be session owner."""
+    result = await db.execute(
+        select(ChatSession).where(ChatSession.id == session_id)
+    )
+    session = result.scalar_one_or_none()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    verify_session_ownership(session, user)
+
+    session.title = body.title
+    await db.commit()
+    await db.refresh(session)
+
+    # Count messages
+    count_q = await db.execute(
+        select(func.count())
+        .select_from(ChatMessage)
+        .where(ChatMessage.session_id == session_id)
+    )
+    msg_count = count_q.scalar() or 0
+
+    return ChatSessionResponse(
+        id=session.id,
+        title=session.title,
+        message_count=msg_count,
+        created_at=session.created_at,
+        updated_at=session.updated_at,
     )

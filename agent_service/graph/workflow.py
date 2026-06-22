@@ -6,6 +6,17 @@ from langgraph.graph import END, StateGraph
 
 from agent_service.config import get_agent_settings
 from agent_service.contracts import AgentChatRequest, AgentChatResponse, TraceSummary
+
+
+def _collect_charts(agent_results: dict[str, Any]) -> list[dict[str, Any]]:
+    """Extract chart payloads from agent results for frontend rendering."""
+    charts: list[dict[str, Any]] = []
+    for agent_name, result in agent_results.items():
+        if isinstance(result, dict) and result.get("chart"):
+            chart = dict(result["chart"])
+            chart.setdefault("agent", agent_name)
+            charts.append(chart)
+    return charts
 from agent_service.graph.nodes import (
     clarification_node,
     committee_review_node,
@@ -193,6 +204,9 @@ def _response_from_result(
         latency_ms=latency_ms,
         warnings=warnings,
     )
+    # Collect charts from agent results
+    charts = _collect_charts(result.get("agent_results", {}))
+
     return AgentChatResponse(
         request_id=request.request_id,
         final_response=final_response,
@@ -200,6 +214,7 @@ def _response_from_result(
         sources=sources,
         suggested_actions=result.get("suggested_actions", []),
         trace_summary=trace_summary,
+        charts=charts,
         full_trace={
             "request_id": request.request_id,
             "intelligence": {

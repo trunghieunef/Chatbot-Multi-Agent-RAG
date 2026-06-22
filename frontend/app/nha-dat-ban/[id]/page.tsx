@@ -9,6 +9,7 @@ import {
   ChevronLeft, ChevronRight,
 } from "lucide-react";
 import { getListingDetail, getSimilarListings } from "@/lib/api";
+import { formatDescription } from "@/lib/utils";
 import ListingCard from "@/components/listing/ListingCard";
 import type { ListingDetail, ListingCard as ListingCardType } from "@/lib/types";
 
@@ -234,7 +235,7 @@ export default function ListingDetailPage() {
                 Mô tả chi tiết
               </h2>
               <div className="text-sm text-foreground/80 leading-relaxed whitespace-pre-line">
-                {listing.description}
+                {formatDescription(listing.description)}
               </div>
             </div>
           )}
