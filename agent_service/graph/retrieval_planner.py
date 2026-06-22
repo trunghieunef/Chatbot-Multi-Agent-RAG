@@ -51,13 +51,18 @@ def _extract_filters(query: str) -> dict[str, Any]:
         for term in ("ho chi minh", "tp hcm", "tphcm", "sai gon", "saigon")
     ):
         filters["city"] = "Ho Chi Minh"
+    elif any(
+        term in normalized
+        for term in ("ha noi", "hanoi", "hn")
+    ):
+        filters["city"] = "Ha Noi"
 
     district_match = re.search(r"\b(?:quan|q)\s*(\d{1,2})\b", normalized)
     if district_match:
         filters["district"] = f"Quan {district_match.group(1)}"
     else:
-        # Named districts: "quận đống đa", "quận cầu giấy", "quan dong da"
-        named = re.search(r"(?:quan|quận)\s+([a-zA-ZđĐàáảãạăắằẳẵặâấầẩẫậêếềểễệôốồổỗộơớờởỡợưứừửữự]+(?:\s+[a-zA-ZđĐàáảãạăắằẳẵặâấầẩẫậêếềểễệôốồổỗộơớờởỡợưứừửữự]+)?)", normalized)
+        # Named districts: "quận đống đa", "quận cầu giấy", "ở cầu giấy"
+        named = re.search(r"(?:quan|quận|ở)\s+([a-zA-ZđĐàáảãạăắằẳẵặâấầẩẫậêếềểễệôốồổỗộơớờởỡợưứừửữự]+(?:\s+[a-zA-ZđĐàáảãạăắằẳẵặâấầẩẫậêếềểễệôốồổỗộơớờởỡợưứừửữự]+)?)", normalized)
         if named:
             filters["district"] = f"Quan {named.group(1).title()}"
 
