@@ -51,19 +51,39 @@ def build_specialist_prompt(
     preferences: dict[str, Any],
 ) -> str:
     evidence_payload = [_compact_evidence(record) for record in evidence]
-    return "\n".join(
-        [
-            "You are a real-estate specialist agent. Return JSON only.",
-            f"Agent name: {agent_name}",
-            f"User query: {query}",
-            f"User preferences: {json.dumps(preferences, ensure_ascii=True)}",
-            "Use only the provided evidence IDs. Do not cite or infer from unseen evidence.",
-            "If evidence is insufficient, return status no_evidence or partial and explain what is missing.",
-            "Required JSON fields: agent_name, status, content, claims, evidence_ids_used, confidence, warnings, missing_evidence.",
-            "Each claim should include text and evidence_id when it depends on a source.",
-            f"Evidence: {json.dumps(evidence_payload, ensure_ascii=True)}",
-        ]
-    )
+
+    # Domain-specific guardrails
+    domain_barriers: dict[str, str] = {
+        "legal_advisor": (
+            "BẠN CHỈ ĐƯỢC TRẢ LỜI các câu hỏi pháp lý liên quan đến BẤT ĐỘNG SẢN: "
+            "mua bán, cho thuê, chuyển nhượng, giấy tờ pháp lý (sổ đỏ, sổ hồng, "
+            "giấy chứng nhận), thuế phí, lệ phí trước bạ, sang tên, công chứng, "
+            "thừa kế, thế chấp, quy hoạch, xây dựng, đất đai, nhà ở, chung cư, "
+            "dự án bất động sản, đền bù giải tỏa, hợp đồng mua bán/thuê bất động sản.\n"
+            "Nếu câu hỏi KHÔNG liên quan đến bất động sản, hãy trả lời: "
+            "'Tôi chỉ hỗ trợ các vấn đề pháp lý về bất động sản. "
+            "Vui lòng hỏi về mua bán, giấy tờ, thuế phí, hoặc các vấn đề pháp lý "
+            "liên quan đến nhà đất.' và đặt status='out_of_domain'."
+        ),
+    }
+    barrier = domain_barriers.get(agent_name, "")
+
+    lines = [
+        "You are a real-estate specialist agent. Return JSON only.",
+        f"Agent name: {agent_name}",
+    ]
+    if barrier:
+        lines.append(barrier)
+    lines.extend([
+        f"User query: {query}",
+        f"User preferences: {json.dumps(preferences, ensure_ascii=True)}",
+        "Use only the provided evidence IDs. Do not cite or infer from unseen evidence.",
+        "If evidence is insufficient, return status no_evidence or partial and explain what is missing.",
+        "Required JSON fields: agent_name, status, content, claims, evidence_ids_used, confidence, warnings, missing_evidence.",
+        "Each claim should include text and evidence_id when it depends on a source.",
+        f"Evidence: {json.dumps(evidence_payload, ensure_ascii=True)}",
+    ])
+    return "\n".join(lines)
 
 
 def _append_warning(result: dict[str, Any], warning: str) -> dict[str, Any]:
