@@ -34,8 +34,21 @@ class _FakeClient:
         self.models = _FakeModels(responses)
 
 
+def _patch_cost_tracking_available(monkeypatch):
+    """Make cost tracking report 'available, under budget' so the guards in
+    run_tool_loop / generate_text_with_usage do not short-circuit offline
+    (no Redis in the test environment)."""
+    monkeypatch.setattr(
+        gemini,
+        "get_runtime_cost_summary",
+        lambda settings: {"tracking_available": True, "budget_exceeded": False},
+        raising=False,
+    )
+
+
 @pytest.mark.asyncio
 async def test_run_tool_loop_executes_tool_then_returns_text(monkeypatch):
+    _patch_cost_tracking_available(monkeypatch)
     # First model turn: ask for a tool. Second turn: final text.
     responses = [
         _FakeResponse(function_calls=[_FakeFunctionCall("search_listings", {"query": "q"})]),
@@ -85,7 +98,44 @@ async def test_run_tool_loop_skips_without_api_key():
 
 
 @pytest.mark.asyncio
+async def test_run_tool_loop_skips_when_cost_tracking_unavailable(monkeypatch):
+    # Cost tracking enabled but the cost summary reports tracking is unavailable
+    # (e.g. Redis unreachable) => the loop must skip and never call the executor.
+    monkeypatch.setattr(
+        gemini,
+        "get_runtime_cost_summary",
+        lambda settings: {"tracking_available": False},
+        raising=False,
+    )
+    monkeypatch.setattr(
+        gemini.genai,
+        "Client",
+        lambda **kw: (_ for _ in ()).throw(AssertionError("client must not be built")),
+        raising=False,
+    )
+
+    async def executor(name, args):
+        raise AssertionError("executor must not run when cost tracking unavailable")
+
+    client = gemini.GeminiClient(api_key="k", model="gemini-2.5-flash")
+    assert client.settings.AGENT_LLM_COST_TRACKING_ENABLED is True
+    result = await client.run_tool_loop(
+        system_prompt="role",
+        user_message="x",
+        function_declarations=[{"name": "t"}],
+        executor=executor,
+        max_iterations=2,
+        timeout_seconds=5.0,
+    )
+    assert result.skipped_reason == "llm_cost_tracking_unavailable"
+    assert result.text == ""
+    assert result.steps == []
+    assert result.iterations == 0
+
+
+@pytest.mark.asyncio
 async def test_generate_text_runs_with_api_key_even_if_model_is_default(monkeypatch):
+    _patch_cost_tracking_available(monkeypatch)
     responses = [_FakeResponse(text="ok")]
     monkeypatch.setattr(gemini.genai, "Client", lambda **kw: _FakeClient(responses), raising=False)
     # model passed positionally => model_explicitly_configured True historically,

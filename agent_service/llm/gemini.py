@@ -117,6 +117,11 @@ class GeminiClient:
 
         if self.settings.AGENT_LLM_COST_TRACKING_ENABLED:
             summary = get_runtime_cost_summary(self.settings)
+            if not summary.get("tracking_available", True):
+                return GeminiResult(
+                    text="",
+                    skipped_reason="llm_cost_tracking_unavailable",
+                )
             if summary.get("budget_exceeded"):
                 return GeminiResult(text="", skipped_reason="llm_budget_exceeded")
 
@@ -208,6 +213,13 @@ class GeminiClient:
         """
         if not self.api_key:
             return ToolLoopResult(text="", steps=[], iterations=0, skipped_reason="no_api_key")
+
+        if self.settings.AGENT_LLM_COST_TRACKING_ENABLED:
+            summary = get_runtime_cost_summary(self.settings)
+            if not summary.get("tracking_available", True):
+                return ToolLoopResult(text="", steps=[], iterations=0, skipped_reason="llm_cost_tracking_unavailable")
+            if summary.get("budget_exceeded"):
+                return ToolLoopResult(text="", steps=[], iterations=0, skipped_reason="llm_budget_exceeded")
 
         tools = [types.Tool(function_declarations=function_declarations)]
         config = types.GenerateContentConfig(
