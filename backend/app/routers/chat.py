@@ -214,6 +214,25 @@ async def _run_agent_service_pipeline(
     try:
         return await get_agent_service_client().chat(request)
     except AgentServiceError as exc:
+        return AgentChatResponse(
+            request_id=request_id,
+            final_response=(
+                "Agent Service chua san sang. Vui long thu lai sau hoac dung pipeline du phong."
+            ),
+            agents_used=["agent_service_error"],
+            suggested_actions=[
+                "Thu lai sau",
+                "Kiem tra backend logs",
+            ],
+            trace_summary=TraceSummary(
+                intent="agent_service_error",
+                agents=["agent_service_error"],
+                latency_ms=0,
+                warnings=[str(exc)],
+            ),
+            full_trace={"mode": "agent_service_error"},
+            readiness={},
+        )
 
 
 async def _run_agent_service_pipeline_v2(
