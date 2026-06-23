@@ -308,6 +308,22 @@ class BaseAgent(ABC):
                 "[%s] iter=%d LLM_OK: action=%s tool=%s confidence=%.2f",
                 self.agent_name, iteration, thought.action, thought.tool_name, thought.confidence,
             )
+
+            # Guard: Force tool call on first iteration if LLM tries to answer without data
+            if thought.action == "final_answer" and iteration == 0 and not previous_actions and tools:
+                logger.warning(
+                    "[%s] iter=%d LLM_GUARD: LLM said final_answer on iter 0 with no data, forcing call_tool",
+                    self.agent_name, iteration,
+                )
+                return AgentThought(
+                    iteration=iteration,
+                    reasoning="Must search for data before answering.",
+                    action="call_tool",
+                    tool_name=tools[0].name,
+                    tool_params={"query": context.normalized_query, "filters": context.routing_filters},
+                    confidence=0.5,
+                )
+
             return thought
         except Exception as exc:
             logger.warning("[%s] iter=%d LLM_FAIL: %s, fallback to deterministic", self.agent_name, iteration, exc)
