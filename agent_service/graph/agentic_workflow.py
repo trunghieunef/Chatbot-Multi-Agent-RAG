@@ -16,9 +16,6 @@ def build_default_tool_registry() -> ToolRegistry:
 
     Each tool is registered with its metadata (ToolDef) and
     bound to the actual async function from agent_service/tools/.
-
-    Imports are lazy (inside this function) to avoid dependency
-    chain issues when the module is first loaded.
     """
     from agent_service.tools.retrieval import (
         search_listings,
@@ -28,13 +25,6 @@ def build_default_tool_registry() -> ToolRegistry:
     )
     from agent_service.tools.market import lookup_market_metrics, lookup_market_timeseries
 
-
-def build_default_tool_registry() -> ToolRegistry:
-    """Build ToolRegistry with all available tools and bindings.
-
-    Each tool is registered with its metadata (ToolDef) and
-    bound to the actual async function from agent_service/tools/.
-    """
     registry = ToolRegistry()
 
     # ── Retrieval tools ──────────────────────────────────────
