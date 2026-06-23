@@ -8,6 +8,10 @@ import {
   deleteChatSession,
   renameChatSession,
 } from "@/lib/api";
+import {
+  buildDemoChatResponse,
+  isDemoChatEnabled,
+} from "@/lib/demoChatResponses";
 import type {
   ChatMessageResponse,
   ChatSessionResponse,
@@ -98,10 +102,19 @@ export function useChat(options: UseChatOptions = { mode: "mini" }) {
       setLoading(true);
 
       try {
-        const res: ChatMessageResponse = await sendChatMessage({
-          message: msg,
-          session_id: sessionId || undefined,
-        });
+        let res: ChatMessageResponse;
+        if (isDemoChatEnabled()) {
+          await new Promise((resolve) => setTimeout(resolve, 450));
+          res = buildDemoChatResponse(
+            msg,
+            sessionId || `demo-session-${Date.now()}`
+          );
+        } else {
+          res = await sendChatMessage({
+            message: msg,
+            session_id: sessionId || undefined,
+          });
+        }
         setSessionId(res.session_id);
         setMessages((prev) => [
           ...prev,

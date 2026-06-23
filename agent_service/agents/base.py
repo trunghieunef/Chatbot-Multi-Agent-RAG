@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import time
 from abc import ABC, abstractmethod
 from typing import Any, TYPE_CHECKING
@@ -18,6 +19,8 @@ from agent_service.graph.blackboard import read_blackboard
 
 if TYPE_CHECKING:
     from agent_service.llm.gemini import GeminiClient
+
+logger = logging.getLogger(__name__)
 
 
 def _warning(code: str, message: str) -> StructuredWarning:
@@ -264,8 +267,10 @@ class BaseAgent(ABC):
         """Use Gemini to decide the next action in the ReAct loop.
 
         Falls back to deterministic think() if LLM is unavailable or fails.
+        Logs every LLM call and fallback reason for debugging.
         """
         if self._llm_client is None:
+            logger.warning("[%s] iter=%d LLM_SKIP: no llm_client (use_llm=%s)", self.agent_name, iteration, self.use_llm)
             return await self.think(context, iteration, previous_actions, blackboard_entries)
 
         tools = (
@@ -273,6 +278,7 @@ class BaseAgent(ABC):
             if self._tool_registry else []
         )
         if not tools:
+            logger.warning("[%s] iter=%d LLM_SKIP: no tools available", self.agent_name, iteration)
             return await self.think(context, iteration, previous_actions, blackboard_entries)
 
         prompt = self._build_think_prompt(
@@ -280,11 +286,13 @@ class BaseAgent(ABC):
         )
 
         try:
+            logger.warning("[%s] iter=%d LLM_CALL: sending prompt (%d chars)", self.agent_name, iteration, len(prompt))
             raw = await self._llm_client.generate_json(
                 prompt,
                 timeout_seconds=15.0,
             )
             if not raw or not raw.get("action"):
+                logger.warning("[%s] iter=%d LLM_EMPTY: empty or invalid response, fallback to deterministic", self.agent_name, iteration)
                 return await self.think(context, iteration, previous_actions, blackboard_entries)
 
             thought = AgentThought(
@@ -296,8 +304,26 @@ class BaseAgent(ABC):
                 clarifying_question=raw.get("clarifying_question"),
                 confidence=float(raw.get("confidence", 0.5)),
             )
+            logger.warning(
+                "[%s] iter=%d LLM_OK: action=%s tool=%s confidence=%.2f",
+                self.agent_name, iteration, thought.action, thought.tool_name, thought.confidence,
+            )
+
+            # Guard: Force tool call on first iteration if LLM tries to answer without data
+            if thought.action == "final_answer" and iteration == 0 and not previous_actions and tools:
+                logger.warning(
+                    "[%s] iter=%d LLM_GUARD: LLM said final_answer on iter 0 with no data, using deterministic tool decision",
+                    self.agent_name, iteration,
+                )
+                fallback_thought = await self.think(
+                    context, iteration, previous_actions, blackboard_entries
+                )
+                if fallback_thought.action != "final_answer":
+                    return fallback_thought
+
             return thought
-        except Exception:
+        except Exception as exc:
+            logger.warning("[%s] iter=%d LLM_FAIL: %s, fallback to deterministic", self.agent_name, iteration, exc)
             return await self.think(context, iteration, previous_actions, blackboard_entries)
 
     # ── ReAct loop ───────────────────────────────────────────────
@@ -325,6 +351,14 @@ class BaseAgent(ABC):
         """
         self._tool_registry = tool_registry
         self._llm_client = llm_client
+        logger.warning(
+            "[%s] RUN_START: use_llm=%s llm_client=%s tools=%d iterations=%d",
+            self.agent_name,
+            self.use_llm,
+            self._llm_client is not None,
+            len(self._tool_registry.list_for_agent(self.agent_name)) if self._tool_registry else 0,
+            self.max_iterations,
+        )
         thoughts: list[AgentThought] = []
         actions: list[AgentAction] = []
         started = time.perf_counter()
@@ -340,68 +374,106 @@ class BaseAgent(ABC):
                     iterations=iteration,
                 )
 
-            try:
-                blackboard_entries = self._read_blackboard(state)
-                if self.use_llm and self._llm_client is not None:
-                    thought = await self._llm_think(
-                        context, iteration, actions, blackboard_entries
-                    )
-                else:
-                    thought = await self.think(
-                        context, iteration, actions, blackboard_entries
-                    )
-                thoughts.append(thought)
-            except Exception as exc:
-                return AgentResult(
-                    agent_name=self.agent_name,
-                    status="failed",
-                    content=f"Agent failed during think: {exc}",
-                    warnings=[_warning("think_error", str(exc))],
-                    iterations=iteration,
-                )
-
-            if thought.action == "final_answer":
-                action = AgentAction(
-                    iteration=iteration,
-                    action_type="final_answer",
-                    status="success",
-                )
-                actions.append(action)
-                return self.build_result(context, thoughts, actions)
-
-            if thought.action == "ask_clarification":
-                return AgentResult(
-                    agent_name=self.agent_name,
-                    status="partial",
-                    content=thought.clarifying_question
-                    or "Could you provide more details?",
-                    iterations=iteration,
-                )
-
-            try:
-                action = await self.act(thought, context)
-                actions.append(action)
-            except Exception as exc:
-                return AgentResult(
-                    agent_name=self.agent_name,
-                    status="failed",
-                    content=f"Agent failed during act: {exc}",
-                    warnings=[_warning("act_error", str(exc))],
-                    iterations=iteration,
-                )
-
-            try:
-                done = await self.observe(thought, action, context)
-                if done:
-                    return self.build_result(context, thoughts, actions)
-            except Exception as exc:
-                return AgentResult(
-                    agent_name=self.agent_name,
-                    status="failed",
-                    content=f"Agent failed during observe: {exc}",
-                    warnings=[_warning("observe_error", str(exc))],
-                    iterations=iteration,
-                )
+            _, _, result = await self.run_one_iteration(
+                context,
+                state,
+                thoughts=thoughts,
+                actions=actions,
+                iteration=iteration,
+                tool_registry=tool_registry,
+                llm_client=llm_client,
+            )
+            if result is not None:
+                return result
 
         # Max iterations reached
         return self.build_result(context, thoughts, actions)
+
+    async def run_one_iteration(
+        self,
+        context: AgentContext,
+        state: dict[str, Any],
+        *,
+        thoughts: list[AgentThought],
+        actions: list[AgentAction],
+        iteration: int,
+        tool_registry: Any | None = None,
+        llm_client: Any | None = None,
+    ) -> tuple[AgentThought | None, AgentAction | None, AgentResult | None]:
+        """Execute exactly one ReAct iteration.
+
+        The orchestrator uses this to coordinate agents across shared
+        blackboard rounds while preserving each agent's thought/action history.
+        """
+        if tool_registry is not None:
+            self._tool_registry = tool_registry
+        if llm_client is not None or self._llm_client is None:
+            self._llm_client = llm_client
+
+        try:
+            blackboard_entries = self._read_blackboard(state)
+            if self.use_llm and self._llm_client is not None:
+                logger.warning("[%s] iter=%d THINK: using LLM", self.agent_name, iteration)
+                thought = await self._llm_think(
+                    context, iteration, actions, blackboard_entries
+                )
+            else:
+                logger.warning("[%s] iter=%d THINK: using deterministic (use_llm=%s client=%s)",
+                               self.agent_name, iteration, self.use_llm, self._llm_client is not None)
+                thought = await self.think(
+                    context, iteration, actions, blackboard_entries
+                )
+            thoughts.append(thought)
+        except Exception as exc:
+            return None, None, AgentResult(
+                agent_name=self.agent_name,
+                status="failed",
+                content=f"Agent failed during think: {exc}",
+                warnings=[_warning("think_error", str(exc))],
+                iterations=iteration,
+            )
+
+        if thought.action == "final_answer":
+            action = AgentAction(
+                iteration=iteration,
+                action_type="final_answer",
+                status="success",
+            )
+            actions.append(action)
+            return thought, action, self.build_result(context, thoughts, actions)
+
+        if thought.action == "ask_clarification":
+            return thought, None, AgentResult(
+                agent_name=self.agent_name,
+                status="partial",
+                content=thought.clarifying_question
+                or "Could you provide more details?",
+                iterations=iteration,
+            )
+
+        try:
+            action = await self.act(thought, context)
+            actions.append(action)
+        except Exception as exc:
+            return thought, None, AgentResult(
+                agent_name=self.agent_name,
+                status="failed",
+                content=f"Agent failed during act: {exc}",
+                warnings=[_warning("act_error", str(exc))],
+                iterations=iteration,
+            )
+
+        try:
+            done = await self.observe(thought, action, context)
+            if done:
+                return thought, action, self.build_result(context, thoughts, actions)
+        except Exception as exc:
+            return thought, action, AgentResult(
+                agent_name=self.agent_name,
+                status="failed",
+                content=f"Agent failed during observe: {exc}",
+                warnings=[_warning("observe_error", str(exc))],
+                iterations=iteration,
+            )
+
+        return thought, action, None

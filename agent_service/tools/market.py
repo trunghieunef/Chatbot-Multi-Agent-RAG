@@ -14,7 +14,7 @@ if str(BACKEND) not in sys.path:
 
 from app.database import async_session
 
-from chatbot.tools.market_stats import district_price_overview
+from agent_service.tools.market_stats import district_price_overview
 
 
 async def lookup_market_metrics(filters: dict[str, Any]) -> list[dict[str, Any]]:

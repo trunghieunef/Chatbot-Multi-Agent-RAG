@@ -178,11 +178,25 @@ class PropertySearchAgent(BaseAgent):
             location = f"{district}, {city}" if district else city
             ppm = listing.get("price_per_m2")
             ppm_str = f" - {ppm:.1f} tr/m²" if ppm else ""
+            listing_id = listing.get("id", "")
+            listing_url = listing.get("url", "")
+            detail_link = listing_url or f"/nha-dat-ban/{listing_id}" if listing_id else ""
 
             lines.append(
                 f"**{i}. {title}**\n"
                 f"   💰 {price} | 📐 {area} | 📍 {location}{ppm_str}\n"
             )
+
+            # Images
+            images = listing.get("images", [])
+            if images:
+                for img_url in images[:2]:
+                    lines.append(f"   ![Ảnh]({img_url})")
+                lines.append("")
+
+            # Link
+            if detail_link:
+                lines.append(f"   🔗 [Xem chi tiết]({detail_link})\n")
 
         # ── Market context if available ──────────────────────────
         if market_data:
@@ -204,10 +218,13 @@ class PropertySearchAgent(BaseAgent):
                 type="listing",
                 id=listing.get("id"),
                 title=listing.get("title"),
+                url=listing.get("url") or f"/nha-dat-ban/{listing.get('id')}" if listing.get("id") else None,
                 location={"district": listing.get("district"), "city": listing.get("city")},
                 metadata={
                     "price_text": listing.get("price_text"),
                     "area_text": listing.get("area_text"),
+                    "images": listing.get("images", []),
+                    "price_per_m2": listing.get("price_per_m2"),
                 },
             )
             for listing in all_listings[:10]
