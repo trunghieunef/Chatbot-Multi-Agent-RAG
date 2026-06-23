@@ -22,6 +22,7 @@ collect_ignore = [
     "test_investment_calculators.py",
     "test_investment_model_node.py",
     "test_investment_safety.py",
+    "test_investment_scorecard_synthesis.py",
     "test_investment_trace.py",
     "test_memory_node.py",
     "test_react_loop.py",
