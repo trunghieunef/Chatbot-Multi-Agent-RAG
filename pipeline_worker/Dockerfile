@@ -11,8 +11,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY pipeline_worker/requirements.txt requirements.txt
-RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install --timeout 300 --retries 10 -r requirements.txt
+RUN pip install --timeout 300 --retries 10 -r requirements.txt
 RUN python -m playwright install --with-deps chromium
 RUN python -c "import os; from sentence_transformers import SentenceTransformer; SentenceTransformer(os.environ['HF_EMBEDDING_MODEL'])"
 
