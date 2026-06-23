@@ -46,11 +46,9 @@ from app.services.agent_service.contracts import (
 from app.services.agent_service.observability import (
     persist_agent_observability as _persist_agent_observability,
 )
-from app.services.chatbot import run_chat_pipeline
 from app.services.chatbot.context import (
     build_conversation_context,
     load_user_preferences,
-    split_agents,
 )
 from app.services.chatbot.memory import (
     decide_memory_status,
@@ -131,57 +129,6 @@ def _enforce_chat_abuse_guard(
     )
 
 
-async def _run_chatbot_pipeline(
-    message: str,
-    db: AsyncSession,
-    session_id: uuid.UUID,
-) -> dict:
-    """Run production multi-agent chat."""
-    try:
-        return await run_chat_pipeline(message, db, session_id=str(session_id))
-    except Exception as exc:
-        return {
-            "final_response": (
-                "Chatbot chua san sang do pipeline multi-agent gap loi. "
-                f"Chi tiet: {exc}"
-            ),
-            "agent_used": "multi_agent_error",
-            "sources": [],
-            "suggested_actions": [
-                "Kiem tra backend logs",
-                "Kiem tra du lieu da ingest",
-                "Thu lai sau",
-            ],
-        }
-
-
-def _legacy_response_to_agent_shape(
-    request_id: str,
-    result: dict,
-) -> AgentChatResponse:
-    agents_used = split_agents(result.get("agent_used")) or ["unknown"]
-    sources = [
-        source
-        for source in result.get("sources", [])
-        if isinstance(source, dict) and source.get("type")
-    ]
-    return AgentChatResponse(
-        request_id=request_id,
-        final_response=result.get("final_response") or "Toi chua tao duoc cau tra loi phu hop.",
-        agents_used=agents_used,
-        sources=sources,
-        suggested_actions=result.get("suggested_actions", []),
-        trace_summary=TraceSummary(
-            intent="legacy",
-            agents=agents_used,
-            source_count=len(result.get("sources", [])),
-            latency_ms=0,
-            warnings=["legacy_pipeline"],
-        ),
-        full_trace={"mode": "legacy", "raw_sources": result.get("sources", [])},
-    )
-
-
 async def _resolve(value):
     if isawaitable(value):
         return await value
@@ -196,8 +143,15 @@ async def _run_agent_service_pipeline(
     request_id: str,
 ) -> AgentChatResponse:
     if not is_agent_service_enabled():
-        legacy_result = await _run_chatbot_pipeline(message, db, session.id)
-        return _legacy_response_to_agent_shape(request_id, legacy_result)
+        return AgentChatResponse(
+            request_id=request_id,
+            final_response="Agent Service chưa được bật. Vui lòng bật CHATBOT_AGENT_SERVICE_ENABLED=true.",
+            agents_used=["error"],
+            suggested_actions=["Kiểm tra cấu hình"],
+            trace_summary=TraceSummary(intent="error", agents=[], latency_ms=0),
+            full_trace={},
+            readiness={},
+        )
 
     settings = get_settings()
     user_id = user.id if user else None
@@ -235,64 +189,7 @@ async def _run_agent_service_pipeline(
         )
 
 
-async def _run_agent_service_pipeline_v2(
-    message: str,
-    db: AsyncSession,
-    session: ChatSession,
-    user: User | None,
-    request_id: str,
-) -> AgentChatResponse:
-    """Agentic RAG pipeline — uses autonomous agents with LLM thinking."""
-    if not is_agent_service_enabled():
-        return AgentChatResponse(
-            request_id=request_id,
-            final_response="Agent Service chưa được bật. Vui lòng bật CHATBOT_AGENT_SERVICE_ENABLED=true.",
-            agents_used=["error"],
-            suggested_actions=["Kiểm tra cấu hình"],
-            trace_summary=TraceSummary(intent="error", agents=[], latency_ms=0),
-            full_trace={},
-            readiness={},
-        )
-
-    settings = get_settings()
-    user_id = user.id if user else None
-    request = AgentChatRequest(
-        request_id=request_id,
-        message=message,
-        session_id=str(session.id),
-        user_id=user_id,
-        is_authenticated=user is not None,
-        conversation_context=await _resolve(build_conversation_context(db, session.id)),
-        user_preferences=await _resolve(load_user_preferences(db, user_id)),
-        requested_trace_level=settings.CHATBOT_TRACE_LEVEL,
-    )
-    try:
-        return await get_agent_service_client().chat_v2(request)
-    except AgentServiceError as exc:
-        return AgentChatResponse(
-            request_id=request_id,
-            final_response=(
-                "Agent Service chua san sang. Vui long thu lai sau hoac dung pipeline du phong."
-            ),
-            agents_used=["agent_service_error"],
-            suggested_actions=[
-                "Thu lai sau",
-                "Kiem tra backend logs",
-            ],
-            trace_summary=TraceSummary(
-                intent="agent_service_error",
-                agents=["agent_service_error"],
-                latency_ms=0,
-                warnings=[str(exc)],
-            ),
-            full_trace={"mode": "agent_service_error"},
-            readiness={},
-        )
-
-
 def _source_dicts(response: AgentChatResponse) -> list[dict]:
-    if response.full_trace.get("mode") == "legacy":
-        return response.full_trace.get("raw_sources", [])
     return [source.model_dump(mode="json") for source in response.sources]
 
 
@@ -555,24 +452,74 @@ async def _stream_agent_service_pipeline(
     user: User | None,
     request_id: str,
 ):
-    yield {"event": "started", "request_id": request_id, "payload": {}}
-    response = await _run_agent_service_pipeline(
-        message,
-        db,
-        session,
-        user,
-        request_id,
+    """Real streaming pipeline — proxies SSE events from Agent Service.
+
+    Events from Agent Service (node_start, node_complete) are forwarded
+    directly to the frontend. The final event is enriched with DB save
+    and evaluation scheduling before being yielded.
+    """
+    settings = get_settings()
+    user_id = user.id if user else None
+    agent_request = AgentChatRequest(
+        request_id=request_id,
+        message=message,
+        session_id=str(session.id),
+        user_id=user_id,
+        is_authenticated=user is not None,
+        conversation_context=await _resolve(build_conversation_context(db, session.id)),
+        user_preferences=await _resolve(load_user_preferences(db, user_id)),
+        requested_trace_level=settings.CHATBOT_TRACE_LEVEL,
     )
 
+    final_payload: dict | None = None
+
+    try:
+        async for event in get_agent_service_client().chat_stream(agent_request):
+            if event.get("event") == "final":
+                # Store the final payload for DB processing
+                final_payload = event.get("payload", {})
+            else:
+                # Forward node_start / node_complete directly
+                yield event
+    except AgentServiceError as exc:
+        yield {
+            "event": "error",
+            "request_id": request_id,
+            "payload": {"code": "agent_service_error", "message": str(exc)},
+        }
+        return
+
+    if final_payload is None:
+        yield {
+            "event": "error",
+            "request_id": request_id,
+            "payload": {"code": "no_response", "message": "Agent Service returned no response."},
+        }
+        return
+
+    # Parse the final response
+    try:
+        response = AgentChatResponse.model_validate(final_payload)
+    except Exception:
+        yield {
+            "event": "error",
+            "request_id": request_id,
+            "payload": {"code": "invalid_response", "message": "Failed to parse agent response."},
+        }
+        return
+
+    # ── Persist user + assistant messages ─────────────────────
     user_msg = ChatMessage(
         session_id=session.id,
         role="user",
         content=message,
     )
     db.add(user_msg)
+
     response_text = response.final_response
     agents_used = response.agents_used
     agent_used = ", ".join(agents_used) if agents_used else "unknown"
+    stored_agent_used = agent_used_for_storage(agent_used, agents_used)
     sources = _source_dicts(response)
     suggested_actions = response.suggested_actions
     trace_summary = _trace_summary_dict(response)
@@ -583,7 +530,7 @@ async def _stream_agent_service_pipeline(
         session_id=session.id,
         role="assistant",
         content=response_text,
-        agent_used=agent_used,
+        agent_used=stored_agent_used,
         metadata_json={
             "request_id": request_id,
             "sources": sources,
@@ -597,22 +544,14 @@ async def _stream_agent_service_pipeline(
     await db.flush()
     await _commit_if_supported(db)
 
+    # ── Observability + Eval ──────────────────────────────────
     try:
         await _resolve(
-            persist_agent_observability(
-                async_session,
-                session,
-                user,
-                response,
-            )
+            persist_agent_observability(async_session, session, user, response)
         )
     except Exception:
-        logger.exception(
-            "Failed to persist agent observability for request_id=%s",
-            response.request_id,
-        )
+        logger.exception("Failed to persist agent observability for request_id=%s", request_id)
 
-    settings = get_settings()
     full_trace = response.full_trace if isinstance(response.full_trace, dict) else {}
     if should_schedule_eval(
         enabled=settings.CHATBOT_EVAL_ENABLED,
@@ -630,18 +569,16 @@ async def _stream_agent_service_pipeline(
                 sync_for_tests=settings.CHATBOT_EVAL_SYNC_FOR_TESTS,
             )
         except Exception:
-            logger.exception(
-                "Failed to schedule agent evaluation for request_id=%s",
-                response.request_id,
-            )
+            logger.exception("Failed to schedule agent evaluation for request_id=%s", request_id)
 
-    payload = response.model_dump(mode="json")
-    payload["session_id"] = str(session.id)
-    payload["memory_hints"] = memory_hints
+    # ── Yield enriched final event ────────────────────────────
+    enriched = response.model_dump(mode="json")
+    enriched["session_id"] = str(session.id)
+    enriched["memory_hints"] = memory_hints
     yield {
         "event": "final",
         "request_id": request_id,
-        "payload": payload,
+        "payload": enriched,
     }
 
 
@@ -835,75 +772,6 @@ async def send_message(
         suggested_actions=suggested_actions,
         trace_summary=trace_summary,
         memory_hints=memory_hints,
-        charts=agent_response.charts,
-        request_id=request_id,
-        created_at=assistant_msg.created_at,
-    )
-
-
-@router.post("/v2", response_model=ChatMessageResponse)
-async def send_message_v2(
-    body: ChatMessageRequest,
-    request: Request = None,
-    response: Response = None,
-    user: User | None = Depends(get_optional_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """Agentic RAG endpoint — autonomous agents with per-agent ReAct loops + LLM thinking."""
-    request_id = str(uuid.uuid4())
-    request = request or Request({"type": "http", "client": ("direct-test", 0)})
-    response = response or Response()
-    _enforce_chat_abuse_guard(body, user, request, response)
-
-    if body.session_id:
-        result = await db.execute(select(ChatSession).where(ChatSession.id == body.session_id))
-        session = result.scalar_one_or_none()
-        if not session:
-            raise HTTPException(status_code=404, detail="Session not found")
-        verify_session_ownership(session, user)
-    else:
-        session = ChatSession(user_id=user.id if user else None, title=body.message[:80])
-        db.add(session)
-        await db.flush()
-
-    await enforce_chat_quota(db, user=user, session_id=session.id)
-
-    agent_response = await _run_agent_service_pipeline_v2(body.message, db, session, user, request_id)
-
-    user_msg = ChatMessage(session_id=session.id, role="user", content=body.message)
-    db.add(user_msg)
-
-    response_text = agent_response.final_response
-    agents_used = agent_response.agents_used
-    sources = _source_dicts(agent_response)
-    suggested_actions = agent_response.suggested_actions
-
-    assistant_msg = ChatMessage(
-        session_id=session.id,
-        role="assistant",
-        content=response_text,
-        agent_used=", ".join(agents_used) if agents_used else "agentic",
-        metadata_json={
-            "request_id": request_id,
-            "sources": sources,
-            "suggested_actions": suggested_actions,
-            "agents_used": agents_used,
-            "mode": "agentic_rag",
-        },
-    )
-    db.add(assistant_msg)
-    await db.flush()
-    await _commit_if_supported(db)
-
-    return ChatMessageResponse(
-        session_id=session.id,
-        role="assistant",
-        content=response_text,
-        agent_used=", ".join(agents_used) if agents_used else "agentic",
-        agents_used=agents_used,
-        sources=sources,
-        suggested_actions=suggested_actions,
-        trace_summary=_trace_summary_dict(agent_response),
         charts=agent_response.charts,
         request_id=request_id,
         created_at=assistant_msg.created_at,

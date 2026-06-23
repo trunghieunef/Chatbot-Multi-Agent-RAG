@@ -1,5 +1,1 @@
-"""Production multi-agent chatbot service."""
-
-from app.services.chatbot.orchestrator import run_chat_pipeline
-
-__all__ = ["run_chat_pipeline"]
+"""Chatbot support services (context, memory, abuse guard, quota, session guard)."""

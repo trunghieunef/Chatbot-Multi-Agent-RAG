@@ -1,7 +1,7 @@
 # Development Commands
 
 ## Infrastructure
-- `docker-compose up -d postgres redis chromadb` — start local DB, cache, vector store
+- `docker-compose up -d postgres redis` — start local DB, cache (pgvector included in postgres image)
 
 ## Backend
 - `cd backend && pip install -r requirements.txt` — install dependencies

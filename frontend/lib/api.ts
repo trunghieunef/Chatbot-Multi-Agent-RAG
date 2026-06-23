@@ -154,17 +154,6 @@ export async function sendChatMessage(
   });
 }
 
-/** Agentic RAG v2 — autonomous agents with per-agent ReAct loops + LLM thinking */
-export async function sendChatMessageV2(
-  body: ChatMessageRequest
-): Promise<ChatMessageResponse> {
-  return fetchJSON(`${BASE}/chat/v2`, {
-    method: "POST",
-    headers: authHeaders(),
-    body: JSON.stringify(body),
-  });
-}
-
 /* Chat feedback */
 
 export async function sendChatFeedback(

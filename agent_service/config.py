@@ -63,7 +63,14 @@ class AgentSettings(BaseSettings):
     AGENT_TOOL_TIMEOUT_SECONDS: float = 15.0
     AGENT_ORCHESTRATOR_MODE: str = "parallel"
     AGENT_BLACKBOARD_ENABLED: bool = True
-    AGENT_AGENTIC_MODE: bool = False  # Toggle: False = old graph, True = agentic
+    AGENT_AGENTIC_MODE: bool = True  # Toggle: False = old graph, True = agentic
+
+    # ── LangGraph checkpoint & retry ──────────────────────────
+    AGENT_CHECKPOINT_PATH: str = "data/checkpoints/agent_graph.db"
+    AGENT_CHECKPOINT_ENABLED: bool = True
+    AGENT_TOOL_RETRY_MAX: int = 3
+    AGENT_TOOL_RETRY_BACKOFF_SECONDS: float = 1.0
+    AGENT_STREAM_ENABLED: bool = True
 
     @field_validator("DEBUG", mode="before")
     @classmethod

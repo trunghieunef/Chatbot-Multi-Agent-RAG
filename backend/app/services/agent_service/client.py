@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+from typing import AsyncIterator
+
 import httpx
 
 from app.config import get_settings
@@ -34,6 +37,55 @@ class AgentServiceClient:
 
     async def chat(self, body: AgentChatRequest) -> AgentChatResponse:
         return await self._chat_endpoint(body, "/internal/agent/chat")
+
+    async def chat_stream(self, body: AgentChatRequest) -> AsyncIterator[dict]:
+        """Call Agent Service streaming endpoint, yield parsed SSE events.
+
+        Each yielded dict has: {event, node?, status?, duration_ms?, payload?}
+        Final event: {event: "final", request_id, payload: AgentChatResponse}
+        """
+        headers = {
+            "X-Internal-Agent-Key": self.internal_key,
+            "Accept": "text/event-stream",
+        }
+        timeout = httpx.Timeout(self.timeout_seconds)
+        try:
+            async with httpx.AsyncClient(
+                timeout=timeout,
+                transport=self.transport,
+            ) as client:
+                async with client.stream(
+                    "POST",
+                    f"{self.base_url}/internal/agent/chat/stream",
+                    json=body.model_dump(mode="json"),
+                    headers=headers,
+                ) as response:
+                    response.raise_for_status()
+                    async for line in response.aiter_lines():
+                        if line.startswith("data: "):
+                            data_str = line[6:]
+                            try:
+                                yield json.loads(data_str)
+                            except json.JSONDecodeError:
+                                continue
+        except httpx.HTTPStatusError as exc:
+            yield {
+                "event": "error",
+                "request_id": body.request_id,
+                "payload": {
+                    "code": "agent_stream_error",
+                    "message": f"Agent Service stream failed: HTTP {exc.response.status_code}",
+                },
+            }
+        except httpx.HTTPError as exc:
+            yield {
+                "event": "error",
+                "request_id": body.request_id,
+                "payload": {
+                    "code": "agent_stream_network",
+                    "message": f"Agent Service stream failed: {exc.__class__.__name__}",
+                },
+            }
 
     async def chat_v2(self, body: AgentChatRequest) -> AgentChatResponse:
         """Call the Agentic RAG endpoint (autonomous agents + LLM thinking)."""
