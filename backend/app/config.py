@@ -50,6 +50,9 @@ class Settings(BaseSettings):
     # Hybrid retrieval (dense + lexical fused via Reciprocal Rank Fusion)
     HYBRID_LEXICAL_ENABLED: bool = True
     HYBRID_RRF_K: int = 60
+    # When true, log per-stage retrieval counts (candidates/vector/lexical/
+    # fused/reranked/records) to stderr to diagnose empty results.
+    HYBRID_SEARCH_DEBUG: bool = False
 
     # Internal Agent Service
     AGENT_SERVICE_URL: str = "http://localhost:8100"

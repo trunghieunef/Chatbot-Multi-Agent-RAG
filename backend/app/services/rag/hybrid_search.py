@@ -568,9 +568,26 @@ async def hybrid_search(
 ) -> list[dict[str, Any]]:
     settings = get_settings()
     filters = filters or {}
+    debug = getattr(settings, "HYBRID_SEARCH_DEBUG", False)
     candidate_ids = await sql_filter(parent_type, filters)
     if not candidate_ids:
+        # Most common cause of "0 results although chunks exist": every row is
+        # excluded by an SQL predicate (is_active / expiry / exact bedrooms /
+        # district / city) before vector search ever runs. Always log this case
+        # so the empty result is explained, not silent.
+        print(
+            f"[hybrid_search] sql_filter=0 parent_type={parent_type} "
+            f"filters={filters} -> NO CANDIDATES "
+            f"(check is_active, expiry_date, bedrooms exact-match, district/city)",
+            file=sys.stderr,
+        )
         return []
+    if debug:
+        print(
+            f"[hybrid_search] parent_type={parent_type} filters={filters} "
+            f"candidates={len(candidate_ids)} query={query!r}",
+            file=sys.stderr,
+        )
 
     embedder = _get_query_embedder()
     try:
@@ -606,9 +623,23 @@ async def hybrid_search(
     reranked = await cohere_rerank(query, fused, top_n=rerank_to)
 
     if parent_type == "listing":
-        return await resolve_to_listing_records(reranked)
-    if parent_type == "project":
-        return await resolve_to_project_records(reranked)
-    if parent_type == "article":
-        return await resolve_to_article_records(reranked)
-    return []
+        records = await resolve_to_listing_records(reranked)
+    elif parent_type == "project":
+        records = await resolve_to_project_records(reranked)
+    elif parent_type == "article":
+        records = await resolve_to_article_records(reranked)
+    else:
+        records = []
+
+    if debug:
+        # Per-stage counts make the drop-off point obvious: a non-zero
+        # candidate count with vector=0 means the embedding/kNN stage; fused>0
+        # with records=0 means resolve_to_* dropped them (parent rows missing).
+        print(
+            f"[hybrid_search] stages parent_type={parent_type} "
+            f"candidates={len(candidate_ids)} vector={len(vector_chunks)} "
+            f"lexical={len(lexical_chunks)} fused={len(fused)} "
+            f"reranked={len(reranked)} records={len(records)}",
+            file=sys.stderr,
+        )
+    return records
