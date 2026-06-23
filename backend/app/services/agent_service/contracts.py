@@ -137,17 +137,3 @@ class AgentChatResponse(BaseModel):
     readiness: dict[str, Any] = Field(default_factory=dict)
     evaluation_candidate: dict[str, Any] = Field(default_factory=dict)
     charts: list[dict[str, Any]] = Field(default_factory=list)
-
-
-class AgentStreamEvent(BaseModel):
-    event: Literal[
-        "started",
-        "routing",
-        "retrieval",
-        "specialist",
-        "synthesis",
-        "final",
-        "error",
-    ]
-    request_id: str
-    payload: dict = Field(default_factory=dict)

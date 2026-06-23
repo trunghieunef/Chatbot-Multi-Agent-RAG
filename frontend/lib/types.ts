@@ -168,6 +168,7 @@ export interface ChatMessageResponse {
   suggested_actions: string[] | null;
   trace_summary?: Partial<TraceSummary> | null;
   memory_hints?: MemoryHint[] | null;
+  charts?: Record<string, unknown>[] | null;
   feedback_id?: string | null;
   request_id?: string | null;
   created_at: string | null;

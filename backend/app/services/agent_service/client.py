@@ -87,10 +87,6 @@ class AgentServiceClient:
                 },
             }
 
-    async def chat_v2(self, body: AgentChatRequest) -> AgentChatResponse:
-        """Call the Agentic RAG endpoint (autonomous agents + LLM thinking)."""
-        return await self._chat_endpoint(body, "/internal/agent/chat-v2")
-
     async def _chat_endpoint(self, body: AgentChatRequest, path: str) -> AgentChatResponse:
         headers = {"X-Internal-Agent-Key": self.internal_key}
         timeout = httpx.Timeout(self.timeout_seconds)
