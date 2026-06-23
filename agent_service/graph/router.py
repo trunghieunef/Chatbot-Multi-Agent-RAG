@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import unicodedata
 from typing import Any
 
@@ -40,7 +41,7 @@ INTENT_BY_AGENT = {
 KEYWORDS_BY_AGENT = {
     "legal_advisor": ["phap ly", "luat", "thu tuc", "cong chung", "so do", "sang ten"],
     "investment_advisor": ["dau tu", "roi", "loi nhuan", "sinh loi", "rental yield"],
-    "market_analysis": ["thi truong", "xu huong", "thong ke", "gia trung binh"],
+    "market_analysis": ["thi truong", "xu huong", "thong ke", "gia trung binh", "gia", "gia ca", "bao nhieu"],
     "news_agent": ["tin tuc", "bao chi", "cap nhat"],
     "project_agent": ["du an", "chu dau tu"],
     "property_search": ["tim", "mua", "thue", "can ho", "nha", "dat", "quan "],
@@ -157,13 +158,44 @@ def _router_prompt(
     compact_context: list[dict[str, Any]] | None = None,
 ) -> str:
     context = compact_context or []
-    return (
-        "Ban la bo dinh tuyen intent bat dong san. Tra ve JSON duy nhat voi "
-        "intent, agents, confidence, filters, needs_clarification, "
-        "clarifying_question, reason. Khong tra loi nguoi dung.\n"
-        f"Conversation context: {context}\n"
-        f"Query: {query}"
-    )
+    return "\n".join([
+        "Bạn là bộ định tuyến (router) trong hệ thống tư vấn bất động sản Agentic RAG.",
+        "Nhiệm vụ: phân tích query và chọn agent(s) phù hợp để xử lý.",
+        "",
+        "### Các agent có sẵn:",
+        "- property_search: Tìm kiếm bất động sản (mua, thuê, căn hộ, nhà, đất).",
+        "- market_analysis: Phân tích thị trường, giá cả, xu hướng, thống kê.",
+        "- legal_advisor: Tư vấn pháp lý (sổ đỏ, công chứng, thuế, hợp đồng, thủ tục).",
+        "- investment_advisor: Tư vấn đầu tư, ROI, so sánh kênh đầu tư.",
+        "- project_agent: Đánh giá dự án bất động sản, chủ đầu tư.",
+        "- news_agent: Tin tức, bài báo về bất động sản.",
+        "",
+        "### Quy tắc chọn agent:",
+        "- Query hỏi về GIÁ CẢ, XU HƯỚNG, THỐNG KÊ → chọn market_analysis.",
+        "- Query hỏi MUA/BÁN/THUÊ cụ thể → chọn property_search.",
+        "- Query hỏi PHÁP LÝ, LUẬT, THỦ TỤC → chọn legal_advisor.",
+        "- Query hỏi ĐẦU TƯ, LỢI NHUẬN, ROI → chọn investment_advisor.",
+        "- Có thể chọn NHIỀU agent nếu query phức tạp.",
+        "",
+        "### Bộ lọc cần trích xuất (nếu có):",
+        "- city: Tỉnh/Thành phố.",
+        "- district: Quận/Huyện.",
+        "- property_type: apartment, house, land, shophouse.",
+        "- listing_type: sale hoặc rent.",
+        "- min_price, max_price: Khoảng giá (số thực, đơn vị tỷ VND).",
+        "",
+        f"### Hội thoại gần đây: {json.dumps(context[-3:] if context else [], ensure_ascii=False)}",
+        f"### Query: {query}",
+        "",
+        "Trả về CHỈ MỘT JSON object (không markdown, không code fence) với định dạng:",
+        "{",
+        '  "intent": "market_analysis|property_search|legal_advice|investment_advice|news|project|mixed",',
+        '  "agents": ["agent_1", "agent_2"],',
+        '  "confidence": 0.0-1.0,',
+        '  "filters": {"city": "...", "district": "...", ...},',
+        '  "reason": "lý do chọn các agent này"',
+        "}",
+    ])
 
 async def route_with_llm(
     state: dict[str, Any],
