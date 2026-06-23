@@ -44,7 +44,7 @@ class InvestmentAdvisorAgent(BaseAgent):
         ]
 
         has_market_data = any(
-            action.tool_result.get("value")
+            action.tool_result.get("value") or action.tool_result.get("results")
             for action in previous_actions
             if action.action_type == "call_tool"
         )
@@ -118,6 +118,33 @@ class InvestmentAdvisorAgent(BaseAgent):
         thoughts: list[AgentThought],
         actions: list[AgentAction],
     ) -> AgentResult:
+        metrics: list[dict[str, Any]] = []
+        evidence_ids: list[str] = []
+        for action in actions:
+            for evidence_id in action.evidence_ids:
+                if evidence_id not in evidence_ids:
+                    evidence_ids.append(evidence_id)
+            results = action.tool_result.get("results", [])
+            if isinstance(results, list):
+                metrics.extend(
+                    item for item in results
+                    if isinstance(item, dict) and item.get("metric")
+                )
+
+        if not metrics:
+            return AgentResult(
+                agent_name=self.agent_name,
+                status="no_evidence",
+                content=(
+                    "Chưa có đủ dữ liệu thị trường để lập scorecard đầu tư cho yêu cầu này.\n\n"
+                    "> ⚠️ Đây không phải lời khuyên tài chính."
+                ),
+                evidence_ids_used=evidence_ids,
+                sources=[],
+                confidence="low",
+                iterations=len(thoughts),
+            )
+
         lines = [
             "💰 **Phân tích đầu tư bất động sản:**\n",
             "Dựa trên dữ liệu thị trường hiện có, tôi đưa ra một số nhận định:\n",
@@ -128,13 +155,21 @@ class InvestmentAdvisorAgent(BaseAgent):
             "Bạn cần tự thẩm định và tham khảo chuyên gia tài chính trước khi "
             "đưa ra quyết định đầu tư.",
         ]
+        lines.insert(2, "**Chỉ số thị trường:**")
+        for metric in metrics[:5]:
+            location = metric.get("location", {})
+            district = location.get("district", "") if isinstance(location, dict) else ""
+            value = metric.get("value", "N/A")
+            unit = metric.get("unit", "")
+            label = metric.get("metric", "metric")
+            lines.insert(3, f"- {district or 'Khu vực'}: {label} = {value} {unit}".strip())
 
         return AgentResult(
             agent_name=self.agent_name,
             status="completed",
             content="\n".join(lines),
-            evidence_ids_used=[],
+            evidence_ids_used=evidence_ids,
             sources=[],
-            confidence="low",
+            confidence="medium",
             iterations=len(thoughts),
         )
