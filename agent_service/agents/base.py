@@ -270,7 +270,7 @@ class BaseAgent(ABC):
         Logs every LLM call and fallback reason for debugging.
         """
         if self._llm_client is None:
-            logger.info("[%s] iter=%d LLM_SKIP: no llm_client", self.agent_name, iteration)
+            logger.warning("[%s] iter=%d LLM_SKIP: no llm_client (use_llm=%s)", self.agent_name, iteration, self.use_llm)
             return await self.think(context, iteration, previous_actions, blackboard_entries)
 
         tools = (
@@ -278,7 +278,7 @@ class BaseAgent(ABC):
             if self._tool_registry else []
         )
         if not tools:
-            logger.info("[%s] iter=%d LLM_SKIP: no tools available", self.agent_name, iteration)
+            logger.warning("[%s] iter=%d LLM_SKIP: no tools available", self.agent_name, iteration)
             return await self.think(context, iteration, previous_actions, blackboard_entries)
 
         prompt = self._build_think_prompt(
@@ -286,7 +286,7 @@ class BaseAgent(ABC):
         )
 
         try:
-            logger.info("[%s] iter=%d LLM_CALL: sending prompt (%d chars)", self.agent_name, iteration, len(prompt))
+            logger.warning("[%s] iter=%d LLM_CALL: sending prompt (%d chars)", self.agent_name, iteration, len(prompt))
             raw = await self._llm_client.generate_json(
                 prompt,
                 timeout_seconds=15.0,
@@ -304,7 +304,7 @@ class BaseAgent(ABC):
                 clarifying_question=raw.get("clarifying_question"),
                 confidence=float(raw.get("confidence", 0.5)),
             )
-            logger.info(
+            logger.warning(
                 "[%s] iter=%d LLM_OK: action=%s tool=%s confidence=%.2f",
                 self.agent_name, iteration, thought.action, thought.tool_name, thought.confidence,
             )
@@ -354,6 +354,14 @@ class BaseAgent(ABC):
         """
         self._tool_registry = tool_registry
         self._llm_client = llm_client
+        logger.warning(
+            "[%s] RUN_START: use_llm=%s llm_client=%s tools=%d iterations=%d",
+            self.agent_name,
+            self.use_llm,
+            self._llm_client is not None,
+            len(self._tool_registry.list_for_agent(self.agent_name)) if self._tool_registry else 0,
+            self.max_iterations,
+        )
         thoughts: list[AgentThought] = []
         actions: list[AgentAction] = []
         started = time.perf_counter()
@@ -372,10 +380,13 @@ class BaseAgent(ABC):
             try:
                 blackboard_entries = self._read_blackboard(state)
                 if self.use_llm and self._llm_client is not None:
+                    logger.warning("[%s] iter=%d THINK: using LLM", self.agent_name, iteration)
                     thought = await self._llm_think(
                         context, iteration, actions, blackboard_entries
                     )
                 else:
+                    logger.warning("[%s] iter=%d THINK: using deterministic (use_llm=%s client=%s)", 
+                                   self.agent_name, iteration, self.use_llm, self._llm_client is not None)
                     thought = await self.think(
                         context, iteration, actions, blackboard_entries
                     )
