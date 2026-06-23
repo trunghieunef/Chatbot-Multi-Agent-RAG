@@ -214,6 +214,42 @@ async def _run_agent_service_pipeline(
     try:
         return await get_agent_service_client().chat(request)
     except AgentServiceError as exc:
+
+
+async def _run_agent_service_pipeline_v2(
+    message: str,
+    db: AsyncSession,
+    session: ChatSession,
+    user: User | None,
+    request_id: str,
+) -> AgentChatResponse:
+    """Agentic RAG pipeline — uses autonomous agents with LLM thinking."""
+    if not is_agent_service_enabled():
+        return AgentChatResponse(
+            request_id=request_id,
+            final_response="Agent Service chưa được bật. Vui lòng bật CHATBOT_AGENT_SERVICE_ENABLED=true.",
+            agents_used=["error"],
+            suggested_actions=["Kiểm tra cấu hình"],
+            trace_summary=TraceSummary(intent="error", agents=[], latency_ms=0),
+            full_trace={},
+            readiness={},
+        )
+
+    settings = get_settings()
+    user_id = user.id if user else None
+    request = AgentChatRequest(
+        request_id=request_id,
+        message=message,
+        session_id=str(session.id),
+        user_id=user_id,
+        is_authenticated=user is not None,
+        conversation_context=await _resolve(build_conversation_context(db, session.id)),
+        user_preferences=await _resolve(load_user_preferences(db, user_id)),
+        requested_trace_level=settings.CHATBOT_TRACE_LEVEL,
+    )
+    try:
+        return await get_agent_service_client().chat_v2(request)
+    except AgentServiceError as exc:
         return AgentChatResponse(
             request_id=request_id,
             final_response=(
@@ -780,6 +816,74 @@ async def send_message(
         suggested_actions=suggested_actions,
         trace_summary=trace_summary,
         memory_hints=memory_hints,
+        charts=agent_response.charts,
+        request_id=request_id,
+        created_at=assistant_msg.created_at,
+    )
+
+
+@router.post("/v2", response_model=ChatMessageResponse)
+async def send_message_v2(
+    body: ChatMessageRequest,
+    request: Request = None,
+    response: Response = None,
+    user: User | None = Depends(get_optional_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Agentic RAG endpoint — autonomous agents with per-agent ReAct loops + LLM thinking."""
+    request_id = str(uuid.uuid4())
+    request = request or Request({"type": "http", "client": ("direct-test", 0)})
+    response = response or Response()
+    _enforce_chat_abuse_guard(body, user, request, response)
+
+    if body.session_id:
+        result = await db.execute(select(ChatSession).where(ChatSession.id == body.session_id))
+        session = result.scalar_one_or_none()
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+        verify_session_ownership(session, user)
+    else:
+        session = ChatSession(user_id=user.id if user else None, title=body.message[:80])
+        db.add(session)
+        await db.flush()
+
+    await enforce_chat_quota(db, user=user, session_id=session.id)
+
+    agent_response = await _run_agent_service_pipeline_v2(body.message, db, session, user, request_id)
+
+    user_msg = ChatMessage(session_id=session.id, role="user", content=body.message)
+    db.add(user_msg)
+
+    response_text = agent_response.final_response
+    agents_used = agent_response.agents_used
+    sources = _source_dicts(agent_response)
+    suggested_actions = agent_response.suggested_actions
+
+    assistant_msg = ChatMessage(
+        session_id=session.id,
+        role="assistant",
+        content=response_text,
+        agent_used=", ".join(agents_used) if agents_used else "agentic",
+        metadata_json={
+            "request_id": request_id,
+            "sources": sources,
+            "suggested_actions": suggested_actions,
+            "agents_used": agents_used,
+            "mode": "agentic_rag",
+        },
+    )
+    db.add(assistant_msg)
+    await db.flush()
+    await _commit_if_supported(db)
+
+    return ChatMessageResponse(
+        session_id=session.id,
+        role="assistant",
+        content=response_text,
+        agent_used=", ".join(agents_used) if agents_used else "agentic",
+        agents_used=agents_used,
+        sources=sources,
+        suggested_actions=suggested_actions,
         charts=agent_response.charts,
         request_id=request_id,
         created_at=assistant_msg.created_at,

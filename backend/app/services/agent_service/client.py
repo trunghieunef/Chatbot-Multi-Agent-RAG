@@ -31,19 +31,15 @@ class AgentServiceClient:
         self.timeout_seconds = timeout_seconds
         self.transport = transport
 
-    async def _post_chat(
-        self,
-        client: httpx.AsyncClient,
-        body: AgentChatRequest,
-        headers: dict[str, str],
-    ) -> httpx.Response:
-        return await client.post(
-            f"{self.base_url}/internal/agent/chat",
-            json=body.model_dump(mode="json"),
-            headers=headers,
-        )
 
     async def chat(self, body: AgentChatRequest) -> AgentChatResponse:
+        return await self._chat_endpoint(body, "/internal/agent/chat")
+
+    async def chat_v2(self, body: AgentChatRequest) -> AgentChatResponse:
+        """Call the Agentic RAG endpoint (autonomous agents + LLM thinking)."""
+        return await self._chat_endpoint(body, "/internal/agent/chat-v2")
+
+    async def _chat_endpoint(self, body: AgentChatRequest, path: str) -> AgentChatResponse:
         headers = {"X-Internal-Agent-Key": self.internal_key}
         timeout = httpx.Timeout(self.timeout_seconds)
         try:
@@ -52,9 +48,17 @@ class AgentServiceClient:
                 transport=self.transport,
             ) as client:
                 try:
-                    response = await self._post_chat(client, body, headers)
+                    response = await client.post(
+                        f"{self.base_url}{path}",
+                        json=body.model_dump(mode="json"),
+                        headers=headers,
+                    )
                 except TRANSIENT_ERRORS:
-                    response = await self._post_chat(client, body, headers)
+                    response = await client.post(
+                        f"{self.base_url}{path}",
+                        json=body.model_dump(mode="json"),
+                        headers=headers,
+                    )
                 response.raise_for_status()
                 return AgentChatResponse.model_validate(response.json())
         except httpx.HTTPStatusError as exc:
