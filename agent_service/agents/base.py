@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import time
 from abc import ABC, abstractmethod
 from typing import Any, TYPE_CHECKING
@@ -18,6 +19,8 @@ from agent_service.graph.blackboard import read_blackboard
 
 if TYPE_CHECKING:
     from agent_service.llm.gemini import GeminiClient
+
+logger = logging.getLogger(__name__)
 
 
 def _warning(code: str, message: str) -> StructuredWarning:
@@ -264,8 +267,10 @@ class BaseAgent(ABC):
         """Use Gemini to decide the next action in the ReAct loop.
 
         Falls back to deterministic think() if LLM is unavailable or fails.
+        Logs every LLM call and fallback reason for debugging.
         """
         if self._llm_client is None:
+            logger.info("[%s] iter=%d LLM_SKIP: no llm_client", self.agent_name, iteration)
             return await self.think(context, iteration, previous_actions, blackboard_entries)
 
         tools = (
@@ -273,6 +278,7 @@ class BaseAgent(ABC):
             if self._tool_registry else []
         )
         if not tools:
+            logger.info("[%s] iter=%d LLM_SKIP: no tools available", self.agent_name, iteration)
             return await self.think(context, iteration, previous_actions, blackboard_entries)
 
         prompt = self._build_think_prompt(
@@ -280,11 +286,13 @@ class BaseAgent(ABC):
         )
 
         try:
+            logger.info("[%s] iter=%d LLM_CALL: sending prompt (%d chars)", self.agent_name, iteration, len(prompt))
             raw = await self._llm_client.generate_json(
                 prompt,
                 timeout_seconds=15.0,
             )
             if not raw or not raw.get("action"):
+                logger.warning("[%s] iter=%d LLM_EMPTY: empty or invalid response, fallback to deterministic", self.agent_name, iteration)
                 return await self.think(context, iteration, previous_actions, blackboard_entries)
 
             thought = AgentThought(
@@ -296,8 +304,13 @@ class BaseAgent(ABC):
                 clarifying_question=raw.get("clarifying_question"),
                 confidence=float(raw.get("confidence", 0.5)),
             )
+            logger.info(
+                "[%s] iter=%d LLM_OK: action=%s tool=%s confidence=%.2f",
+                self.agent_name, iteration, thought.action, thought.tool_name, thought.confidence,
+            )
             return thought
-        except Exception:
+        except Exception as exc:
+            logger.warning("[%s] iter=%d LLM_FAIL: %s, fallback to deterministic", self.agent_name, iteration, exc)
             return await self.think(context, iteration, previous_actions, blackboard_entries)
 
     # ── ReAct loop ───────────────────────────────────────────────
