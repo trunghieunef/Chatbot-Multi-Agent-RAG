@@ -903,6 +903,7 @@ async def send_message_v2(
         agents_used=agents_used,
         sources=sources,
         suggested_actions=suggested_actions,
+        trace_summary=_trace_summary_dict(agent_response),
         charts=agent_response.charts,
         request_id=request_id,
         created_at=assistant_msg.created_at,
