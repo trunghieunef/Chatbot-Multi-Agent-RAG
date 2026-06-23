@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import {
-  sendChatMessage,
+  sendChatMessageV2,
   getChatSessions,
   getChatSessionHistory,
   deleteChatSession,
@@ -98,7 +98,7 @@ export function useChat(options: UseChatOptions = { mode: "mini" }) {
       setLoading(true);
 
       try {
-        const res: ChatMessageResponse = await sendChatMessage({
+        const res: ChatMessageResponse = await sendChatMessageV2({
           message: msg,
           session_id: sessionId || undefined,
         });
