@@ -11,6 +11,48 @@ from agent_service.contracts import (
 from agent_service.tools.registry import ToolRegistry, ToolDef
 
 
+async def _attach_listing_images(results: list[dict]) -> list[dict]:
+    """Fetch first 2 images for each listing from listing_images table."""
+    if not results:
+        return results
+
+    listing_ids = [
+        r["id"] for r in results
+        if isinstance(r, dict) and r.get("id") is not None
+    ]
+    if not listing_ids:
+        return results
+
+    try:
+        from app.database import async_session
+        from sqlalchemy import text
+
+        async with async_session() as session:
+            query = text(
+                "SELECT listing_id, image_url FROM listing_images "
+                "WHERE listing_id = ANY(:ids) AND sort_order <= 2 "
+                "ORDER BY listing_id, sort_order"
+            )
+            rows = await session.execute(query, {"ids": listing_ids})
+            images_by_id: dict[int, list[str]] = {}
+            for row in rows:
+                lid = row.listing_id
+                url = row.image_url
+                if lid not in images_by_id:
+                    images_by_id[lid] = []
+                if len(images_by_id[lid]) < 2:
+                    images_by_id[lid].append(url)
+    except Exception:
+        return results
+
+    for r in results:
+        lid = r.get("id")
+        if lid in images_by_id and images_by_id[lid]:
+            r["images"] = images_by_id[lid]
+
+    return results
+
+
 def build_default_tool_registry() -> ToolRegistry:
     """Build ToolRegistry with all available tools and bindings.
 
@@ -95,6 +137,8 @@ def build_default_tool_registry() -> ToolRegistry:
             query=query, filters=filters, trace=trace,
             top_k=top_k, rerank_to=rerank_to,
         )
+        # Attach images for each listing
+        results = await _attach_listing_images(results)
         evidence_ids = [
             f"ev_{r.get('id', f'listing_{i}')}"
             for i, r in enumerate(results) if isinstance(r, dict)
