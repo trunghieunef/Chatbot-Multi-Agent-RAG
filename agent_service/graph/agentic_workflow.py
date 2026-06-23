@@ -30,15 +30,11 @@ from agent_service.contracts import (
     AgentChatRequest,
     AgentChatResponse,
     AgentContext,
-    AgentResult,
     AgentSource,
-    AgentThought,
-    AgentAction,
     TraceSummary,
-    StructuredWarning,
     ToolDef,
 )
-from agent_service.graph.router import route_request, RouterDecision
+from agent_service.graph.router import route_request
 from agent_service.graph.synthesis import synthesize_final_answer
 from agent_service.llm.gemini import GeminiClient
 from agent_service.tools.registry import ToolRegistry
@@ -193,12 +189,26 @@ def build_default_tool_registry() -> ToolRegistry:
     @with_retry
     async def _market_metrics_wrapper(*, filters):
         results = await lookup_market_metrics(filters=filters or {})
-        return {"status": "success", "results": results, "evidence_ids": []}
+        # Each metric record carries a stable `source_identity`; expose it as
+        # evidence so grounded synthesis can cite market figures instead of
+        # falling back to deterministic concatenation.
+        evidence_ids = [
+            r["source_identity"]
+            for r in results
+            if isinstance(r, dict) and r.get("source_identity")
+        ]
+        return {"status": "success", "results": results, "evidence_ids": evidence_ids}
 
     @with_retry
     async def _market_timeseries_wrapper(*, filters):
         results = await lookup_market_timeseries(filters=filters or {})
-        return {"status": "success", "results": results, "evidence_ids": []}
+        evidence_ids = [
+            f"market_ts:{r.get('district') or r.get('city') or 'all'}:"
+            f"{r.get('property_type') or 'all'}:{r.get('snapshot_month')}"
+            for r in results
+            if isinstance(r, dict) and r.get("snapshot_month")
+        ]
+        return {"status": "success", "results": results, "evidence_ids": evidence_ids}
 
     registry.bind("search_listings", _search_listings_wrapper)
     registry.bind("search_projects", _search_projects_wrapper)
@@ -498,11 +508,18 @@ async def run_agentic_graph_stream(request: AgentChatRequest):
         "synthesize": "đang tổng hợp kết quả...",
     }
     node_started: dict[str, float] = {}
+    # Accumulate node outputs as they stream. The graph compiles without a
+    # checkpointer by default, so we must read the final answer from the stream
+    # itself — `aget_state` would raise "No checkpointer set". The terminal keys
+    # (final_response/final_sources/suggested_actions, agents_used) are written
+    # by single (non-parallel) nodes, so a plain merge is correct here.
+    vs: dict[str, Any] = {}
 
     try:
         async for event in graph.astream(initial, config, stream_mode="updates"):
             for node_name, node_output in event.items():
                 now = time.perf_counter()
+                vs.update(node_output or {})
                 if node_name not in node_started:
                     node_started[node_name] = now
                     yield {"event": "node_start", "node": node_name, "status": NODE_STATUS.get(node_name, f"xử lý {node_name}..."), "payload": {}}
@@ -510,8 +527,6 @@ async def run_agentic_graph_stream(request: AgentChatRequest):
                     "duration_ms": round((now - node_started.get(node_name, now)) * 1000, 2),
                     "payload": {k: v for k, v in (node_output or {}).items() if k in ("agents_used", "suggested_actions")}}
 
-        final_state = await graph.aget_state(config)
-        vs = final_state.values if final_state.values else {}
         response = AgentChatResponse(
             request_id=request.request_id,
             final_response=vs.get("final_response", ""),
