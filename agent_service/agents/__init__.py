@@ -7,7 +7,6 @@ from agent_service.agents.legal_advisor_agent import LegalAdvisorAgent
 from agent_service.agents.investment_advisor_agent import InvestmentAdvisorAgent
 from agent_service.agents.project_agent import ProjectAgent
 from agent_service.agents.news_agent import NewsAgent
-from agent_service.agents.orchestrator import OrchestratorAgent
 
 __all__ = [
     "BaseAgent",
@@ -17,5 +16,4 @@ __all__ = [
     "InvestmentAdvisorAgent",
     "ProjectAgent",
     "NewsAgent",
-    "OrchestratorAgent",
 ]

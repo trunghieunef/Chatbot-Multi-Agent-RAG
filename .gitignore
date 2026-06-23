@@ -32,7 +32,10 @@ out/
 # ─── Data (large files) ──────────────────────────────────────
 data/raw/
 data/processed/
+data/checkpoints/
 *.db
+*.db-shm
+*.db-wal
 *.sqlite3
 
 # ─── Docker ───────────────────────────────────────────────────
