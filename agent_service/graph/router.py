@@ -205,8 +205,9 @@ async def route_with_llm(
     settings = get_agent_settings()
     client = client or GeminiClient()
     try:
+        context = state.get("conversation_context") or state.get("compact_context", [])
         payload = await client.generate_json(
-            _router_prompt(request.message, state.get("compact_context", [])),
+            _router_prompt(request.message, context),
             timeout_seconds=settings.AGENT_LLM_ROUTER_TIMEOUT_SECONDS,
         )
         decision = RouterDecision.model_validate(payload)
