@@ -47,6 +47,10 @@ class Settings(BaseSettings):
     RERANK_MODEL: str = "rerank-multilingual-v3.0"
     RERANK_TOP_N: int = 5
 
+    # Hybrid retrieval (dense + lexical fused via Reciprocal Rank Fusion)
+    HYBRID_LEXICAL_ENABLED: bool = True
+    HYBRID_RRF_K: int = 60
+
     # Internal Agent Service
     AGENT_SERVICE_URL: str = "http://localhost:8100"
     AGENT_INTERNAL_KEY: str = "dev-agent-internal-key"

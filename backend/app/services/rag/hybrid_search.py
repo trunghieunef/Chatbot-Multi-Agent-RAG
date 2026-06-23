@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import sys
 import re
 import unicodedata
@@ -390,7 +391,7 @@ async def resolve_to_listing_records(chunks: list[dict[str, Any]]) -> list[dict[
         listing["matched_chunk"] = {
             "chunk_type": chunk["chunk_type"],
             "text": chunk["text"],
-            "distance": float(chunk["distance"]),
+            "distance": float(chunk["distance"]) if chunk.get("distance") is not None else None,
             "rerank_score": chunk.get("rerank_score"),
         }
         records.append(listing)
@@ -426,7 +427,7 @@ async def resolve_to_project_records(chunks: list[dict[str, Any]]) -> list[dict[
         project["matched_chunk"] = {
             "chunk_type": chunk["chunk_type"],
             "text": chunk["text"],
-            "distance": float(chunk["distance"]),
+            "distance": float(chunk["distance"]) if chunk.get("distance") is not None else None,
             "rerank_score": chunk.get("rerank_score"),
         }
         records.append(project)
@@ -461,7 +462,7 @@ async def resolve_to_article_records(chunks: list[dict[str, Any]]) -> list[dict[
         article["matched_chunk"] = {
             "chunk_type": chunk["chunk_type"],
             "text": chunk["text"],
-            "distance": float(chunk["distance"]),
+            "distance": float(chunk["distance"]) if chunk.get("distance") is not None else None,
             "rerank_score": chunk.get("rerank_score"),
         }
         chunk_meta = chunk.get("metadata_json") or {}
@@ -471,6 +472,93 @@ async def resolve_to_article_records(chunks: list[dict[str, Any]]) -> list[dict[
     return records
 
 
+async def lexical_search(
+    query: str,
+    *,
+    parent_type: str,
+    parent_ids: list[int],
+    k: int,
+) -> list[dict[str, Any]]:
+    """Full-text (tsvector) ranking over the candidate chunks.
+
+    Returns chunk rows shaped like :func:`pgvector_knn` (minus ``distance``),
+    ordered by ``ts_rank_cd`` desc. Degrades to ``[]`` if the ``text_tsv``
+    column / ``f_unaccent`` function is absent (migration 20260801_0012 not yet
+    applied) or on any error, so retrieval falls back to vector-only.
+    """
+    if not parent_ids or not query.strip():
+        return []
+
+    sql = text(
+        "SELECT id, parent_type, parent_id, chunk_type, text, metadata_json, "
+        "ts_rank_cd(text_tsv, websearch_to_tsquery('simple', f_unaccent(:q))) AS lex_rank "
+        "FROM chunks "
+        "WHERE parent_type = :parent_type AND parent_id = ANY(:parent_ids) "
+        "AND text_tsv @@ websearch_to_tsquery('simple', f_unaccent(:q)) "
+        "ORDER BY lex_rank DESC LIMIT :k"
+    )
+    params = {
+        "q": query,
+        "parent_type": parent_type,
+        "parent_ids": parent_ids,
+        "k": k,
+    }
+    try:
+        async with async_session() as session:
+            result = await session.execute(sql, params)
+            return [dict(row._mapping) for row in result.all()]
+    except Exception as exc:  # pragma: no cover - DB-dependent fallback
+        print(
+            f"[hybrid_search] lexical search unavailable, vector-only: {exc}",
+            file=sys.stderr,
+        )
+        return []
+
+
+def reciprocal_rank_fusion(
+    vector_chunks: list[dict[str, Any]],
+    lexical_chunks: list[dict[str, Any]],
+    *,
+    top_n: int,
+    k: int = 60,
+) -> list[dict[str, Any]]:
+    """Fuse two ranked chunk lists via Reciprocal Rank Fusion.
+
+    Each chunk is identified by ``id``. Fused score = sum over rankers of
+    ``1 / (k + rank)`` with ``rank`` 1-based, so a chunk present in both rankers
+    outranks one present in a single ranker at the same position.
+
+    The vector chunk dict is preferred when a chunk appears in both lists (it
+    carries the pgvector ``distance``); a lexical-only chunk is given
+    ``distance=None`` so downstream ``resolve_to_*_records`` never KeyErrors.
+    With an empty lexical list this preserves the vector order exactly.
+    """
+    scores: dict[Any, float] = {}
+    chosen: dict[Any, dict[str, Any]] = {}
+
+    for rank, chunk in enumerate(vector_chunks, start=1):
+        cid = chunk["id"]
+        scores[cid] = scores.get(cid, 0.0) + 1.0 / (k + rank)
+        if cid not in chosen:
+            chosen[cid] = dict(chunk)
+
+    for rank, chunk in enumerate(lexical_chunks, start=1):
+        cid = chunk["id"]
+        scores[cid] = scores.get(cid, 0.0) + 1.0 / (k + rank)
+        if cid not in chosen:
+            entry = dict(chunk)
+            entry.setdefault("distance", None)
+            chosen[cid] = entry
+
+    ordered = sorted(scores, key=lambda cid: scores[cid], reverse=True)
+    fused: list[dict[str, Any]] = []
+    for cid in ordered[:top_n]:
+        entry = chosen[cid]
+        entry["rrf_score"] = scores[cid]
+        fused.append(entry)
+    return fused
+
+
 async def hybrid_search(
     query: str,
     filters: dict[str, Any] | None = None,
@@ -478,6 +566,7 @@ async def hybrid_search(
     top_k: int = 20,
     rerank_to: int = 5,
 ) -> list[dict[str, Any]]:
+    settings = get_settings()
     filters = filters or {}
     candidate_ids = await sql_filter(parent_type, filters)
     if not candidate_ids:
@@ -495,8 +584,26 @@ async def hybrid_search(
         embedding_cache = None
 
     query_embedding = await get_query_embedding(query, embedder=embedder, cache=embedding_cache)
-    chunks = await pgvector_knn(query_embedding, parent_type=parent_type, parent_ids=candidate_ids, k=top_k)
-    reranked = await cohere_rerank(query, chunks, top_n=rerank_to)
+
+    # Dense (pgvector) + lexical (full-text) retrieval over the same candidate
+    # set, run concurrently, then fused with Reciprocal Rank Fusion before the
+    # cross-encoder rerank. Lexical degrades to [] when unavailable, in which
+    # case fusion reproduces the original vector ordering.
+    lexical_enabled = getattr(settings, "HYBRID_LEXICAL_ENABLED", True)
+    if lexical_enabled:
+        vector_chunks, lexical_chunks = await asyncio.gather(
+            pgvector_knn(query_embedding, parent_type=parent_type, parent_ids=candidate_ids, k=top_k),
+            lexical_search(query, parent_type=parent_type, parent_ids=candidate_ids, k=top_k),
+        )
+    else:
+        vector_chunks = await pgvector_knn(
+            query_embedding, parent_type=parent_type, parent_ids=candidate_ids, k=top_k
+        )
+        lexical_chunks = []
+
+    rrf_k = getattr(settings, "HYBRID_RRF_K", 60)
+    fused = reciprocal_rank_fusion(vector_chunks, lexical_chunks, top_n=top_k, k=rrf_k)
+    reranked = await cohere_rerank(query, fused, top_n=rerank_to)
 
     if parent_type == "listing":
         return await resolve_to_listing_records(reranked)
