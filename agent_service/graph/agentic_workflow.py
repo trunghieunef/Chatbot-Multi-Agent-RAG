@@ -546,6 +546,12 @@ async def run_agentic_graph(request: AgentChatRequest) -> AgentChatResponse:
 
     final_state = await graph.ainvoke(initial, config)
 
+    router_decision = final_state.get("router_decision")
+    if isinstance(router_decision, RouterDecision):
+        intent = router_decision.intent
+    else:
+        intent = "unknown"
+
     return AgentChatResponse(
         request_id=request.request_id,
         final_response=final_state.get("final_response", ""),
@@ -553,7 +559,7 @@ async def run_agentic_graph(request: AgentChatRequest) -> AgentChatResponse:
         sources=final_state.get("final_sources", []),
         suggested_actions=final_state.get("suggested_actions", []),
         trace_summary=TraceSummary(
-            intent=(final_state.get("router_decision") or RouterDecision()).intent,
+            intent=intent,
             agents=final_state.get("agents_used", []),
             source_count=len(final_state.get("final_sources", [])),
             latency_ms=round((time.perf_counter() - started) * 1000, 2),
