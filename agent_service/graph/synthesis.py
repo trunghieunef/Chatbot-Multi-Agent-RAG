@@ -29,6 +29,7 @@ def build_synthesis_prompt(
     query: str,
     conversation_context: list[dict[str, Any]],
     agent_results: dict[str, dict[str, Any]],
+    supervisor_plan: dict[str, Any] | None = None,
 ) -> str:
     compact_results = {
         agent: {
@@ -56,6 +57,7 @@ def build_synthesis_prompt(
             f"User query: {query}",
             f"Conversation context: {json.dumps(conversation_context, ensure_ascii=True)}",
             f"Agent results: {json.dumps(compact_results, ensure_ascii=True, default=str)}",
+            f"Supervisor plan: {json.dumps(supervisor_plan or {}, ensure_ascii=True, default=str)}",
         ]
     )
 
@@ -125,6 +127,8 @@ async def synthesize_final_answer(
     generate_json: GenerateJson | None,
     timeout_seconds: float,
     allowed_evidence_ids: set[str] | None = None,
+    supervisor_plan: dict[str, Any] | None = None,
+    evidence_by_id: dict[str, Any] | None = None,
 ) -> SynthesisResult:
     if generate_json is None:
         return SynthesisResult(
@@ -140,6 +144,7 @@ async def synthesize_final_answer(
                 query=query,
                 conversation_context=conversation_context,
                 agent_results=agent_results,
+                supervisor_plan=supervisor_plan,
             ),
             timeout_seconds=timeout_seconds,
         )

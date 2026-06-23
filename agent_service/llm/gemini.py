@@ -4,9 +4,13 @@ import asyncio
 import json
 import logging
 import re
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from json import JSONDecodeError
 from typing import Any
+
+from google import genai
+from google.genai import types
 
 from agent_service.config import get_agent_settings
 from agent_service.llm.cost import get_runtime_cost_summary, record_runtime_llm_cost
@@ -28,6 +32,21 @@ class GeminiResult:
     error_message: str | None = None
 
 
+@dataclass(frozen=True)
+class ToolLoopStep:
+    tool_name: str
+    args: dict[str, Any]
+    result: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class ToolLoopResult:
+    text: str
+    steps: list["ToolLoopStep"]
+    iterations: int
+    skipped_reason: str | None = None
+
+
 class GeminiClient:
     def __init__(self, api_key: str | None = None, model: str | None = None) -> None:
         settings = get_agent_settings()
@@ -46,8 +65,6 @@ class GeminiClient:
         max_retries: int = 2,
     ):
         """Call Gemini with exponential backoff retry for rate-limit errors."""
-        from google import genai
-
         http_options = {"timeout": int(timeout_seconds * 1000)}
         client = genai.Client(api_key=self.api_key, http_options=http_options)
 
@@ -97,8 +114,6 @@ class GeminiClient:
     ) -> GeminiResult:
         if not self.api_key:
             return GeminiResult(text="")
-        if not self.model_explicitly_configured:
-            return GeminiResult(text="", skipped_reason="gemini_model_not_configured")
 
         if self.settings.AGENT_LLM_COST_TRACKING_ENABLED:
             summary = get_runtime_cost_summary(self.settings)
@@ -178,3 +193,92 @@ class GeminiClient:
             else:
                 return {}
         return parsed if isinstance(parsed, dict) else {}
+
+    async def run_tool_loop(
+        self,
+        *,
+        system_prompt: str,
+        user_message: str,
+        function_declarations: list[Any],
+        executor: Callable[[str, dict[str, Any]], Awaitable[dict[str, Any]]],
+        max_iterations: int,
+        timeout_seconds: float,
+    ) -> ToolLoopResult:
+        """Run a native function-calling ReAct loop.
+
+        Each turn: ask the model; if it returns function calls, execute them via
+        `executor`, append the results, and loop; otherwise return the final text.
+        Does NOT gate on model_explicitly_configured (config validation already
+        enforces an explicit model when live LLM is enabled).
+        """
+        if not self.api_key:
+            return ToolLoopResult(text="", steps=[], iterations=0, skipped_reason="no_api_key")
+
+        if self.settings.AGENT_LLM_COST_TRACKING_ENABLED:
+            summary = get_runtime_cost_summary(self.settings)
+            if not summary.get("tracking_available", True):
+                return ToolLoopResult(text="", steps=[], iterations=0, skipped_reason="llm_cost_tracking_unavailable")
+            if summary.get("budget_exceeded"):
+                return ToolLoopResult(text="", steps=[], iterations=0, skipped_reason="llm_budget_exceeded")
+
+        tools = [types.Tool(function_declarations=function_declarations)]
+        config = types.GenerateContentConfig(
+            system_instruction=system_prompt,
+            tools=tools,
+        )
+        contents: list[Any] = [
+            types.Content(role="user", parts=[types.Part(text=user_message)])
+        ]
+        steps: list[ToolLoopStep] = []
+        http_options = {"timeout": int(timeout_seconds * 1000)}
+        client = genai.Client(api_key=self.api_key, http_options=http_options)
+
+        final_text = ""
+        iteration = 0
+        for iteration in range(1, max_iterations + 1):
+            def _generate_sync(_contents=contents):
+                return client.models.generate_content(
+                    model=self.model, contents=_contents, config=config
+                )
+
+            async with _llm_semaphore:
+                response = await asyncio.wait_for(
+                    asyncio.to_thread(_generate_sync), timeout=timeout_seconds
+                )
+
+            usage = getattr(response, "usage_metadata", None)
+            record_runtime_llm_cost(
+                self.settings,
+                input_tokens=getattr(usage, "prompt_token_count", None),
+                output_tokens=getattr(usage, "candidates_token_count", None),
+            )
+
+            function_calls = list(getattr(response, "function_calls", None) or [])
+            if not function_calls:
+                final_text = getattr(response, "text", "") or ""
+                break
+
+            # Record the model's function-call turn.
+            contents.append(
+                types.Content(
+                    role="model",
+                    parts=[
+                        types.Part(function_call=types.FunctionCall(name=fc.name, args=dict(fc.args or {})))
+                        for fc in function_calls
+                    ],
+                )
+            )
+            response_parts = []
+            for fc in function_calls:
+                args = dict(fc.args or {})
+                try:
+                    tool_result = await executor(fc.name, args)
+                except Exception as exc:  # degrade, do not crash the loop
+                    tool_result = {"status": "error", "error": str(exc)[:300]}
+                steps.append(ToolLoopStep(tool_name=fc.name, args=args, result=tool_result))
+                response_parts.append(
+                    types.Part.from_function_response(name=fc.name, response={"result": tool_result})
+                )
+            contents.append(types.Content(role="user", parts=response_parts))
+
+        return ToolLoopResult(text=final_text, steps=steps, iterations=iteration)
