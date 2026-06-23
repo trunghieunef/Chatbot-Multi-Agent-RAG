@@ -10,8 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Install Python deps
 COPY requirements.txt .
-RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install --timeout 300 --retries 10 -r requirements.txt
+RUN pip install --timeout 300 --retries 10 -r requirements.txt
 
 # Copy app
 COPY . .

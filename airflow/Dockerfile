@@ -6,5 +6,4 @@ ENV AIRFLOW_CONSTRAINTS_URL=https://raw.githubusercontent.com/apache/airflow/con
 
 USER airflow
 COPY airflow/requirements.txt /requirements.txt
-RUN --mount=type=cache,target=/home/airflow/.cache/pip \
-    pip install --timeout 300 --retries 10 -r /requirements.txt --constraint "${AIRFLOW_CONSTRAINTS_URL}"
+RUN pip install --timeout 300 --retries 10 -r /requirements.txt --constraint "${AIRFLOW_CONSTRAINTS_URL}"
