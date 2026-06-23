@@ -5,11 +5,11 @@ Replaces the pure-Python OrchestratorAgent with a LangGraph StateGraph
 that provides: checkpointing (SQLite), streaming, and built-in retry.
 
 Graph structure:
-    route (classify + select agents)
-      → dispatch_agents (parallel via asyncio)
-      → synthesize (merge + safety)
+    supervisor (plan + select agents)
+      → specialist (parallel via Send)
+      → synthesize (grounded merge + cards)
 
-All state is tracked in AgenticState, persisted via SqliteSaver.
+State is tracked in GraphState; non-streaming responses come from ainvoke.
 """
 
 from __future__ import annotations
