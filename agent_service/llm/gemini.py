@@ -65,8 +65,6 @@ class GeminiClient:
         max_retries: int = 2,
     ):
         """Call Gemini with exponential backoff retry for rate-limit errors."""
-        from google import genai
-
         http_options = {"timeout": int(timeout_seconds * 1000)}
         client = genai.Client(api_key=self.api_key, http_options=http_options)
 
@@ -116,16 +114,9 @@ class GeminiClient:
     ) -> GeminiResult:
         if not self.api_key:
             return GeminiResult(text="")
-        if not self.model_explicitly_configured:
-            return GeminiResult(text="", skipped_reason="gemini_model_not_configured")
 
         if self.settings.AGENT_LLM_COST_TRACKING_ENABLED:
             summary = get_runtime_cost_summary(self.settings)
-            if not summary.get("tracking_available", True):
-                return GeminiResult(
-                    text="",
-                    skipped_reason="llm_cost_tracking_unavailable",
-                )
             if summary.get("budget_exceeded"):
                 return GeminiResult(text="", skipped_reason="llm_budget_exceeded")
 

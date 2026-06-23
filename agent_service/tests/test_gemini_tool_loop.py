@@ -82,3 +82,15 @@ async def test_run_tool_loop_skips_without_api_key():
     assert result.skipped_reason == "no_api_key"
     assert result.text == ""
     assert result.steps == []
+
+
+@pytest.mark.asyncio
+async def test_generate_text_runs_with_api_key_even_if_model_is_default(monkeypatch):
+    responses = [_FakeResponse(text="ok")]
+    monkeypatch.setattr(gemini.genai, "Client", lambda **kw: _FakeClient(responses), raising=False)
+    # model passed positionally => model_explicitly_configured True historically,
+    # but we assert behavior holds when only api_key is provided.
+    client = gemini.GeminiClient(api_key="k", model="gemini-2.5-flash")
+    monkeypatch.setattr(client, "model_explicitly_configured", False, raising=False)
+    out = await client.generate_text("hi")
+    assert out == "ok"
