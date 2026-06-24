@@ -47,6 +47,13 @@ def test_build_listing_filter_clauses_uses_general_vietnamese_normalization():
     assert params["property_type_norm"] == "%can ho%"
 
 
+def test_build_listing_filter_clauses_property_type_matches_vietnamese_value():
+    """property_type is matched accent-insensitively against the Vietnamese value
+    the router now emits (sourced from the DB taxonomy), e.g. 'Căn hộ chung cư'."""
+    _, params = build_listing_filter_clauses({"property_type": "Căn hộ chung cư"})
+    assert params["property_type_norm"] == "%can ho chung cu%"
+
+
 def test_build_listing_filter_clauses_always_filters_active_listings():
     clauses, _ = build_listing_filter_clauses({})
     sql = " ".join(clauses)
