@@ -2,6 +2,7 @@ import pytest
 
 from agent_service.agents.market_analysis_agent import MarketAnalysisAgent
 from agent_service.contracts import AgentAction, AgentContext
+from agent_service.graph.agentic_workflow import _collect_charts
 from agent_service.graph.charts import (
     build_district_comparison_chart,
     build_price_trend_chart,
@@ -94,9 +95,6 @@ def test_market_agent_no_charts_without_data():
     assert result.charts == []
 
 
-from agent_service.graph.agentic_workflow import _collect_charts
-
-
 def test_collect_charts_gathers_only_used_agents():
     raw = {
         "market_analysis": {"charts": [{"type": "bar"}, {"type": "line_band"}]},
@@ -108,3 +106,4 @@ def test_collect_charts_gathers_only_used_agents():
 def test_collect_charts_handles_missing_and_nonlist():
     assert _collect_charts({}, ["market_analysis"]) == []
     assert _collect_charts({"market_analysis": {}}, ["market_analysis"]) == []
+    assert _collect_charts({"market_analysis": {"charts": 42}}, ["market_analysis"]) == []

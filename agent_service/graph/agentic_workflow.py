@@ -291,7 +291,10 @@ def _collect_charts(raw_results: dict[str, Any], agents_used: list[str]) -> list
     """Gather chart specs emitted by the agents that actually ran."""
     charts: list[dict] = []
     for name in agents_used:
-        for chart in (raw_results.get(name) or {}).get("charts", []):
+        agent_charts = (raw_results.get(name) or {}).get("charts")
+        if not isinstance(agent_charts, list):
+            continue
+        for chart in agent_charts:
             if isinstance(chart, dict):
                 charts.append(chart)
     return charts
