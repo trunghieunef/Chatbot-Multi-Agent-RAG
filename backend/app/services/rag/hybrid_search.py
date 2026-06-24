@@ -75,6 +75,25 @@ def _add_vietnamese_text_match_clause(
         clauses.append("(" + " OR ".join(parts) + ")")
 
 
+# Listing prices are stored in tỷ (billions VND), realistically well under
+# ~1000. The router is asked for tỷ but the LLM occasionally emits raw VND
+# (e.g. 7_000_000_000 instead of 7). Any value at/above this threshold is far
+# too large to be tỷ, so it is treated as VND and divided back to tỷ — otherwise
+# `price <= :price_max` becomes a no-op and over-budget listings leak in.
+_PRICE_VND_THRESHOLD = 1_000_000.0
+
+
+def _normalize_price_ty(value: Any) -> Any:
+    """Coerce a price filter to tỷ units, converting raw-VND values back to tỷ."""
+    try:
+        num = float(value)
+    except (TypeError, ValueError):
+        return value
+    if abs(num) >= _PRICE_VND_THRESHOLD:
+        return num / 1_000_000_000
+    return num
+
+
 def _district_number(value: Any) -> str | None:
     raw = str(value or "").strip()
     normalized = _strip_accents(raw)
@@ -109,10 +128,10 @@ def build_listing_filter_clauses(filters: dict[str, Any]) -> tuple[list[str], di
 
     if price_min is not None:
         clauses.append("price >= :price_min")
-        params["price_min"] = price_min
+        params["price_min"] = _normalize_price_ty(price_min)
     if price_max is not None:
         clauses.append("price <= :price_max")
-        params["price_max"] = price_max
+        params["price_max"] = _normalize_price_ty(price_max)
     if area_min is not None:
         clauses.append("area >= :area_min")
         params["area_min"] = area_min
@@ -137,9 +156,10 @@ def build_listing_filter_clauses(filters: dict[str, Any]) -> tuple[list[str], di
             key="city",
             value=filters["city"],
         )
-    if filters.get("bedrooms") is not None:
+    bedrooms = filters.get("bedrooms", filters.get("num_bedrooms"))
+    if bedrooms is not None:
         clauses.append("bedrooms = :bedrooms")
-        params["bedrooms"] = filters["bedrooms"]
+        params["bedrooms"] = bedrooms
     if filters.get("listing_type"):
         clauses.append("listing_type = :listing_type")
         params["listing_type"] = filters["listing_type"]
