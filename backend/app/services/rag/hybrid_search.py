@@ -382,6 +382,24 @@ async def cohere_rerank(query: str, chunks: list[dict[str, Any]], top_n: int) ->
     return reranked
 
 
+def group_listing_images(
+    rows: list[tuple[int, str]], *, limit: int = 3
+) -> dict[int, list[str]]:
+    """Group ordered ``(listing_id, image_url)`` rows into ``{listing_id: [url]}``.
+
+    Rows must already be ordered (is_primary DESC, sort_order ASC). Keeps at most
+    ``limit`` non-empty urls per listing, preserving the input order.
+    """
+    grouped: dict[int, list[str]] = {}
+    for listing_id, image_url in rows:
+        if not image_url:
+            continue
+        bucket = grouped.setdefault(listing_id, [])
+        if len(bucket) < limit:
+            bucket.append(image_url)
+    return grouped
+
+
 async def resolve_to_listing_records(chunks: list[dict[str, Any]]) -> list[dict[str, Any]]:
     parent_ids: list[int] = []
     for chunk in chunks:
