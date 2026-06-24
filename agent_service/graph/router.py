@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import json
+import time
 import unicodedata
 from typing import Any
 
 from pydantic import BaseModel, Field
+from sqlalchemy import text
 
 from agent_service.config import get_agent_settings
 from agent_service.contracts import StructuredWarning
 from agent_service.llm.gemini import GeminiClient
+from app.database import async_session
 
 
 ALLOWED_AGENTS = {
@@ -46,6 +49,50 @@ KEYWORDS_BY_AGENT = {
     "project_agent": ["du an", "chu dau tu"],
     "property_search": ["tim", "mua", "thue", "can ho", "nha", "dat", "quan "],
 }
+
+
+# The canonical property_type taxonomy is whatever the ETL actually wrote to the
+# data (data_pipeline/clean.py::determine_property_type), in Vietnamese. Rather
+# than hardcode and duplicate that list here, the router reads the distinct
+# values straight from the DB and injects them into the LLM prompt, so the model
+# can only emit values that exist and the SQL filter matches them. Cached
+# in-process with a TTL since the taxonomy changes rarely.
+_PROPERTY_TYPE_VOCAB_CACHE: tuple[float, list[str]] | None = None
+_PROPERTY_TYPE_VOCAB_TTL = 3600.0
+
+
+async def _fetch_distinct_property_types() -> list[str]:
+    """Read the distinct, non-empty property_type values from the listings data."""
+    query = text(
+        "SELECT DISTINCT property_type FROM listings "
+        "WHERE property_type IS NOT NULL AND btrim(property_type) <> '' "
+        "ORDER BY property_type"
+    )
+    async with async_session() as session:
+        result = await session.execute(query)
+        return [row[0] for row in result.all()]
+
+
+async def get_property_type_vocabulary(
+    *, ttl_seconds: float = _PROPERTY_TYPE_VOCAB_TTL
+) -> list[str]:
+    """Distinct property_type values from the DB, cached in-process with a TTL.
+
+    Degrades to the last cached value, or ``[]`` if never loaded, on any DB
+    error so routing never breaks just because the taxonomy lookup failed.
+    """
+    global _PROPERTY_TYPE_VOCAB_CACHE
+    now = time.monotonic()
+    if _PROPERTY_TYPE_VOCAB_CACHE is not None:
+        cached_at, values = _PROPERTY_TYPE_VOCAB_CACHE
+        if now - cached_at < ttl_seconds:
+            return values
+    try:
+        values = await _fetch_distinct_property_types()
+    except Exception:
+        return _PROPERTY_TYPE_VOCAB_CACHE[1] if _PROPERTY_TYPE_VOCAB_CACHE else []
+    _PROPERTY_TYPE_VOCAB_CACHE = (now, values)
+    return values
 
 
 class RouterDecision(BaseModel):
@@ -156,8 +203,21 @@ def merge_router_decisions(
 def _router_prompt(
     query: str,
     compact_context: list[dict[str, Any]] | None = None,
+    property_types: list[str] | None = None,
 ) -> str:
     context = compact_context or []
+    if property_types:
+        property_type_line = (
+            "- property_type: CHỌN ĐÚNG MỘT giá trị trong danh sách sau, "
+            "giữ nguyên tiếng Việt (KHÔNG dịch sang tiếng Anh): "
+            + " | ".join(property_types)
+            + "."
+        )
+    else:
+        property_type_line = (
+            "- property_type: loại hình bất động sản, giữ nguyên cụm từ "
+            "tiếng Việt người dùng dùng (KHÔNG dịch sang tiếng Anh)."
+        )
     return "\n".join([
         "Bạn là bộ định tuyến (router) trong hệ thống tư vấn bất động sản Agentic RAG.",
         "Nhiệm vụ: phân tích query và chọn agent(s) phù hợp để xử lý.",
@@ -180,7 +240,7 @@ def _router_prompt(
         "### Bộ lọc cần trích xuất (nếu có):",
         "- city: Tỉnh/Thành phố.",
         "- district: Quận/Huyện.",
-        "- property_type: apartment, house, land, shophouse.",
+        property_type_line,
         "- listing_type: sale hoặc rent.",
         "- min_price, max_price: Khoảng giá (số thực, đơn vị tỷ VND).",
         "",
@@ -206,8 +266,9 @@ async def route_with_llm(
     client = client or GeminiClient()
     try:
         context = state.get("conversation_context") or state.get("compact_context", [])
+        property_types = await get_property_type_vocabulary()
         payload = await client.generate_json(
-            _router_prompt(request.message, context),
+            _router_prompt(request.message, context, property_types),
             timeout_seconds=settings.AGENT_LLM_ROUTER_TIMEOUT_SECONDS,
         )
         decision = RouterDecision.model_validate(payload)
