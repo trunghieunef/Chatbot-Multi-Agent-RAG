@@ -12,6 +12,7 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 import { getProjects } from "@/lib/api";
+import Pagination from "@/components/ui/Pagination";
 import type { ProjectCard, ProjectFilters } from "@/lib/types";
 
 const FALLBACK_PROJECTS: ProjectCard[] = [
@@ -191,21 +192,33 @@ export default function ProjectsPage() {
   });
   const [draftSearch, setDraftSearch] = useState("");
   const [projects, setProjects] = useState<ProjectCard[]>([]);
+  const [meta, setMeta] = useState({ page: 1, total_pages: 0 });
   const [loading, setLoading] = useState(true);
   const [usingFallback, setUsingFallback] = useState(false);
+
+  const handlePageChange = (page: number) => {
+    setFilters((prev) => ({ ...prev, page }));
+  };
 
   useEffect(() => {
     let cancelled = false;
     getProjects(filters)
       .then((data) => {
         if (cancelled) return;
-        setProjects(data.items.length > 0 ? data.items : FALLBACK_PROJECTS);
-        setUsingFallback(data.items.length === 0);
+        const hasItems = data.items.length > 0;
+        setProjects(hasItems ? data.items : FALLBACK_PROJECTS);
+        setUsingFallback(!hasItems);
+        setMeta(
+          hasItems
+            ? { page: data.page, total_pages: data.total_pages }
+            : { page: 1, total_pages: 0 }
+        );
       })
       .catch(() => {
         if (cancelled) return;
         setProjects(FALLBACK_PROJECTS);
         setUsingFallback(true);
+        setMeta({ page: 1, total_pages: 0 });
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -389,6 +402,12 @@ export default function ProjectsPage() {
                 <ProjectCardItem key={project.id} project={project} />
               ))}
             </div>
+
+            <Pagination
+              page={meta.page}
+              totalPages={meta.total_pages}
+              onPageChange={handlePageChange}
+            />
           </div>
 
           <aside className="space-y-4">
