@@ -52,6 +52,12 @@ def build_synthesis_prompt(
             ),
             "Use only the agent outputs and evidence IDs provided.",
             "Do not invent listings, prices, laws, market facts, or citations.",
+            (
+                "When naming a listing, use the exact listing title from the agent "
+                "outputs for THIS query. Never invent or rename projects, and never "
+                "reuse a listing name from the conversation context — those are from "
+                "earlier, possibly unrelated queries."
+            ),
             "Every factual claim must include evidence_ids from the provided agent outputs.",
             "If evidence is missing, say what is missing and ask a useful follow-up.",
             f"User query: {query}",
