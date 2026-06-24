@@ -7,6 +7,7 @@ import { getListingSourceDetails, getMarketSourceSummary, getSourceKind, getSour
 import { useRouter } from "next/navigation";
 import ListingImageGallery from "./ListingImageGallery";
 import ChatChart from "./ChatChart";
+import ComparisonToggle from "./ComparisonToggle";
 import type { ChatSource, MemoryHint, StructuredWarning } from "@/lib/types";
 import type { Message } from "@/lib/useChat";
 
@@ -188,9 +189,13 @@ export default function ChatWidget() {
 
                     {msg.charts && msg.charts.length > 0 && (
                       <div className="mt-2 space-y-2">
-                        {msg.charts.map((chart, chartIndex) => (
-                          <ChatChart key={chartIndex} chart={chart} />
-                        ))}
+                        {msg.charts.map((chart, chartIndex) =>
+                          (chart as { type?: string }).type === "comparison_table" ? (
+                            <ComparisonToggle key={chartIndex} table={chart} />
+                          ) : (
+                            <ChatChart key={chartIndex} chart={chart} />
+                          )
+                        )}
                       </div>
                     )}
 
