@@ -1,6 +1,7 @@
 import pytest
 
 from agent_service.agents.market_analysis_agent import MarketAnalysisAgent
+from agent_service.agents.property_search_agent import PropertySearchAgent
 from agent_service.contracts import AgentAction, AgentContext
 from agent_service.graph.agentic_workflow import _collect_charts
 from agent_service.graph.charts import (
@@ -167,9 +168,6 @@ def test_comparison_table_zero_price_is_not_missing():
     ]
     table = build_comparison_table(listings, area_avg_price_per_m2=None)
     assert table["rows"][0]["price_per_m2"] == 0.0   # zero price computed, not None
-
-
-from agent_service.agents.property_search_agent import PropertySearchAgent
 
 
 def _ps_action(results):

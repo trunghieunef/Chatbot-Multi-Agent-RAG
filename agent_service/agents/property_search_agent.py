@@ -203,7 +203,7 @@ class PropertySearchAgent(BaseAgent):
         area_avg: float | None = None
         avg_prices = [
             float(m.get("value", 0))
-            for m in market_data
+            for m in (market_data or [])
             if m.get("metric") == "avg_price_per_m2" and m.get("value")
         ]
         if avg_prices:
