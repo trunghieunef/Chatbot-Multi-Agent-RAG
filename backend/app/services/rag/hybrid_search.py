@@ -412,7 +412,7 @@ async def resolve_to_listing_records(chunks: list[dict[str, Any]]) -> list[dict[
 
     query = text(
         "SELECT id, product_id, title, price, price_text, area, area_text, bedrooms, "
-        "bathrooms, district, city, address, url "
+        "bathrooms, district, city, address, url, legal_status, furniture "
         "FROM listings WHERE id = ANY(:ids)"
     )
     image_query = text(
