@@ -158,3 +158,12 @@ def test_comparison_table_auto_open_flag():
     ]
     assert build_comparison_table(listings, area_avg_price_per_m2=None)["auto_open"] is False
     assert build_comparison_table(listings, area_avg_price_per_m2=None, auto_open=True)["auto_open"] is True
+
+
+def test_comparison_table_zero_price_is_not_missing():
+    listings = [
+        {"id": 1, "title": "A", "price": 0.0, "area": 50},
+        {"id": 2, "title": "B", "price": 4.0, "area": 50},
+    ]
+    table = build_comparison_table(listings, area_avg_price_per_m2=None)
+    assert table["rows"][0]["price_per_m2"] == 0.0   # zero price computed, not None

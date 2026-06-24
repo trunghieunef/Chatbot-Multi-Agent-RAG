@@ -112,7 +112,7 @@ def build_comparison_table(
     for listing in listings:
         price = _num(listing.get("price"))
         area = _num(listing.get("area"))
-        ppm = round(price * 1000 / area, 1) if price and area else None
+        ppm = round(price * 1000 / area, 1) if price is not None and area else None
         pct = (
             round((ppm - area_avg_price_per_m2) / area_avg_price_per_m2 * 100, 1)
             if ppm is not None and area_avg_price_per_m2
