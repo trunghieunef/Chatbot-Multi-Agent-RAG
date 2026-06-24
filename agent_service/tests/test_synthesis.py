@@ -2,7 +2,22 @@ from __future__ import annotations
 
 import pytest
 
-from agent_service.graph.synthesis import synthesize_final_answer
+from agent_service.graph.synthesis import build_synthesis_prompt, synthesize_final_answer
+
+
+def test_synthesis_prompt_forbids_renaming_listings():
+    """The prose must name listings using the exact titles from the agent
+    outputs, never inventing project names or borrowing names from earlier
+    conversation turns — otherwise the answer text disagrees with the source
+    cards (which show the real DB titles)."""
+    prompt = build_synthesis_prompt(
+        query="tìm căn hộ 2 phòng ngủ",
+        conversation_context=[{"role": "user", "content": "Iconia Lakeside"}],
+        agent_results={},
+    )
+    lowered = prompt.lower()
+    assert "exact" in lowered and "title" in lowered
+    assert "conversation context" in lowered  # explicitly tells it not to reuse names from there
 
 
 @pytest.mark.asyncio
