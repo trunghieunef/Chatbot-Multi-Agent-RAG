@@ -111,6 +111,13 @@ def test_collect_charts_handles_missing_and_nonlist():
     assert _collect_charts({"market_analysis": {"charts": 42}}, ["market_analysis"]) == []
 
 
+def test_collect_charts_includes_property_search_comparison():
+    raw = {"property_search": {"charts": [{"type": "comparison_table", "rows": [1, 2]}]}}
+    assert _collect_charts(raw, ["property_search"]) == [
+        {"type": "comparison_table", "rows": [1, 2]}
+    ]
+
+
 def test_comparison_table_tags_ppm_and_pct():
     listings = [
         {"id": 1, "title": "A", "url": "/a", "price": 6.6, "area": 79,
