@@ -92,3 +92,19 @@ def test_market_agent_no_charts_without_data():
     action = AgentAction(iteration=1, action_type="call_tool", status="success", tool_result={"results": []})
     result = MarketAnalysisAgent().build_result(ctx, thoughts=[], actions=[action])
     assert result.charts == []
+
+
+from agent_service.graph.agentic_workflow import _collect_charts
+
+
+def test_collect_charts_gathers_only_used_agents():
+    raw = {
+        "market_analysis": {"charts": [{"type": "bar"}, {"type": "line_band"}]},
+        "property_search": {"charts": [{"type": "ignored"}]},
+    }
+    assert _collect_charts(raw, ["market_analysis"]) == [{"type": "bar"}, {"type": "line_band"}]
+
+
+def test_collect_charts_handles_missing_and_nonlist():
+    assert _collect_charts({}, ["market_analysis"]) == []
+    assert _collect_charts({"market_analysis": {}}, ["market_analysis"]) == []
