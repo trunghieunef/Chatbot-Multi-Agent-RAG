@@ -61,3 +61,18 @@ export function getListingSourceDetails(source: ChatSource): string[] {
     source.area_text || metadataText(source, "area_text"),
   ].filter((value): value is string => Boolean(value));
 }
+
+export function getSourceImages(source: ChatSource): string[] {
+  const imgs = (source.metadata as { images?: unknown } | undefined)?.images;
+  return Array.isArray(imgs)
+    ? imgs.filter((u): u is string => typeof u === "string").slice(0, 3)
+    : [];
+}
+
+export function getListingDetailHref(source: ChatSource): string | undefined {
+  if (source.url) return source.url;
+  if (source.id !== undefined && source.id !== null) {
+    return `/nha-dat-ban/${source.id}`;
+  }
+  return undefined;
+}

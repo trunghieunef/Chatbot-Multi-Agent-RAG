@@ -168,7 +168,6 @@ def build_default_tool_registry() -> ToolRegistry:
     async def _search_listings_wrapper(*, query, filters=None, top_k=20, rerank_to=5):
         trace = RetrievalTrace(request_id="agentic")
         results = await search_listings(query=query, filters=filters, trace=trace, top_k=top_k, rerank_to=rerank_to)
-        results = await _attach_listing_images(results)
         evidence_ids = [f"ev_{r.get('id', f'listing_{i}')}" for i, r in enumerate(results) if isinstance(r, dict)]
         return {"status": "success", "results": results, "evidence_ids": evidence_ids}
 
@@ -217,35 +216,6 @@ def build_default_tool_registry() -> ToolRegistry:
     registry.bind("lookup_market_timeseries", _market_timeseries_wrapper)
 
     return registry
-
-
-async def _attach_listing_images(results: list[dict]) -> list[dict]:
-    if not results:
-        return results
-    listing_ids = [r["id"] for r in results if isinstance(r, dict) and r.get("id") is not None]
-    if not listing_ids:
-        return results
-    try:
-        from app.database import async_session
-        from sqlalchemy import text
-        async with async_session() as session:
-            rows = await session.execute(
-                text("SELECT listing_id, image_url FROM listing_images WHERE listing_id = ANY(:ids) AND sort_order <= 2 ORDER BY listing_id, sort_order"),
-                {"ids": listing_ids},
-            )
-            images_by_id: dict[int, list[str]] = {}
-            for row in rows:
-                lid, url = row.listing_id, row.image_url
-                images_by_id.setdefault(lid, [])
-                if len(images_by_id[lid]) < 2:
-                    images_by_id[lid].append(url)
-    except Exception:
-        return results
-    for r in results:
-        lid = r.get("id")
-        if lid in images_by_id and images_by_id[lid]:
-            r["images"] = images_by_id[lid]
-    return results
 
 
 _registry: ToolRegistry | None = None
