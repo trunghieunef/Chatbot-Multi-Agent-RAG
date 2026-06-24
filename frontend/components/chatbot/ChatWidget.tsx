@@ -6,6 +6,7 @@ import { useChat } from "@/lib/useChat";
 import { getListingSourceDetails, getMarketSourceSummary, getSourceKind, getSourceTitle, getSourceImages, getListingDetailHref } from "@/lib/chatSourceDisplay";
 import { useRouter } from "next/navigation";
 import ListingImageGallery from "./ListingImageGallery";
+import ChatChart from "./ChatChart";
 import type { ChatSource, MemoryHint, StructuredWarning } from "@/lib/types";
 import type { Message } from "@/lib/useChat";
 
@@ -184,6 +185,15 @@ export default function ChatWidget() {
                       </div>
                     )}
                     <p className="whitespace-pre-wrap">{msg.content}</p>
+
+                    {msg.charts && msg.charts.length > 0 && (
+                      <div className="mt-2 space-y-2">
+                        {msg.charts.map((chart, chartIndex) => (
+                          <ChatChart key={chartIndex} chart={chart} />
+                        ))}
+                      </div>
+                    )}
+
                     {msg.trace_summary && (
                       <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-border/70 bg-card/60 px-2 py-1 text-[11px] leading-snug text-muted-foreground">
                         {msg.trace_summary.intent && (

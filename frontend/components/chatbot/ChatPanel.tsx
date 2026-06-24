@@ -22,6 +22,7 @@ import {
   getSourceTitle,
 } from "@/lib/chatSourceDisplay";
 import ListingImageGallery from "./ListingImageGallery";
+import ChatChart from "./ChatChart";
 import type { ChatSource } from "@/lib/types";
 import type { Message } from "@/lib/useChat";
 
@@ -175,6 +176,14 @@ export default function ChatPanel({
                   <p className="whitespace-pre-wrap text-sm leading-relaxed">
                     {msg.content}
                   </p>
+
+                  {msg.charts && msg.charts.length > 0 && (
+                    <div className="mt-2 space-y-2">
+                      {msg.charts.map((chart, chartIndex) => (
+                        <ChatChart key={chartIndex} chart={chart} />
+                      ))}
+                    </div>
+                  )}
 
                   {/* Trace summary */}
                   {msg.trace_summary && (
