@@ -2,6 +2,7 @@
 
 import {
   BarChart3,
+  ExternalLink,
   FileText,
   Home,
   MapPin,
@@ -14,10 +15,13 @@ import {
 } from "lucide-react";
 import {
   getListingSourceDetails,
+  getListingDetailHref,
   getMarketSourceSummary,
+  getSourceImages,
   getSourceKind,
   getSourceTitle,
 } from "@/lib/chatSourceDisplay";
+import ListingImageGallery from "./ListingImageGallery";
 import type { ChatSource } from "@/lib/types";
 import type { Message } from "@/lib/useChat";
 
@@ -252,6 +256,20 @@ export default function ChatPanel({
                                 <div className="mt-1 text-muted-foreground">
                                   {listingDetails.join(" · ")}
                                 </div>
+                                <ListingImageGallery
+                                  images={getSourceImages(source)}
+                                />
+                                {getListingDetailHref(source) && (
+                                  <a
+                                    href={getListingDetailHref(source)}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="mt-1 inline-flex items-center gap-1 text-primary hover:underline"
+                                  >
+                                    <ExternalLink size={11} className="shrink-0" />
+                                    Xem chi tiết
+                                  </a>
+                                )}
                               </>
                             )}
                           </div>
