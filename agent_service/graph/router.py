@@ -242,7 +242,9 @@ def _router_prompt(
         "- district: Quận/Huyện.",
         property_type_line,
         "- listing_type: sale hoặc rent.",
-        "- min_price, max_price: Khoảng giá (số thực, đơn vị tỷ VND).",
+        "- bedrooms: số phòng ngủ (số nguyên), dùng đúng key 'bedrooms'.",
+        "- min_price, max_price: số thực, ĐƠN VỊ TỶ VND "
+        "(ví dụ '7 tỷ' -> 7, KHÔNG ghi 7000000000).",
         "",
         f"### Hội thoại gần đây: {json.dumps(context[-3:] if context else [], ensure_ascii=False)}",
         f"### Query: {query}",

@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { BarChart3, FileText, Home, MapPin, Maximize2, MessageCircle, Scale, Send, Bot, TrendingUp, User, Sparkles, X } from "lucide-react";
+import { BarChart3, ExternalLink, FileText, Home, MapPin, Maximize2, MessageCircle, Scale, Send, Bot, TrendingUp, User, Sparkles, X } from "lucide-react";
 import { useChat } from "@/lib/useChat";
-import { getListingSourceDetails, getMarketSourceSummary, getSourceKind, getSourceTitle } from "@/lib/chatSourceDisplay";
+import { getListingSourceDetails, getMarketSourceSummary, getSourceKind, getSourceTitle, getSourceImages, getListingDetailHref } from "@/lib/chatSourceDisplay";
 import { useRouter } from "next/navigation";
+import ListingImageGallery from "./ListingImageGallery";
 import type { ChatSource, MemoryHint, StructuredWarning } from "@/lib/types";
 import type { Message } from "@/lib/useChat";
 
@@ -274,6 +275,20 @@ export default function ChatWidget() {
                                   <div className="mt-1 text-muted-foreground">
                                     {listingDetails.join(" · ")}
                                   </div>
+                                  <ListingImageGallery
+                                    images={getSourceImages(source)}
+                                  />
+                                  {getListingDetailHref(source) && (
+                                    <a
+                                      href={getListingDetailHref(source)}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="mt-1 inline-flex items-center gap-1 text-primary hover:underline"
+                                    >
+                                      <ExternalLink size={11} className="shrink-0" />
+                                      Xem chi tiết
+                                    </a>
+                                  )}
                                 </>
                               )}
                             </div>

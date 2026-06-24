@@ -74,6 +74,39 @@ def test_build_listing_filter_clauses_accepts_chatbot_price_aliases():
     assert params["price_max"] == 5
 
 
+def test_build_listing_filter_clauses_normalizes_raw_vnd_price_to_ty():
+    """The router sometimes emits price in raw VND (7e9) instead of tỷ (7).
+    Prices are stored in tỷ, so a raw-VND value must be normalized or the
+    `price <= ...` filter becomes a no-op and over-budget listings leak in."""
+    _, params = build_listing_filter_clauses(
+        {"min_price": 700_000_000, "max_price": 7_000_000_000}
+    )
+    assert params["price_min"] == 0.7
+    assert params["price_max"] == 7.0
+
+
+def test_build_listing_filter_clauses_keeps_price_already_in_ty():
+    """A value already in tỷ (small number) must be left unchanged."""
+    _, params = build_listing_filter_clauses({"max_price": 7, "min_price": 2.5})
+    assert params["price_max"] == 7
+    assert params["price_min"] == 2.5
+
+
+def test_build_listing_filter_clauses_bedrooms_accepts_num_bedrooms_alias():
+    """The router emits `num_bedrooms`; the filter must treat it as `bedrooms`
+    so the bedroom count is hard-filtered in SQL."""
+    clauses, params = build_listing_filter_clauses({"num_bedrooms": 2})
+    sql = " ".join(clauses)
+    assert "bedrooms = :bedrooms" in sql
+    assert params["bedrooms"] == 2
+
+
+def test_build_listing_filter_clauses_bedrooms_key_still_works():
+    clauses, params = build_listing_filter_clauses({"bedrooms": 3})
+    assert "bedrooms = :bedrooms" in " ".join(clauses)
+    assert params["bedrooms"] == 3
+
+
 def test_build_listing_filter_clauses_accepts_chatbot_area_aliases():
     clauses, params = build_listing_filter_clauses({"min_area": 60, "max_area": 90})
 

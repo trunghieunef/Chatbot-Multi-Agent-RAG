@@ -26,6 +26,15 @@ def test_router_prompt_falls_back_to_vietnamese_instruction_without_vocab():
     assert "property_type" in prompt
 
 
+def test_router_prompt_guides_bedrooms_key_and_ty_price_unit():
+    """Prompt must ask for the `bedrooms` key (not num_bedrooms) and prices in
+    tỷ (not raw VND) so the SQL filters apply correctly at the source."""
+    prompt = router._router_prompt("căn hộ 2 phòng ngủ dưới 7 tỷ", None, [])
+    assert "bedrooms" in prompt
+    assert "TỶ" in prompt
+    assert "7000000000" in prompt  # explicit "don't write raw VND" example
+
+
 @pytest.mark.asyncio
 async def test_get_property_type_vocabulary_caches(monkeypatch):
     """The taxonomy is read from the DB once and cached within the TTL."""
