@@ -42,7 +42,10 @@ export default function ImageLightbox({
       aria-modal="true"
     >
       <button
-        onClick={onClose}
+        onClick={(e) => {
+          e.stopPropagation();
+          onClose();
+        }}
         aria-label="Đóng"
         className="absolute right-4 top-4 rounded-full bg-white/10 p-2 text-white hover:bg-white/20"
       >
