@@ -200,7 +200,7 @@ export default function ChatPanel({
                   {/* Sources */}
                   {msg.sources && msg.sources.length > 0 && (
                     <div className="mt-2 space-y-1.5 border-t border-border/70 pt-2">
-                      {msg.sources.slice(0, 3).map((source, sourceIndex) => {
+                      {msg.sources.map((source, sourceIndex) => {
                         const key = `${source.type || "source"}-${source.product_id || source.id || sourceIndex}`;
                         const sourceKind = getSourceKind(source);
                         const isLegal = sourceKind === "legal";
