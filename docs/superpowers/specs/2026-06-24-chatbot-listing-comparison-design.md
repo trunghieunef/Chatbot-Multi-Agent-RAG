@@ -40,6 +40,7 @@ property_search_agent.build_result (đã thu all_listings + market_data avg)
   "title": "So sánh 4 căn",
   "unit": "triệu VNĐ/m²",
   "area_avg_price_per_m2": 152.31,        // null nếu không có dữ liệu market
+  "auto_open": false,                     // true khi user yêu cầu "so sánh" -> bảng mở sẵn
   "rows": [
     {
       "title": "Căn hộ ...", "url": "/nha-dat-ban/123",
@@ -109,7 +110,9 @@ Sửa block render `msg.charts`: tách theo `type`.
 ## Trigger
 
 property_search có ≥2 tin → emit `comparison_table` vào charts. Frontend luôn hiện **nút**
-"So sánh N căn"; bảng ẩn cho tới khi bấm.
+"So sánh N căn"; bảng ẩn cho tới khi bấm. **Nếu câu hỏi của user có ý "so sánh"**
+(lowercased query chứa "so sanh"/"so sánh"/"compare"/"doi chieu"/"đối chiếu") → block đặt
+`auto_open=true` và bảng **mở sẵn** (nút đổi thành "Ẩn so sánh").
 
 ## Error handling
 

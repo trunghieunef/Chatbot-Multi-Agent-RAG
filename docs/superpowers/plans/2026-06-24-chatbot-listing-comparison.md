@@ -16,6 +16,7 @@
 - Within-set tags (deterministic): "Rẻ nhất" (min price), "Rộng nhất" (max area), "Giá/m² tốt nhất" (min price_per_m2).
 - Table columns: Tin (title+link), Giá, Diện tích, Giá/m², PN/WC, Pháp lý, Vị trí, Nội thất, Đánh giá.
 - Comparison block only when ≥2 listings; builder returns `None` otherwise.
+- The block carries `"auto_open"`: when the user's query expresses comparison intent (lowercased query contains any of "so sanh", "so sánh", "compare", "doi chieu", "đối chiếu"), the table renders expanded by default; otherwise it stays collapsed behind the button.
 - Backend type hints; frontend TS strict, lucide-react only; detail links open new tab (`target="_blank" rel="noopener noreferrer"`); frontend gated on `cd frontend && npm run lint`.
 - No frontend unit-test framework exists.
 
@@ -117,6 +118,15 @@ def test_comparison_table_missing_price_area_and_no_avg():
     assert table["rows"][1]["pct_vs_area_avg"] is None   # no avg
     assert table["rows"][0]["url"] == "/nha-dat-ban/1"   # url fallback from id
     assert "Rẻ nhất" in table["rows"][1]["tags"]         # only B has a numeric price
+
+
+def test_comparison_table_auto_open_flag():
+    listings = [
+        {"id": 1, "title": "A", "price": 6.6, "area": 79},
+        {"id": 2, "title": "B", "price": 3.9, "area": 55},
+    ]
+    assert build_comparison_table(listings, area_avg_price_per_m2=None)["auto_open"] is False
+    assert build_comparison_table(listings, area_avg_price_per_m2=None, auto_open=True)["auto_open"] is True
 ```
 
 - [ ] **Step 2: Run to verify it fails**
@@ -143,13 +153,19 @@ def _tag_extreme(rows: list[dict], values: list[float | None], tag: str, *, want
 
 
 def build_comparison_table(
-    listings: list[dict], *, area_avg_price_per_m2: float | None, unit: str = _DEFAULT_UNIT
+    listings: list[dict],
+    *,
+    area_avg_price_per_m2: float | None,
+    unit: str = _DEFAULT_UNIT,
+    auto_open: bool = False,
 ) -> dict | None:
     """Side-by-side comparison block for >=2 listings.
 
     Computes price_per_m2 (price in tỷ -> triệu/m²), within-set tags
     (cheapest / largest / best price-per-m²), and % vs the area average.
-    Returns None for fewer than 2 listings.
+    ``auto_open`` tells the frontend to show the table expanded by default
+    (set when the user explicitly asked to compare). Returns None for fewer
+    than 2 listings.
     """
     if len(listings) < 2:
         return None
@@ -203,6 +219,7 @@ def build_comparison_table(
         "title": f"So sánh {len(rows)} căn",
         "unit": unit,
         "area_avg_price_per_m2": area_avg_price_per_m2,
+        "auto_open": auto_open,
         "rows": rows,
     }
 ```
@@ -259,6 +276,25 @@ def test_property_search_no_table_for_single_listing():
     listings = [{"id": 1, "title": "A", "price": 6.6, "area": 79, "price_text": "6,6 tỷ", "area_text": "79 m²"}]
     result = PropertySearchAgent().build_result(ctx, thoughts=[], actions=[_ps_action(listings)])
     assert result.charts == []
+
+
+def test_property_search_auto_opens_table_on_compare_intent():
+    listings = [
+        {"id": 1, "title": "A", "price": 6.6, "area": 79, "price_text": "6,6 tỷ", "area_text": "79 m²"},
+        {"id": 2, "title": "B", "price": 3.9, "area": 55, "price_text": "3,9 tỷ", "area_text": "55 m²"},
+    ]
+    # Plain search -> button collapsed
+    plain = PropertySearchAgent().build_result(
+        AgentContext(agent_name="property_search", query="tìm căn hộ Nam Từ Liêm"),
+        thoughts=[], actions=[_ps_action(listings)],
+    )
+    assert plain.charts[0]["auto_open"] is False
+    # Explicit compare request -> table auto-opens
+    compare = PropertySearchAgent().build_result(
+        AgentContext(agent_name="property_search", query="so sánh các căn này"),
+        thoughts=[], actions=[_ps_action(listings)],
+    )
+    assert compare.charts[0]["auto_open"] is True
 ```
 
 (`AgentAction`, `AgentContext` are already imported in this test file from the Task-2/charts tests of the market-charts feature.)
@@ -328,7 +364,14 @@ Find the final completed return:
 ```
 Replace with:
 ```python
-        comparison = build_comparison_table(all_listings, area_avg_price_per_m2=area_avg)
+        query_text = f"{context.normalized_query or ''} {context.query or ''}".lower()
+        wants_comparison = any(
+            keyword in query_text
+            for keyword in ("so sanh", "so sánh", "compare", "doi chieu", "đối chiếu")
+        )
+        comparison = build_comparison_table(
+            all_listings, area_avg_price_per_m2=area_avg, auto_open=wants_comparison
+        )
 
         return AgentResult(
             agent_name=self.agent_name,
@@ -472,9 +515,9 @@ import { useState } from "react";
 import ComparisonTable from "./ComparisonTable";
 
 export default function ComparisonToggle({ table }: { table: Record<string, unknown> }) {
-  const [open, setOpen] = useState(false);
-  const rows = (table as { rows?: unknown[] }).rows;
-  const count = Array.isArray(rows) ? rows.length : 0;
+  const spec = table as { rows?: unknown[]; auto_open?: boolean };
+  const [open, setOpen] = useState(spec.auto_open === true);
+  const count = Array.isArray(spec.rows) ? spec.rows.length : 0;
   if (count < 2) return null;
 
   return (
