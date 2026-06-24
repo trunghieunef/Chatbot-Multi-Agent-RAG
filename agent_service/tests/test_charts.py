@@ -167,3 +167,49 @@ def test_comparison_table_zero_price_is_not_missing():
     ]
     table = build_comparison_table(listings, area_avg_price_per_m2=None)
     assert table["rows"][0]["price_per_m2"] == 0.0   # zero price computed, not None
+
+
+from agent_service.agents.property_search_agent import PropertySearchAgent
+
+
+def _ps_action(results):
+    return AgentAction(iteration=1, action_type="call_tool", status="success",
+                       tool_result={"results": results})
+
+
+def test_property_search_emits_comparison_table():
+    ctx = AgentContext(agent_name="property_search", query="tìm căn hộ")
+    listings = [
+        {"id": 1, "title": "A", "price": 6.6, "area": 79, "price_text": "6,6 tỷ", "area_text": "79 m²"},
+        {"id": 2, "title": "B", "price": 3.9, "area": 55, "price_text": "3,9 tỷ", "area_text": "55 m²"},
+    ]
+    result = PropertySearchAgent().build_result(ctx, thoughts=[], actions=[_ps_action(listings)])
+    tables = [c for c in result.charts if c.get("type") == "comparison_table"]
+    assert len(tables) == 1
+    assert len(tables[0]["rows"]) == 2
+
+
+def test_property_search_no_table_for_single_listing():
+    ctx = AgentContext(agent_name="property_search", query="tìm căn hộ")
+    listings = [{"id": 1, "title": "A", "price": 6.6, "area": 79, "price_text": "6,6 tỷ", "area_text": "79 m²"}]
+    result = PropertySearchAgent().build_result(ctx, thoughts=[], actions=[_ps_action(listings)])
+    assert result.charts == []
+
+
+def test_property_search_auto_opens_table_on_compare_intent():
+    listings = [
+        {"id": 1, "title": "A", "price": 6.6, "area": 79, "price_text": "6,6 tỷ", "area_text": "79 m²"},
+        {"id": 2, "title": "B", "price": 3.9, "area": 55, "price_text": "3,9 tỷ", "area_text": "55 m²"},
+    ]
+    # Plain search -> button collapsed
+    plain = PropertySearchAgent().build_result(
+        AgentContext(agent_name="property_search", query="tìm căn hộ Nam Từ Liêm"),
+        thoughts=[], actions=[_ps_action(listings)],
+    )
+    assert plain.charts[0]["auto_open"] is False
+    # Explicit compare request -> table auto-opens
+    compare = PropertySearchAgent().build_result(
+        AgentContext(agent_name="property_search", query="so sánh các căn này"),
+        thoughts=[], actions=[_ps_action(listings)],
+    )
+    assert compare.charts[0]["auto_open"] is True

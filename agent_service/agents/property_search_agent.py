@@ -10,6 +10,7 @@ from agent_service.contracts import (
     AgentSource,
     AgentThought,
 )
+from agent_service.graph.charts import build_comparison_table
 
 
 class PropertySearchAgent(BaseAgent):
@@ -198,20 +199,20 @@ class PropertySearchAgent(BaseAgent):
             if detail_link:
                 lines.append(f"   🔗 [Xem chi tiết]({detail_link})\n")
 
-        # ── Market context if available ──────────────────────────
-        if market_data:
-            avg_prices = [
-                float(m.get("value", 0))
-                for m in market_data
-                if m.get("metric") == "avg_price_per_m2" and m.get("value")
-            ]
-            if avg_prices:
-                avg = sum(avg_prices) / len(avg_prices)
-                lines.append(f"\n📊 **Giá trung bình khu vực:** {avg:.1f} tr/m²")
-                lines.append(
-                    "> ℹ️ Giá/m² tính từ diện tích và giá listing. "
-                    "Giá thực tế có thể thay đổi khi thương lượng."
-                )
+        # ── Market context (area average price/m²) ───────────────
+        area_avg: float | None = None
+        avg_prices = [
+            float(m.get("value", 0))
+            for m in market_data
+            if m.get("metric") == "avg_price_per_m2" and m.get("value")
+        ]
+        if avg_prices:
+            area_avg = sum(avg_prices) / len(avg_prices)
+            lines.append(f"\n📊 **Giá trung bình khu vực:** {area_avg:.1f} tr/m²")
+            lines.append(
+                "> ℹ️ Giá/m² tính từ diện tích và giá listing. "
+                "Giá thực tế có thể thay đổi khi thương lượng."
+            )
 
         sources = [
             AgentSource(
@@ -230,6 +231,15 @@ class PropertySearchAgent(BaseAgent):
             for listing in all_listings[:10]
         ]
 
+        query_text = f"{context.normalized_query or ''} {context.query or ''}".lower()
+        wants_comparison = any(
+            keyword in query_text
+            for keyword in ("so sanh", "so sánh", "compare", "doi chieu", "đối chiếu")
+        )
+        comparison = build_comparison_table(
+            all_listings, area_avg_price_per_m2=area_avg, auto_open=wants_comparison
+        )
+
         return AgentResult(
             agent_name=self.agent_name,
             status="completed",
@@ -238,4 +248,5 @@ class PropertySearchAgent(BaseAgent):
             sources=sources,
             confidence="high" if all_listings else "low",
             iterations=len(thoughts),
+            charts=[comparison] if comparison else [],
         )
