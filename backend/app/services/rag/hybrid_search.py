@@ -415,9 +415,21 @@ async def resolve_to_listing_records(chunks: list[dict[str, Any]]) -> list[dict[
         "bathrooms, district, city, address, url "
         "FROM listings WHERE id = ANY(:ids)"
     )
+    image_query = text(
+        "SELECT listing_id, image_url FROM listing_images "
+        "WHERE listing_id = ANY(:ids) "
+        "ORDER BY listing_id, is_primary DESC, sort_order ASC"
+    )
     async with async_session() as session:
         result = await session.execute(query, {"ids": parent_ids})
         listings = {row._mapping["id"]: dict(row._mapping) for row in result.all()}
+        img_result = await session.execute(image_query, {"ids": parent_ids})
+        images_by_listing = group_listing_images(
+            [
+                (row._mapping["listing_id"], row._mapping["image_url"])
+                for row in img_result.all()
+            ]
+        )
 
     records: list[dict[str, Any]] = []
     for chunk in chunks:
@@ -432,6 +444,7 @@ async def resolve_to_listing_records(chunks: list[dict[str, Any]]) -> list[dict[
             "distance": float(chunk["distance"]) if chunk.get("distance") is not None else None,
             "rerank_score": chunk.get("rerank_score"),
         }
+        listing["images"] = images_by_listing.get(listing["id"], [])
         records.append(listing)
     return records
 
