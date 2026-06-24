@@ -65,10 +65,23 @@ logic ở hai chỗ render card).
 - Icon `lucide-react`: `X` (đóng), `ChevronLeft`/`ChevronRight` (prev/next).
 - Đóng khi: bấm ✕, bấm nền tối, nhấn `Esc`. Chỉ tiến/lùi khi `images.length > 1`.
 
-### 4. Giữ nguyên "Xem chi tiết"
+### 4. Link "Xem chi tiết" trong card (mở tab mới)
 
-Link "Xem chi tiết" (→ `source.url` hoặc `/nha-dat-ban/{id}`) độc lập với ảnh,
-giữ nguyên. Bấm ảnh = lightbox; bấm link = sang trang chi tiết.
+**Hiện trạng:** nội dung trả lời được render plain text
+(`<p className="whitespace-pre-wrap">{msg.content}</p>`), KHÔNG phải markdown —
+nên `[Xem chi tiết](url)` và `![Ảnh](url)` agent tạo ra chỉ là chữ thô, không
+bấm được; card nguồn là `<div>` không có link. Vì vậy cần thêm link thật.
+
+- Trong card nguồn loại listing, thêm link "Xem chi tiết" trỏ tới
+  `source.url` (link gốc) hoặc fallback `/nha-dat-ban/{id}`:
+  ```jsx
+  <a href={detailHref} target="_blank" rel="noopener noreferrer">Xem chi tiết</a>
+  ```
+- **`target="_blank"`** → mở **tab mới**, không điều hướng trong khung chat
+  (giữ nguyên cuộc trò chuyện). `rel="noopener noreferrer"` cho an toàn.
+- Phân biệt hành vi: bấm **thumbnail** = mở lightbox tại chỗ (không điều hướng);
+  bấm **"Xem chi tiết"** = mở tab mới sang trang chi tiết.
+- Không có `detailHref` → ẩn link.
 
 ## Types
 
