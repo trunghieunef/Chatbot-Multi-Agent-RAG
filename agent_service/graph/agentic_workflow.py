@@ -60,6 +60,7 @@ class GraphState(TypedDict, total=False):
     final_response: str
     final_sources: list
     suggested_actions: list
+    final_charts: list
 
 
 def _conversation_context(request: AgentChatRequest) -> list[dict[str, str]]:
@@ -81,6 +82,7 @@ def _initial_state(request: AgentChatRequest) -> dict[str, Any]:
         "final_response": "",
         "final_sources": [],
         "suggested_actions": [],
+        "final_charts": [],
     }
 
 
@@ -285,6 +287,19 @@ async def _node_specialist(state: dict[str, Any]) -> dict[str, Any]:
     return {"_agent_results": {agent_name: rd}, "evidence_by_id": evidence}
 
 
+def _collect_charts(raw_results: dict[str, Any], agents_used: list[str]) -> list[dict]:
+    """Gather chart specs emitted by the agents that actually ran."""
+    charts: list[dict] = []
+    for name in agents_used:
+        agent_charts = (raw_results.get(name) or {}).get("charts")
+        if not isinstance(agent_charts, list):
+            continue
+        for chart in agent_charts:
+            if isinstance(chart, dict):
+                charts.append(chart)
+    return charts
+
+
 async def _node_synthesize(state: dict[str, Any]) -> dict[str, Any]:
     plan = state.get("supervisor_plan") or {}
     raw_results = state.get("_agent_results", {})
@@ -337,7 +352,8 @@ async def _node_synthesize(state: dict[str, Any]) -> dict[str, Any]:
 
     deduped = list({(s.type, s.id or s.url or s.title): s for s in all_sources}.values())
     return {"final_response": final, "final_sources": deduped,
-            "suggested_actions": synth.suggested_actions[:5]}
+            "suggested_actions": synth.suggested_actions[:5],
+            "final_charts": _collect_charts(raw_results, agents_used)}
 
 
 # ── Graph Builder ─────────────────────────────────────────────────
@@ -447,6 +463,7 @@ async def run_agentic_graph(request: AgentChatRequest) -> AgentChatResponse:
         agents_used=final_state.get("agents_used", []),
         sources=final_state.get("final_sources", []),
         suggested_actions=final_state.get("suggested_actions", []),
+        charts=final_state.get("final_charts", []),
         trace_summary=TraceSummary(
             intent=plan.get("intent", "unknown"),
             agents=final_state.get("agents_used", []),
@@ -503,6 +520,7 @@ async def run_agentic_graph_stream(request: AgentChatRequest):
             agents_used=vs.get("agents_used", []),
             sources=vs.get("final_sources", []),
             suggested_actions=vs.get("suggested_actions", []),
+            charts=vs.get("final_charts", []),
             trace_summary=TraceSummary(intent="streaming", agents=vs.get("agents_used", []),
                 source_count=len(vs.get("final_sources", [])), latency_ms=round((time.perf_counter() - started) * 1000, 2)),
             full_trace={"graph_version": settings.AGENT_GRAPH_VERSION, "streaming": True},
