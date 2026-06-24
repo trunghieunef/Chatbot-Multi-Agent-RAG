@@ -24,6 +24,7 @@ export interface Message {
   agent_used?: string | null;
   agents_used?: string[] | null;
   sources?: ChatSource[] | null;
+  charts?: Record<string, unknown>[] | null;
   suggested_actions?: string[] | null;
   trace_summary?: ChatMessageResponse["trace_summary"];
   memory_hints?: ChatMessageResponse["memory_hints"];
@@ -124,6 +125,7 @@ export function useChat(options: UseChatOptions = { mode: "mini" }) {
             agent_used: res.agent_used,
             agents_used: res.agents_used,
             sources: res.sources,
+            charts: res.charts,
             suggested_actions: res.suggested_actions,
             trace_summary: res.trace_summary,
             memory_hints: res.memory_hints,
@@ -167,6 +169,7 @@ export function useChat(options: UseChatOptions = { mode: "mini" }) {
             agent_used: m.agent_used,
             agents_used: m.agents_used,
             sources: m.sources,
+            charts: m.charts,
             suggested_actions: m.suggested_actions,
             trace_summary: m.trace_summary,
             memory_hints: m.memory_hints,

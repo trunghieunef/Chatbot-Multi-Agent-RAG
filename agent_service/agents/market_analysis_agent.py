@@ -10,6 +10,10 @@ from agent_service.contracts import (
     AgentSource,
     AgentThought,
 )
+from agent_service.graph.charts import (
+    build_district_comparison_chart,
+    build_price_trend_chart,
+)
 
 
 class MarketAnalysisAgent(BaseAgent):
@@ -160,6 +164,20 @@ class MarketAnalysisAgent(BaseAgent):
             "\n> ℹ️ Dữ liệu chỉ mang tính tham khảo, giá thực tế có thể khác tùy vị trí cụ thể."
         )
 
+        filters = context.routing_filters or {}
+        area = filters.get("district") or filters.get("city") or "khu vực"
+        ptype = filters.get("property_type")
+        trend_title = f"Biến động giá — {area}" + (f" ({ptype})" if ptype else "")
+        comparison_title = f"So sánh giá theo quận — {filters.get('city') or 'khu vực'}"
+        charts = [
+            chart
+            for chart in (
+                build_price_trend_chart(timeseries, title=trend_title),
+                build_district_comparison_chart(metrics, title=comparison_title),
+            )
+            if chart is not None
+        ]
+
         return AgentResult(
             agent_name=self.agent_name,
             status="completed",
@@ -168,4 +186,5 @@ class MarketAnalysisAgent(BaseAgent):
             sources=[],
             confidence="medium",
             iterations=len(thoughts),
+            charts=charts,
         )
