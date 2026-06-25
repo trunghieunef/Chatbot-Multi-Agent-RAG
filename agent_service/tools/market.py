@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import sys
-from datetime import timedelta
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -70,22 +70,22 @@ async def lookup_market_timeseries(
             min_price_per_m2, max_price_per_m2, listing_count.
     """
     city = filters.get("city")
-    if not city:
-        return []
-
     district = filters.get("district")
     property_type = filters.get("property_type")
     months = int(filters.get("months", 6))
 
-    clauses = [
-        "city ILIKE :city",
-        "month >= (DATE_TRUNC('month', NOW()) - :interval)::date",
-    ]
-    params: dict[str, Any] = {
-        "city": f"%{city}%",
-        "interval": timedelta(days=months * 31),
-    }
+    # Compute the cutoff date in Python: binding a timedelta into
+    # (DATE_TRUNC('month', NOW()) - :interval)::date raises
+    # "cannot cast type interval to date" under asyncpg. A bound date is safe.
+    cutoff = date.today().replace(day=1) - timedelta(days=months * 31)
 
+    # city is optional: district alone identifies the area for trend analysis.
+    clauses = ["month >= :cutoff"]
+    params: dict[str, Any] = {"cutoff": cutoff}
+
+    if city:
+        clauses.append("city ILIKE :city")
+        params["city"] = f"%{city}%"
     if district:
         clauses.append("district ILIKE :district")
         params["district"] = f"%{district}%"
