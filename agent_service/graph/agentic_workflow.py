@@ -349,6 +349,12 @@ async def _node_synthesize(state: dict[str, Any]) -> dict[str, Any]:
         evidence_by_id=state.get("evidence_by_id", {}),
     )
 
+    logger.info(
+        "[synthesize] used_llm=%s warnings=%s agents=%s allowed_evidence=%d final_len=%d",
+        synth.used_llm, synth.warnings, agents_used,
+        len(allowed_evidence_ids), len(synth.final_response or ""),
+    )
+
     final = synth.final_response
     if "legal_advisor" in agents_used and "không thay thế tư vấn luật sư" not in final.lower():
         final += "\n\n> ⚠️ Thông tin pháp lý chỉ mang tính tham khảo, không thay thế tư vấn luật sư."
