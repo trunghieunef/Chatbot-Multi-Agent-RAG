@@ -20,6 +20,25 @@ def test_synthesis_prompt_forbids_renaming_listings():
     assert "conversation context" in lowered  # explicitly tells it not to reuse names from there
 
 
+def test_synthesis_prompt_forbids_self_contradiction():
+    """The answer must never both deny and provide data for the same topic:
+    if one agent has a price trend and another is empty, present the trend and
+    do not also claim the data is missing."""
+    prompt = build_synthesis_prompt(
+        query="giá Nam Từ Liêm tăng hay giảm?",
+        conversation_context=[],
+        agent_results={},
+        supervisor_plan=None,
+    )
+    assert "Never contradict yourself" in prompt
+    assert "Reconcile partial results" in prompt
+    # the old standalone hedging line is gone (it invited "no data" + data)
+    assert (
+        "If evidence is missing, say what is missing and ask a useful follow-up."
+        not in prompt
+    )
+
+
 @pytest.mark.asyncio
 async def test_synthesize_final_answer_uses_llm_when_valid():
     async def fake_generate_json(prompt: str, *, timeout_seconds=None):
