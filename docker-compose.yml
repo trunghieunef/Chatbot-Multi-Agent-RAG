@@ -111,6 +111,9 @@ services:
       AGENT_STREAM_ENABLED: ${AGENT_STREAM_ENABLED:-true}
     volumes:
       - ./data:/app/data
+      # Reuse the bge-m3 model the host already downloaded (HF_HOME=/app/.cache/huggingface)
+      # so query embedding works offline without re-downloading ~2.2GB into the container.
+      - ${HOME}/.cache/huggingface:/app/.cache/huggingface
     healthcheck:
       test: ["CMD-SHELL", "curl -f -H \"X-Internal-Agent-Key: $$AGENT_INTERNAL_KEY\" http://localhost:8100/internal/agent/health"]
       interval: 10s
