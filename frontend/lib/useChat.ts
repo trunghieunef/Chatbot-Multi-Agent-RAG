@@ -25,6 +25,9 @@ import {
   setLastSessionId,
 } from "@/lib/chatHistory";
 
+const hasAuthToken = () =>
+  typeof window !== "undefined" && !!window.localStorage.getItem("token");
+
 export interface Message {
   role: "user" | "assistant";
   content: string;
@@ -84,7 +87,7 @@ export function useChat(options: UseChatOptions = { mode: "mini" }) {
     if (!isFull) return;
     setLoadingSessions(true);
     try {
-      if (localStorage.getItem("token")) {
+      if (hasAuthToken()) {
         const data = await getChatSessions();
         setSessions(data);
       } else {
@@ -123,7 +126,7 @@ export function useChat(options: UseChatOptions = { mode: "mini" }) {
         }
         setSessionId(res.session_id);
         setLastSessionId(res.session_id);
-        if (!localStorage.getItem("token")) {
+        if (!hasAuthToken()) {
           // First user message becomes the conversation title; later sends only
           // refresh updatedAt (upsert keeps the original title).
           upsertConversation(res.session_id, msg);
@@ -146,7 +149,7 @@ export function useChat(options: UseChatOptions = { mode: "mini" }) {
           },
         ]);
         // Refresh session list in full mode (logged-in path)
-        if (isFull && !sessionId && localStorage.getItem("token")) {
+        if (isFull && !sessionId && hasAuthToken()) {
           loadSessions();
         }
       } catch {
