@@ -21,6 +21,7 @@ import {
   registryAsSessions,
   upsertConversation,
   removeConversation,
+  renameConversation,
   getLastSessionId,
   setLastSessionId,
 } from "@/lib/chatHistory";
@@ -233,6 +234,12 @@ export function useChat(options: UseChatOptions = { mode: "mini" }) {
   // Delete a session
   const deleteSession = useCallback(
     async (id: string) => {
+      if (!hasAuthToken()) {
+        removeConversation(id);
+        if (sessionId === id) newSession();
+        loadSessions();
+        return;
+      }
       try {
         await deleteChatSession(id);
         setSessions((prev) => prev.filter((s) => s.id !== id));
@@ -243,12 +250,17 @@ export function useChat(options: UseChatOptions = { mode: "mini" }) {
         // Silently fail
       }
     },
-    [sessionId, newSession]
+    [sessionId, newSession, loadSessions]
   );
 
   // Rename a session
   const renameSession = useCallback(
     async (id: string, title: string) => {
+      if (!hasAuthToken()) {
+        renameConversation(id, title);
+        loadSessions();
+        return;
+      }
       try {
         const updated = await renameChatSession(id, title);
         setSessions((prev) =>
@@ -258,7 +270,7 @@ export function useChat(options: UseChatOptions = { mode: "mini" }) {
         // Silently fail
       }
     },
-    []
+    [loadSessions]
   );
 
   return {

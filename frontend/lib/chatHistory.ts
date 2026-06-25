@@ -12,6 +12,7 @@ export interface ChatHistoryEntry {
   id: string;
   title: string;
   updatedAt: string;
+  messageCount: number;
 }
 
 function readRegistry(): ChatHistoryEntry[] {
@@ -49,10 +50,20 @@ export function upsertConversation(id: string, title: string): void {
   const existing = entries.find((e) => e.id === id);
   if (existing) {
     existing.updatedAt = now; // keep the original title
+    existing.messageCount += 1;
   } else {
     const clean = title.trim().slice(0, TITLE_MAX) || "Cuộc trò chuyện";
-    entries.push({ id, title: clean, updatedAt: now });
+    entries.push({ id, title: clean, updatedAt: now, messageCount: 1 });
   }
+  writeRegistry(entries);
+}
+
+export function renameConversation(id: string, title: string): void {
+  if (typeof window === "undefined") return;
+  const entries = readRegistry();
+  const entry = entries.find((e) => e.id === id);
+  if (!entry) return;
+  entry.title = title.trim().slice(0, TITLE_MAX) || entry.title;
   writeRegistry(entries);
 }
 
@@ -84,7 +95,7 @@ export function registryAsSessions(): ChatSessionResponse[] {
   return listConversations().map((e) => ({
     id: e.id,
     title: e.title,
-    message_count: 0,
+    message_count: e.messageCount,
     created_at: e.updatedAt,
     updated_at: e.updatedAt,
   }));
