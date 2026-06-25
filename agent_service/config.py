@@ -39,6 +39,9 @@ class AgentSettings(BaseSettings):
 
     AGENT_REQUEST_TIMEOUT_SECONDS: float = 45.0
     AGENT_LLM_TIMEOUT_SECONDS: float = 30.0
+    # Gemini "thinking" budget (tokens). 0 disables thinking -> much faster, avoids
+    # 504 DEADLINE_EXCEEDED on large prompts. Set to -1 to use the model default.
+    AGENT_GEMINI_THINKING_BUDGET: int = 0
     AGENT_ROUTER_MODE: str = "llm"
     AGENT_QUERY_REWRITE_ENABLED: bool = True
     AGENT_MEMORY_FILTERS_ENABLED: bool = True

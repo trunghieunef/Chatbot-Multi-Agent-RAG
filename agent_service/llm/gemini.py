@@ -57,6 +57,14 @@ class GeminiClient:
         )
         self.model = model or settings.GEMINI_MODEL
         self.timeout_seconds = settings.AGENT_LLM_TIMEOUT_SECONDS
+        self.thinking_budget = settings.AGENT_GEMINI_THINKING_BUDGET
+
+    def _thinking_config(self) -> types.ThinkingConfig | None:
+        """Gemini 2.5 thinking config. budget=0 disables thinking (faster, fewer
+        504 timeouts); a negative budget means use the model default (no override)."""
+        if self.thinking_budget is None or self.thinking_budget < 0:
+            return None
+        return types.ThinkingConfig(thinking_budget=self.thinking_budget)
 
     async def _call_gemini_with_retry(
         self,
@@ -73,7 +81,11 @@ class GeminiClient:
             try:
                 def generate_sync():
                     return client.models.generate_content(
-                        model=self.model, contents=prompt
+                        model=self.model,
+                        contents=prompt,
+                        config=types.GenerateContentConfig(
+                            thinking_config=self._thinking_config()
+                        ),
                     )
 
                 return await asyncio.wait_for(
@@ -225,6 +237,7 @@ class GeminiClient:
         config = types.GenerateContentConfig(
             system_instruction=system_prompt,
             tools=tools,
+            thinking_config=self._thinking_config(),
         )
         contents: list[Any] = [
             types.Content(role="user", parts=[types.Part(text=user_message)])
