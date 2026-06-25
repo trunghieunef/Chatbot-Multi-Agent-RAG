@@ -17,6 +17,13 @@ import type {
   ChatSessionResponse,
   ChatSource,
 } from "@/lib/types";
+import {
+  registryAsSessions,
+  upsertConversation,
+  removeConversation,
+  getLastSessionId,
+  setLastSessionId,
+} from "@/lib/chatHistory";
 
 export interface Message {
   role: "user" | "assistant";
@@ -77,20 +84,18 @@ export function useChat(options: UseChatOptions = { mode: "mini" }) {
     if (!isFull) return;
     setLoadingSessions(true);
     try {
-      const data = await getChatSessions();
-      setSessions(data);
+      if (localStorage.getItem("token")) {
+        const data = await getChatSessions();
+        setSessions(data);
+      } else {
+        setSessions(registryAsSessions()); // anonymous: from localStorage registry
+      }
     } catch {
-      // Silently fail — user may be anonymous
+      setSessions(registryAsSessions()); // fallback to local registry
     } finally {
       setLoadingSessions(false);
     }
   }, [isFull]);
-
-  useEffect(() => {
-    if (isFull) {
-      loadSessions();
-    }
-  }, [isFull, loadSessions]);
 
   // Send message
   const send = useCallback(
@@ -117,6 +122,13 @@ export function useChat(options: UseChatOptions = { mode: "mini" }) {
           });
         }
         setSessionId(res.session_id);
+        setLastSessionId(res.session_id);
+        if (!localStorage.getItem("token")) {
+          // First user message becomes the conversation title; later sends only
+          // refresh updatedAt (upsert keeps the original title).
+          upsertConversation(res.session_id, msg);
+          if (isFull) loadSessions();
+        }
         setMessages((prev) => [
           ...prev,
           {
@@ -133,8 +145,8 @@ export function useChat(options: UseChatOptions = { mode: "mini" }) {
             request_id: res.request_id,
           },
         ]);
-        // Refresh session list in full mode
-        if (isFull && !sessionId) {
+        // Refresh session list in full mode (logged-in path)
+        if (isFull && !sessionId && localStorage.getItem("token")) {
           loadSessions();
         }
       } catch {
@@ -152,6 +164,23 @@ export function useChat(options: UseChatOptions = { mode: "mini" }) {
     },
     [input, loading, sessionId, isFull, loadSessions]
   );
+
+  // Create new session — declared before selectSession so its catch can reference it
+  const newSession = useCallback(() => {
+    setSessionId(null);
+    setMessages([
+      {
+        role: "assistant",
+        content:
+          "Xin chào! Tôi là trợ lý AI tư vấn bất động sản. Bạn muốn tìm kiếm nhà đất, hỏi về thị trường, hay cần tư vấn pháp lý?",
+        suggested_actions: [
+          "Tìm căn hộ 2PN Quận 7",
+          "Xu hướng giá nhà 2024",
+          "Thủ tục mua nhà lần đầu",
+        ],
+      },
+    ]);
+  }, []);
 
   // Select a session and load its history
   const selectSession = useCallback(
@@ -178,35 +207,25 @@ export function useChat(options: UseChatOptions = { mode: "mini" }) {
           }))
         );
       } catch {
-        setMessages([
-          {
-            role: "assistant",
-            content: "Không thể tải lịch sử. Vui lòng thử lại.",
-          },
-        ]);
+        removeConversation(id); // stale id — drop it and start fresh
+        newSession();
       } finally {
         setLoading(false);
       }
     },
-    [isFull]
+    [isFull, newSession]
   );
 
-  // Create new session
-  const newSession = useCallback(() => {
-    setSessionId(null);
-    setMessages([
-      {
-        role: "assistant",
-        content:
-          "Xin chào! Tôi là trợ lý AI tư vấn bất động sản. Bạn muốn tìm kiếm nhà đất, hỏi về thị trường, hay cần tư vấn pháp lý?",
-        suggested_actions: [
-          "Tìm căn hộ 2PN Quận 7",
-          "Xu hướng giá nhà 2024",
-          "Thủ tục mua nhà lần đầu",
-        ],
-      },
-    ]);
-  }, []);
+  // Mount effect: load sessions and restore last conversation
+  useEffect(() => {
+    if (!isFull) return;
+    loadSessions();
+    const last = getLastSessionId();
+    if (last) {
+      selectSession(last); // restores messages + sets sessionId so chat continues it
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isFull]);
 
   // Delete a session
   const deleteSession = useCallback(
