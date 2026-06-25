@@ -8,6 +8,7 @@ import asyncio
 import json
 import logging
 import random
+import time
 import uuid
 from datetime import datetime
 from inspect import isawaitable
@@ -24,7 +25,7 @@ from app.models.chat import ChatMessage, ChatSession
 from app.models.preference import ChatFeedback, MemoryProposal
 from app.models.user import User
 from app.routers.auth import get_optional_user
-from app.routers.metrics import CHAT_REQUESTS
+from app.routers.metrics import CHAT_REQUESTS, RETRIEVAL_LATENCY
 from app.schemas.chat import (
     ChatFeedbackRequest,
     ChatFeedbackResponse,
@@ -680,6 +681,7 @@ async def send_message(
 
     await enforce_chat_quota(db, user=user, session_id=session.id)
 
+    _agent_start = time.perf_counter()
     agent_response = await _run_agent_service_pipeline(
         body.message,
         db,
@@ -687,6 +689,10 @@ async def send_message(
         user,
         request_id,
     )
+    # Proxy metric: the agent-service round-trip (route -> retrieval -> synthesize),
+    # recorded into the retrieval-latency histogram so the Grafana panel has data.
+    # The backend only forwards, so this time is dominated by retrieval + LLM.
+    RETRIEVAL_LATENCY.observe(time.perf_counter() - _agent_start)
 
     # Save user message
     user_msg = ChatMessage(
