@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import logging
 import sys
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
 from sqlalchemy import text
+
+logger = logging.getLogger(__name__)
 
 ROOT = Path(__file__).resolve().parents[2]
 BACKEND = ROOT / "backend"
@@ -24,6 +27,7 @@ async def lookup_market_metrics(filters: dict[str, Any]) -> list[dict[str, Any]]
     property_type = filters.get("property_type")
     district = filters.get("district")
     if not city:
+        logger.info("[market_metrics] skipped: no 'city' in filters (district=%s)", district)
         return []
 
     rows = await district_price_overview(
@@ -32,7 +36,7 @@ async def lookup_market_metrics(filters: dict[str, Any]) -> list[dict[str, Any]]
         property_type=str(property_type) if property_type else None,
         district=str(district) if district else None,
     )
-    return [
+    metrics = [
         {
             "source_identity": (
                 f"market:{row.get('district')}:{property_type or 'all'}:"
@@ -49,6 +53,11 @@ async def lookup_market_metrics(filters: dict[str, Any]) -> list[dict[str, Any]]
         for row in rows
         if row.get("avg_price_per_m2") is not None
     ]
+    logger.info(
+        "[market_metrics] city=%s district=%s property_type=%s rows=%d metrics=%d",
+        city, district, property_type, len(rows), len(metrics),
+    )
+    return metrics
 
 
 async def lookup_market_timeseries(
@@ -101,7 +110,7 @@ async def lookup_market_timeseries(
 
     async with async_session() as session:
         result = await session.execute(text(sql), params)
-        return [
+        series = [
             {
                 "snapshot_month": row.snapshot_month,
                 "city": row.city,
@@ -115,3 +124,8 @@ async def lookup_market_timeseries(
             }
             for row in result
         ]
+    logger.info(
+        "[market_timeseries] district=%s property_type=%s months=%s rows=%d",
+        district, property_type, months, len(series),
+    )
+    return series
