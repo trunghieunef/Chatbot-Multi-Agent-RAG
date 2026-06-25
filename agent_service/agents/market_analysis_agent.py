@@ -16,6 +16,21 @@ from agent_service.graph.charts import (
 )
 
 
+def _tool_result_items(tool_result: Any) -> list[dict[str, Any]]:
+    """Normalize a tool result into a list of dict rows.
+
+    The market tools (lookup_market_metrics / lookup_market_timeseries) return a
+    raw list of dicts, but tolerate a {"results": [...]} wrapper too.
+    """
+    if isinstance(tool_result, list):
+        items = tool_result
+    elif isinstance(tool_result, dict):
+        items = tool_result.get("results", [])
+    else:
+        items = []
+    return [item for item in items if isinstance(item, dict)] if isinstance(items, list) else []
+
+
 class MarketAnalysisAgent(BaseAgent):
     """Autonomous market analysis agent.
 
@@ -36,14 +51,16 @@ class MarketAnalysisAgent(BaseAgent):
         blackboard_entries: list[dict[str, Any]],
     ) -> AgentThought:
         has_metrics = any(
-            action.tool_result.get("metric") == "avg_price_per_m2"
+            item.get("metric") == "avg_price_per_m2"
             for action in previous_actions
             if action.action_type == "call_tool"
+            for item in _tool_result_items(action.tool_result)
         )
         has_timeseries = any(
-            "timeseries" in str(action.tool_result.get("results", ""))
+            item.get("snapshot_month")
             for action in previous_actions
             if action.action_type == "call_tool"
+            for item in _tool_result_items(action.tool_result)
         )
 
         if not has_metrics:
@@ -123,14 +140,11 @@ class MarketAnalysisAgent(BaseAgent):
         metrics = []
         timeseries = []
         for action in actions:
-            results = action.tool_result.get("results", [])
-            if isinstance(results, list):
-                for item in results:
-                    if isinstance(item, dict):
-                        if item.get("metric"):
-                            metrics.append(item)
-                        elif item.get("snapshot_month"):
-                            timeseries.append(item)
+            for item in _tool_result_items(action.tool_result):
+                if item.get("metric"):
+                    metrics.append(item)
+                elif item.get("snapshot_month"):
+                    timeseries.append(item)
 
         if not metrics and not timeseries:
             return AgentResult(
