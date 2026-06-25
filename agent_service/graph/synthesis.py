@@ -59,7 +59,22 @@ def build_synthesis_prompt(
                 "earlier, possibly unrelated queries."
             ),
             "Every factual claim must include evidence_ids from the provided agent outputs.",
-            "If evidence is missing, say what is missing and ask a useful follow-up.",
+            (
+                "Produce ONE coherent answer. Never contradict yourself — if any "
+                "agent output contains data for a topic (for example a price trend), "
+                "present that data and do NOT also claim the data is missing or "
+                "unavailable for that same topic."
+            ),
+            (
+                "Reconcile partial results: when one agent returns data and another "
+                "returns none for the same topic, use the data and omit any "
+                "'no data' statement."
+            ),
+            (
+                "Only state that information is missing when NO agent output contains "
+                "it — never alongside data you are presenting; in that case ask a "
+                "useful follow-up."
+            ),
             f"User query: {query}",
             f"Conversation context: {json.dumps(conversation_context, ensure_ascii=True)}",
             f"Agent results: {json.dumps(compact_results, ensure_ascii=True, default=str)}",
