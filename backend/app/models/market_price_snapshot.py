@@ -12,6 +12,7 @@ class MarketPriceSnapshot(Base):
     city = Column(String(100), nullable=False)
     district = Column(String(100), nullable=False)
     ward = Column(String(100), nullable=False, default="")
+    street = Column(String(150), nullable=False, default="")
     property_type = Column(String(120), nullable=False)
     month = Column(Date, nullable=False)
     period = Column(String(7), nullable=False)
@@ -31,6 +32,7 @@ class MarketPriceSnapshot(Base):
             "city",
             "district",
             "ward",
+            "street",
             "property_type",
             "month",
             "source",

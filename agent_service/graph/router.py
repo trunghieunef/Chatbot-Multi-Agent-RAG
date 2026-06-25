@@ -103,6 +103,7 @@ class RouterDecision(BaseModel):
     needs_clarification: bool = False
     clarifying_question: str | None = None
     reason: str = ""
+    rewritten_query: str | None = None
     mode: str = "rule"
     warnings: list[Any] = Field(default_factory=list)
 
@@ -255,7 +256,8 @@ def _router_prompt(
         '  "agents": ["agent_1", "agent_2"],',
         '  "confidence": 0.0-1.0,',
         '  "filters": {"city": "...", "district": "...", ...},',
-        '  "reason": "lý do chọn các agent này"',
+        '  "rewritten_query": "câu hỏi đã được chuẩn hóa, bổ sung ngữ cảnh thiếu từ lịch sử hội thoại, dùng cho retrieval",',
+        '  "reason": "lý do ngắn gọn tại sao chọn các agent này"',
         "}",
     ])
 
