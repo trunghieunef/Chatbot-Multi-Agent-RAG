@@ -192,11 +192,19 @@ class MarketAnalysisAgent(BaseAgent):
             if chart is not None
         ]
 
+        # Expose the market figures' stable ids as evidence so grounded synthesis
+        # can cite the trend/metrics instead of rejecting the answer and falling
+        # back to the raw deterministic concatenation.
+        evidence_ids = [
+            item["source_identity"]
+            for item in (*metrics, *timeseries)
+            if isinstance(item, dict) and item.get("source_identity")
+        ]
         return AgentResult(
             agent_name=self.agent_name,
             status="completed",
             content="\n".join(lines),
-            evidence_ids_used=[],
+            evidence_ids_used=evidence_ids,
             sources=[],
             confidence="medium",
             iterations=len(thoughts),
