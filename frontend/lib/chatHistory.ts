@@ -39,10 +39,11 @@ function writeRegistry(entries: ChatHistoryEntry[]): void {
 }
 
 export function listConversations(): ChatHistoryEntry[] {
-  return readRegistry().sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  return readRegistry();
 }
 
 export function upsertConversation(id: string, title: string): void {
+  if (typeof window === "undefined") return;
   const entries = readRegistry();
   const now = new Date().toISOString();
   const existing = entries.find((e) => e.id === id);
@@ -56,6 +57,7 @@ export function upsertConversation(id: string, title: string): void {
 }
 
 export function removeConversation(id: string): void {
+  if (typeof window === "undefined") return;
   writeRegistry(readRegistry().filter((e) => e.id !== id));
 }
 
@@ -78,8 +80,6 @@ export function setLastSessionId(id: string): void {
 }
 
 // Map registry entries into the shape the session sidebar already renders.
-// Verify the exact ChatSessionResponse fields at frontend/lib/types.ts:216-222
-// and fill any additional required field sensibly (use updatedAt for dates).
 export function registryAsSessions(): ChatSessionResponse[] {
   return listConversations().map((e) => ({
     id: e.id,
