@@ -112,6 +112,11 @@ async def lookup_market_timeseries(
         result = await session.execute(text(sql), params)
         series = [
             {
+                # Stable evidence id so grounded synthesis can cite the trend.
+                "source_identity": (
+                    f"market:{row.district}:{row.property_type or 'all'}"
+                    f":trend:{row.snapshot_month}"
+                ),
                 "snapshot_month": row.snapshot_month,
                 "city": row.city,
                 "district": row.district,
