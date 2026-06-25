@@ -144,6 +144,7 @@ def normalize_hf_market_row(row: dict[str, Any]) -> dict[str, Any] | None:
         "city": city,
         "district": district,
         "ward": _clean_text(row.get("ward_name")),
+        "street": _clean_text(row.get("street_name")),
         "property_type": property_type,
         "month": month,
         "price": price,
@@ -179,6 +180,9 @@ def normalize_listing_market_row(row: dict[str, Any]) -> dict[str, Any] | None:
         "city": city,
         "district": district,
         "ward": _clean_text(row.get("ward")),
+        # Internal listings have no dedicated street column (only a free-text
+        # address), so the street segment is left empty for this source.
+        "street": "",
         "property_type": property_type,
         "month": month,
         "price": price_vnd,
@@ -192,7 +196,7 @@ def aggregate_market_snapshots(
     *,
     source: str = SOURCE_NAME,
 ) -> list[dict[str, Any]]:
-    buckets: dict[tuple[str, str, str, str, date], dict[str, list[float]]] = defaultdict(
+    buckets: dict[tuple[str, str, str, str, str, date], dict[str, list[float]]] = defaultdict(
         lambda: {"prices": [], "prices_per_m2": []}
     )
 
@@ -201,6 +205,7 @@ def aggregate_market_snapshots(
             str(row["city"]),
             str(row["district"]),
             str(row.get("ward") or ""),
+            str(row.get("street") or ""),
             str(row["property_type"]),
             row["month"],
         )
@@ -208,7 +213,7 @@ def aggregate_market_snapshots(
         buckets[key]["prices_per_m2"].append(float(row["price_per_m2"]))
 
     snapshots: list[dict[str, Any]] = []
-    for (city, district, ward, property_type, month), values in sorted(buckets.items()):
+    for (city, district, ward, street, property_type, month), values in sorted(buckets.items()):
         prices = values["prices"]
         prices_per_m2 = values["prices_per_m2"]
         snapshots.append(
@@ -216,6 +221,7 @@ def aggregate_market_snapshots(
                 "city": city,
                 "district": district,
                 "ward": ward,
+                "street": street,
                 "property_type": property_type,
                 "month": month,
                 "period": month.strftime("%Y-%m"),

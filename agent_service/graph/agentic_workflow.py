@@ -271,12 +271,17 @@ async def _node_specialist(state: dict[str, Any]) -> dict[str, Any]:
     request = state["request"]
     settings = get_agent_settings()
     registry = get_agentic_registry()
+    plan = state.get("supervisor_plan") or {}
+    rewritten_query = plan.get("rewritten_query") or request.message
     context = AgentContext(
-        agent_name=agent_name, query=request.message,
-        normalized_query=request.message.lower(),
+        agent_name=agent_name,
+        query=rewritten_query,
+        normalized_query=rewritten_query.lower(),
         routing_filters=state.get("routing_filters", {}),
         conversation_context=state.get("conversation_context", []),
-        user_preferences=request.user_preferences, locale=request.locale,
+        user_preferences=request.user_preferences,
+        locale=request.locale,
+        query_understanding={"rewritten_query": rewritten_query, "original_query": request.message},
     )
     result = await run_specialist(
         agent_name=agent_name, context=context, registry=registry,

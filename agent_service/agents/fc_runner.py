@@ -64,8 +64,12 @@ async def run_specialist(
         return await registry.call(tool_name=tool_name, agent_name=agent_name, **args)
 
     system_prompt = BaseAgent._role_description(agent_name)
+    original_query = context.query_understanding.get("original_query") if context.query_understanding else None
+    query_line = context.query
+    if original_query and original_query != context.query:
+        query_line = f"{context.query}\n(Câu hỏi gốc: {original_query})"
     user_message = (
-        f"Truy vấn người dùng: {context.query}\n"
+        f"Truy vấn: {query_line}\n"
         f"Bộ lọc: {context.routing_filters}\n"
         "Hãy dùng công cụ để lấy dữ liệu rồi đưa ra phân tích ngắn gọn bằng tiếng Việt. "
         "KHÔNG bịa thông tin không có trong kết quả công cụ."
