@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import sys
 import time
 from typing import Annotated, Any, TypedDict
 
@@ -347,6 +348,13 @@ async def _node_synthesize(state: dict[str, Any]) -> dict[str, Any]:
         allowed_evidence_ids=allowed_evidence_ids,
         supervisor_plan=plan,
         evidence_by_id=state.get("evidence_by_id", {}),
+    )
+
+    print(
+        f"[synthesize] used_llm={synth.used_llm} warnings={synth.warnings} "
+        f"agents={agents_used} allowed_evidence={len(allowed_evidence_ids)} "
+        f"final_len={len(synth.final_response or '')}",
+        file=sys.stderr,
     )
 
     final = synth.final_response
