@@ -90,8 +90,16 @@ async def judge_answer(
     graph_version: str,
     prompt_version: str,
     model_name: str,
+    judge_model: str | None = None,
     client: GeminiClient | None = None,
 ) -> dict[str, Any]:
+    """Score an answer.
+
+    ``model_name`` is metadata: the model that produced ``answer`` (recorded in
+    the prompt for context). ``judge_model`` is the model that runs the judge
+    itself; defaults to ``model_name`` only for backward compatibility, but
+    callers should pass the configured judge model explicitly.
+    """
     prompt = build_judge_prompt(
         question=question,
         answer=answer,
@@ -101,7 +109,7 @@ async def judge_answer(
         prompt_version=prompt_version,
         model_name=model_name,
     )
-    judge_client = client or GeminiClient(model=model_name)
+    judge_client = client or GeminiClient(model=judge_model or model_name)
     data = await judge_client.generate_json(prompt)
     if not data:
         return fallback_scores("judge unavailable")
