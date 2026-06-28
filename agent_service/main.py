@@ -72,6 +72,11 @@ async def chat_stream(
 @app.post("/internal/agent/evaluate")
 async def evaluate(body: dict, _: None = Depends(require_internal_key)) -> dict:
     settings = get_agent_settings()
+    # The judge always runs on the configured judge model. body["model_name"] is
+    # metadata (the model that produced the answer) and may be a placeholder like
+    # "unknown_model" when the trace lacks it — it must never select the judge model.
+    judge_model = settings.GEMINI_JUDGE_MODEL
+    answer_model = body.get("model_name") or judge_model
     return await judge_answer(
         question=body.get("question", ""),
         answer=body.get("answer", ""),
@@ -79,7 +84,8 @@ async def evaluate(body: dict, _: None = Depends(require_internal_key)) -> dict:
         trace=body.get("trace", {}),
         graph_version=body.get("graph_version") or settings.AGENT_GRAPH_VERSION,
         prompt_version=body.get("prompt_version") or settings.AGENT_PROMPT_VERSION,
-        model_name=body.get("model_name") or settings.GEMINI_JUDGE_MODEL,
+        model_name=answer_model,
+        judge_model=judge_model,
     )
 
 
