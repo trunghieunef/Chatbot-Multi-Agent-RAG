@@ -56,11 +56,6 @@ class AgentSettings(BaseSettings):
     AGENT_LLM_COST_TRACKING_ENABLED: bool = True
     AGENT_LLM_INPUT_PRICE_PER_MILLION_USD: float = 0.0
     AGENT_LLM_OUTPUT_PRICE_PER_MILLION_USD: float = 0.0
-    AGENT_REACT_ENABLED: bool = True
-    AGENT_REACT_MAX_ITERATIONS: int = 2
-    AGENT_REACT_CONTROLLER_MODE: str = "llm"
-    AGENT_REACT_TIMEOUT_SECONDS: float = 5.0
-
     # ── Agentic RAG settings ──────────────────────────────────
     AGENT_MAX_ITERATIONS: int = 3
     AGENT_TOOL_TIMEOUT_SECONDS: float = 15.0
@@ -88,16 +83,6 @@ class AgentSettings(BaseSettings):
         allowed = {"rule", "llm", "hybrid"}
         if value not in allowed:
             raise ValueError(f"AGENT_ROUTER_MODE must be one of {sorted(allowed)}")
-        return value
-
-    @field_validator("AGENT_REACT_CONTROLLER_MODE")
-    @classmethod
-    def validate_react_controller_mode(cls, value: str) -> str:
-        allowed = {"rule", "llm", "hybrid"}
-        if value not in allowed:
-            raise ValueError(
-                f"AGENT_REACT_CONTROLLER_MODE must be one of {sorted(allowed)}"
-            )
         return value
 
     @model_validator(mode="after")

@@ -61,7 +61,11 @@ from app.services.chatbot.abuse_guard import (
     enforce_chat_abuse_guard,
 )
 from app.services.chatbot.quota import enforce_chat_quota
-from app.services.chatbot.session_guard import verify_session_ownership
+def verify_session_ownership(session: ChatSession, user: User | None) -> None:
+    """Raise 404 when an authenticated session is accessed by a non-owner."""
+    if session.user_id is not None and (user is None or session.user_id != user.id):
+        raise HTTPException(status_code=404, detail="Session not found")
+
 
 router = APIRouter(prefix="/chat", tags=["Chat"])
 logger = logging.getLogger(__name__)

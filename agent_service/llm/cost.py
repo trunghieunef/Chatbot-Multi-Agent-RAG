@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Protocol
 
 
 @dataclass(frozen=True)
@@ -21,16 +20,6 @@ class LLMCostSummary:
             "budget_exceeded": self.budget_exceeded,
             "tracking_available": self.tracking_available,
         }
-
-
-class CostTracker(Protocol):
-    monthly_budget_usd: float
-
-    def add_estimated_cost(self, month: str, amount_usd: float) -> None:
-        ...
-
-    def get_summary(self, month: str) -> dict:
-        ...
 
 
 def current_month_key(now: datetime | None = None) -> str:

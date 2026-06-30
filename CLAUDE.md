@@ -61,7 +61,7 @@ Key pieces:
 - `evaluation/judge.py` — LLM-as-judge scoring, exposed at `/internal/agent/evaluate`.
 - State is checkpointed to SQLite (`AGENT_CHECKPOINT_PATH`, default `data/checkpoints/agent_graph.db`);
   streaming emits SSE node events. Behavior is heavily flag-driven (see `agent_service/config.py`):
-  `AGENT_AGENTIC_MODE`, `AGENT_REACT_ENABLED`, `AGENT_BLACKBOARD_ENABLED`, `AGENT_STREAM_ENABLED`,
+  `AGENT_AGENTIC_MODE`, `AGENT_BLACKBOARD_ENABLED`, `AGENT_STREAM_ENABLED`,
   `AGENT_CHECKPOINT_ENABLED`, `AGENT_LLM_COST_TRACKING_ENABLED`, etc.
 
 ### Data / RAG pipeline
