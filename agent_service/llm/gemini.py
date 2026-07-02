@@ -13,7 +13,7 @@ from google import genai
 from google.genai import types
 
 from agent_service.config import get_agent_settings
-from agent_service.llm.cost import get_runtime_cost_summary, record_runtime_llm_cost
+from agent_service.llm.cost import get_runtime_cost_summary, record_runtime_llm_cost_async
 
 logger = logging.getLogger(__name__)
 
@@ -159,7 +159,7 @@ class GeminiClient:
             output_tokens=(
                 output_tokens := getattr(usage, "candidates_token_count", None)
             ),
-            estimated_cost_usd=record_runtime_llm_cost(
+            estimated_cost_usd=record_runtime_llm_cost_async(
                 self.settings,
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
@@ -259,7 +259,7 @@ class GeminiClient:
                 )
 
             usage = getattr(response, "usage_metadata", None)
-            record_runtime_llm_cost(
+            record_runtime_llm_cost_async(
                 self.settings,
                 input_tokens=getattr(usage, "prompt_token_count", None),
                 output_tokens=getattr(usage, "candidates_token_count", None),

@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import asyncio
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -127,12 +131,13 @@ def get_runtime_cost_summary(settings) -> dict:
         )
 
 
-def record_runtime_llm_cost(
+def estimate_runtime_llm_cost(
     settings,
     *,
     input_tokens: int | None,
     output_tokens: int | None,
 ) -> float:
+    """Pure cost estimate — no I/O, safe to call on the hot path."""
     if (
         not settings.AGENT_LLM_COST_TRACKING_ENABLED
         or input_tokens is None
@@ -148,7 +153,11 @@ def record_runtime_llm_cost(
     )
     if amount <= 0:
         return 0.0
+    return round(amount, 6)
 
+
+def _write_cost_to_redis(settings, amount: float) -> None:
+    """Blocking Redis write — run in a thread, never directly on the event loop."""
     try:
         tracker = RedisCostTracker(
             redis_url=settings.REDIS_URL,
@@ -156,5 +165,46 @@ def record_runtime_llm_cost(
         )
         tracker.add_estimated_cost(current_month_key(), amount)
     except Exception:
+        logger.debug("Failed to write LLM cost to Redis", exc_info=True)
+
+
+def record_runtime_llm_cost(
+    settings,
+    *,
+    input_tokens: int | None,
+    output_tokens: int | None,
+) -> float:
+    """Synchronous cost record: estimate + blocking Redis write. Kept for
+    backward compatibility with callers outside the async event loop."""
+    amount = estimate_runtime_llm_cost(
+        settings, input_tokens=input_tokens, output_tokens=output_tokens
+    )
+    if amount <= 0:
         return 0.0
-    return round(amount, 6)
+    _write_cost_to_redis(settings, amount)
+    return amount
+
+
+def record_runtime_llm_cost_async(
+    settings,
+    *,
+    input_tokens: int | None,
+    output_tokens: int | None,
+) -> float:
+    """Estimate cost immediately (pure, cheap) and fire off the Redis write
+    without blocking the event loop. Falls back to a direct write when there
+    is no running loop (e.g. sync/test contexts)."""
+    amount = estimate_runtime_llm_cost(
+        settings, input_tokens=input_tokens, output_tokens=output_tokens
+    )
+    if amount <= 0:
+        return 0.0
+
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        _write_cost_to_redis(settings, amount)
+        return amount
+
+    loop.create_task(asyncio.to_thread(_write_cost_to_redis, settings, amount))
+    return amount
