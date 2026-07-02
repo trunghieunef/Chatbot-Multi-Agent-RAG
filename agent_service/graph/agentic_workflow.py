@@ -62,6 +62,7 @@ class GraphState(TypedDict, total=False):
     final_sources: list
     suggested_actions: list
     final_charts: list
+    correction_round: int
 
 
 def _conversation_context(request: AgentChatRequest) -> list[dict[str, str]]:
@@ -84,6 +85,7 @@ def _initial_state(request: AgentChatRequest) -> dict[str, Any]:
         "final_sources": [],
         "suggested_actions": [],
         "final_charts": [],
+        "correction_round": 0,
     }
 
 
