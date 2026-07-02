@@ -18,8 +18,7 @@ from agent_service.llm.cost import get_runtime_cost_summary, record_runtime_llm_
 logger = logging.getLogger(__name__)
 
 # Limit concurrent Gemini calls to avoid 429 rate limits
-_MAX_CONCURRENT_LLM_CALLS = 2
-_llm_semaphore = asyncio.Semaphore(_MAX_CONCURRENT_LLM_CALLS)
+_llm_semaphore = asyncio.Semaphore(get_agent_settings().AGENT_MAX_CONCURRENT_LLM_CALLS)
 
 
 @dataclass(frozen=True)
