@@ -43,6 +43,10 @@ def build_listing_chunks(listing: dict[str, Any]) -> list[dict[str, str]]:
     furniture = compact_text(listing.get("furniture"))
     bedrooms = compact_text(listing.get("bedrooms"))
     bathrooms = compact_text(listing.get("bathrooms"))
+    frontage = compact_text(listing.get("frontage"))
+    road_width = compact_text(listing.get("road_width"))
+    direction = compact_text(listing.get("direction"))
+    floors = compact_text(listing.get("floors"))
 
     chunks: list[dict[str, str]] = []
 
@@ -55,6 +59,10 @@ def build_listing_chunks(listing: dict[str, Any]) -> list[dict[str, str]]:
         f"Diện tích: {area_text}" if area_text else "",
         f"Phòng ngủ: {bedrooms}" if bedrooms else "",
         f"Phòng tắm: {bathrooms}" if bathrooms else "",
+        f"Mặt tiền: {frontage}" if frontage else "",
+        f"Đường vào: {road_width}" if road_width else "",
+        f"Hướng: {direction}" if direction else "",
+        f"Số tầng: {floors}" if floors else "",
         f"Khu vực: {region}" if region else "",
         f"Pháp lý: {legal_status}" if legal_status else "",
         f"Nội thất: {furniture}" if furniture else "",
