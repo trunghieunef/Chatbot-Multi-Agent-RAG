@@ -17,7 +17,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-import sys
 import time
 from typing import Annotated, Any, TypedDict
 
@@ -46,7 +45,9 @@ logger = logging.getLogger(__name__)
 # ── LangGraph State ───────────────────────────────────────────────
 
 def _merge_dicts(a: dict, b: dict) -> dict:
-    """Reducer for keys written concurrently by parallel ``Send`` branches."""
+    """Reducer for parallel Send writes; empty new dict resets (for retry)."""
+    if b == {}:
+        return {}
     return {**(a or {}), **(b or {})}
 
 
@@ -352,11 +353,10 @@ async def _node_synthesize(state: dict[str, Any]) -> dict[str, Any]:
         evidence_by_id=state.get("evidence_by_id", {}),
     )
 
-    print(
-        f"[synthesize] used_llm={synth.used_llm} warnings={synth.warnings} "
-        f"agents={agents_used} allowed_evidence={len(allowed_evidence_ids)} "
-        f"final_len={len(synth.final_response or '')}",
-        file=sys.stderr,
+    logger.info(
+        "synthesize used_llm=%s warnings=%s agents=%s allowed_evidence=%d final_len=%d",
+        synth.used_llm, synth.warnings, agents_used,
+        len(allowed_evidence_ids), len(synth.final_response or ""),
     )
 
     final = synth.final_response
@@ -371,17 +371,121 @@ async def _node_synthesize(state: dict[str, Any]) -> dict[str, Any]:
             "final_charts": _collect_charts(raw_results, agents_used)}
 
 
+# ── Self-correction (grade → rewrite) ─────────────────────────────
+
+_RELAXABLE_KEYS = ("bedrooms", "price_max", "max_price", "district", "area_max", "max_area")
+
+
+def _relaxable_filters(filters: dict[str, Any]) -> bool:
+    """True nếu filter có ràng buộc có thể nới để cứu 0-kết-quả."""
+    return any(filters.get(k) not in (None, "") for k in _RELAXABLE_KEYS)
+
+
+def _relax_filters(filters: dict[str, Any]) -> dict[str, Any]:
+    """Nới filter: bỏ bedrooms/district phụ, +20% price bound, +20% area bound."""
+    relaxed = dict(filters)
+    relaxed.pop("bedrooms", None)
+    relaxed.pop("num_bedrooms", None)
+    relaxed.pop("district", None)
+    for pk in ("price_max", "max_price"):
+        if isinstance(relaxed.get(pk), (int, float)):
+            relaxed[pk] = round(relaxed[pk] * 1.2, 4)
+    for ak in ("area_max", "max_area"):
+        if isinstance(relaxed.get(ak), (int, float)):
+            relaxed[ak] = round(relaxed[ak] * 1.2, 4)
+    return relaxed
+
+
+def _best_rerank_score(results: dict[str, Any]) -> float | None:
+    """Điểm rerank cao nhất trên mọi source của mọi agent."""
+    scores = [
+        s["rerank_score"]
+        for rd in results.values()
+        for s in rd.get("sources", [])
+        if isinstance(s, dict) and isinstance(s.get("rerank_score"), (int, float))
+    ]
+    return max(scores) if scores else None
+
+
+def _grade_decision(state: dict[str, Any]) -> str:
+    """Heuristic grade (0 LLM): 'rewrite' để tự sửa, 'synthesize' để trả lời."""
+    settings = get_agent_settings()
+    if state.get("correction_round", 0) >= settings.AGENT_MAX_CORRECTION_ROUNDS:
+        return "synthesize"
+
+    results = state.get("_agent_results", {})
+    filters = state.get("routing_filters", {}) or {}
+
+    has_evidence = any(
+        rd.get("status") not in ("no_evidence", "failed") and rd.get("sources")
+        for rd in results.values()
+    )
+    if not has_evidence:
+        # 0 kết quả: chỉ retry nếu filter nới được, nếu không → trả lời trung thực
+        return "rewrite" if _relaxable_filters(filters) else "synthesize"
+
+    best = _best_rerank_score(results)
+    if best is not None and best < settings.AGENT_GRADE_MIN_SCORE and _relaxable_filters(filters):
+        return "rewrite"
+    return "synthesize"
+
+
+async def _node_grade(state: dict[str, Any]) -> dict[str, Any]:
+    """No-op node: quyết định thực nằm ở conditional edge _grade_decision."""
+    return {}
+
+
+async def _node_rewrite(state: dict[str, Any]) -> dict[str, Any]:
+    """Nới filter (deterministic) + paraphrase truy vấn (1 LLM call), tăng round."""
+    filters = state.get("routing_filters", {}) or {}
+    plan = dict(state.get("supervisor_plan") or {})
+
+    new_filters = _relax_filters(filters)
+
+    # LLM paraphrase (best-effort; giữ query cũ nếu lỗi/không có client)
+    settings = get_agent_settings()
+    llm_client = _make_llm_client(settings)
+    original = plan.get("rewritten_query") or state["request"].message
+    if llm_client is not None:
+        try:
+            data = await llm_client.generate_json(
+                "Viết lại truy vấn bất động sản sau ngắn gọn, giữ nguyên ý, "
+                "nới lỏng ràng buộc quá chặt. Trả JSON {\"query\": \"...\"}.\n"
+                f"Truy vấn: {original}",
+                timeout_seconds=settings.AGENT_LLM_QUERY_TIMEOUT_SECONDS,
+            )
+            if isinstance(data, dict) and data.get("query"):
+                plan["rewritten_query"] = str(data["query"])
+        except Exception as exc:  # paraphrase là best-effort
+            logger.warning("rewrite paraphrase failed: %s", exc)
+
+    # Reset kết quả cũ để specialist chạy lại sạch (merge reducer thay thế key).
+    return {
+        "routing_filters": new_filters,
+        "supervisor_plan": plan,
+        "correction_round": state.get("correction_round", 0) + 1,
+        "_agent_results": {},
+        "evidence_by_id": {},
+    }
+
+
 # ── Graph Builder ─────────────────────────────────────────────────
 
 def _new_state_graph() -> StateGraph:
-    """Build the uncompiled supervisor → specialist → synthesize StateGraph."""
+    """Build the supervisor → specialist → grade → (rewrite|synthesize) StateGraph."""
     graph = StateGraph(GraphState)
     graph.add_node("supervisor", _node_supervisor)
     graph.add_node("specialist", _node_specialist)
+    graph.add_node("grade", _node_grade)
+    graph.add_node("rewrite", _node_rewrite)
     graph.add_node("synthesize", _node_synthesize)
     graph.set_entry_point("supervisor")
     graph.add_conditional_edges("supervisor", _dispatch, ["specialist", "synthesize"])
-    graph.add_edge("specialist", "synthesize")
+    graph.add_edge("specialist", "grade")
+    graph.add_conditional_edges("grade", _grade_decision, ["synthesize", "rewrite"])
+    # rewrite must re-emit Send fan-out (specialist needs per-agent agent_name),
+    # so route through _dispatch rather than a plain edge.
+    graph.add_conditional_edges("rewrite", _dispatch, ["specialist", "synthesize"])
     graph.add_edge("synthesize", END)
     return graph
 

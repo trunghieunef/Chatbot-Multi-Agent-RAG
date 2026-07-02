@@ -57,6 +57,9 @@ class AgentSettings(BaseSettings):
     AGENT_LLM_INPUT_PRICE_PER_MILLION_USD: float = 0.0
     AGENT_LLM_OUTPUT_PRICE_PER_MILLION_USD: float = 0.0
     AGENT_MAX_CONCURRENT_LLM_CALLS: int = 6
+    # Self-correction: ngưỡng rerank tối thiểu coi là "đủ tốt"; số vòng retry tối đa.
+    AGENT_GRADE_MIN_SCORE: float = 0.2
+    AGENT_MAX_CORRECTION_ROUNDS: int = 1
     # ── Agentic RAG settings ──────────────────────────────────
     AGENT_MAX_ITERATIONS: int = 3
     AGENT_TOOL_TIMEOUT_SECONDS: float = 15.0
