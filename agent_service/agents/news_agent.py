@@ -148,6 +148,7 @@ class NewsAgent(BaseAgent):
                 title=article.get("title"),
                 url=article.get("url"),
                 snippet=article.get("snippet", ""),
+                score=(article.get("matched_chunk") or {}).get("rerank_score"),
             )
             for article in all_articles[:5]
         ]

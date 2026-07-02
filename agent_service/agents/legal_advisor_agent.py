@@ -221,6 +221,7 @@ class LegalAdvisorAgent(BaseAgent):
                 title=article.get("title"),
                 citation=article.get("citation"),
                 snippet=article.get("snippet", ""),
+                score=(article.get("matched_chunk") or {}).get("rerank_score"),
             )
             for article in all_articles[:5]
         ]

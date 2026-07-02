@@ -397,12 +397,14 @@ def _relax_filters(filters: dict[str, Any]) -> dict[str, Any]:
 
 
 def _best_rerank_score(results: dict[str, Any]) -> float | None:
-    """Điểm rerank cao nhất trên mọi source của mọi agent."""
+    """Điểm rerank cao nhất trên mọi source của mọi agent.
+
+    Điểm nằm ở AgentSource.score (do specialist copy từ matched_chunk.rerank_score)."""
     scores = [
-        s["rerank_score"]
+        s["score"]
         for rd in results.values()
         for s in rd.get("sources", [])
-        if isinstance(s, dict) and isinstance(s.get("rerank_score"), (int, float))
+        if isinstance(s, dict) and isinstance(s.get("score"), (int, float))
     ]
     return max(scores) if scores else None
 
