@@ -591,7 +591,11 @@ async def run_agentic_graph(request: AgentChatRequest) -> AgentChatResponse:
             source_count=len(final_state.get("final_sources", [])),
             latency_ms=round((time.perf_counter() - started) * 1000, 2),
         ),
-        full_trace={"graph_version": settings.AGENT_GRAPH_VERSION, "mode": "supervisor_specialist_fc"},
+        full_trace={
+            "graph_version": settings.AGENT_GRAPH_VERSION,
+            "mode": "supervisor_specialist_fc",
+            "correction_round": final_state.get("correction_round", 0),
+        },
     )
 
 
@@ -648,7 +652,11 @@ async def run_agentic_graph_stream(request: AgentChatRequest):
             charts=vs.get("final_charts", []),
             trace_summary=TraceSummary(intent="streaming", agents=vs.get("agents_used", []),
                 source_count=len(vs.get("final_sources", [])), latency_ms=round((time.perf_counter() - started) * 1000, 2)),
-            full_trace={"graph_version": settings.AGENT_GRAPH_VERSION, "streaming": True},
+            full_trace={
+                "graph_version": settings.AGENT_GRAPH_VERSION,
+                "streaming": True,
+                "correction_round": vs.get("correction_round", 0),
+            },
         )
         yield {"event": "final", "request_id": request.request_id, "payload": response.model_dump(mode="json")}
 

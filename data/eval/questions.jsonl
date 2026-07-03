@@ -1,0 +1,12 @@
+{"id": "q01", "probe": "self_correction_zero_result", "query": "Tìm nhà 6 phòng ngủ ở Quận 1 giá dưới 2 tỷ", "note": "Filter quá chặt (6PN + giá thấp) → nhiều khả năng 0 kết quả → phải kích hoạt grade→rewrite nới filter."}
+{"id": "q02", "probe": "self_correction_zero_result", "query": "Căn hộ 5 phòng ngủ ở Quận 7 dưới 1 tỷ", "note": "Giá 1 tỷ cho 5PN là bất khả thi → 0 kết quả → test vòng tự sửa nới giá."}
+{"id": "q03", "probe": "field_coverage_direction", "query": "Nhà hướng Đông Nam mặt tiền rộng ở TP.HCM", "note": "Truy vấn theo direction/frontage — chỉ retrieval được sau khi chunk mới có field (P2). So trước/sau re-embed."}
+{"id": "q04", "probe": "field_coverage_floors", "query": "Nhà 3 tầng có sổ hồng ở Hà Nội", "note": "Truy vấn theo floors (~37% điền) + pháp lý (94% điền)."}
+{"id": "q05", "probe": "normal_retrieval", "query": "Căn hộ chung cư 2 phòng ngủ khoảng 3 tỷ ở Quận 2", "note": "Truy vấn phổ biến, dữ liệu dồi dào → baseline chất lượng retrieval bình thường, KHÔNG nên retry."}
+{"id": "q06", "probe": "normal_retrieval", "query": "Đất nền dự án ở Bình Dương dưới 5 tỷ", "note": "Loại BĐS phổ biến (property_type đã normalize) → kiểm không retry oan."}
+{"id": "q07", "probe": "market_analysis", "query": "Giá nhà trung bình ở Quận 7 hiện tại là bao nhiêu?", "note": "Market agent → lookup_market_metrics; kiểm chart + không phụ thuộc self-correction."}
+{"id": "q08", "probe": "market_trend", "query": "Xu hướng giá bất động sản Hà Nội 6 tháng qua thế nào?", "note": "Market timeseries → kiểm dữ liệu market_price_snapshots + chart."}
+{"id": "q09", "probe": "legal_sparse_data", "query": "Thủ tục sang tên sổ đỏ khi mua nhà cần giấy tờ gì?", "note": "Legal agent — CHỈ 17 bài news/legal → nhiều khả năng no_evidence. Đo grounding + câu trả lời trung thực khi thiếu data."}
+{"id": "q10", "probe": "legal_sparse_data", "query": "Phí trước bạ khi mua căn hộ chung cư tính thế nào?", "note": "Legal — kiểm hệ báo trung thực khi KB rỗng thay vì bịa."}
+{"id": "q11", "probe": "investment", "query": "Có nên đầu tư căn hộ cho thuê ở Quận 9 không?", "note": "Investment agent → kiểm disclaimer tài chính được thêm ở synthesize."}
+{"id": "q12", "probe": "grounding_multi_agent", "query": "Tôi có 3 tỷ, muốn mua căn hộ 2PN ở Quận 2 và biết pháp lý cần lưu ý gì", "note": "Kích 2 specialist (property + legal) → test fan-out song song (đo latency P1) + grounding synthesis + disclaimer pháp lý."}
