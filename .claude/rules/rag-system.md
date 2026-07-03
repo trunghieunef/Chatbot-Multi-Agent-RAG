@@ -18,25 +18,40 @@ paths:
 
 ## Graph Workflow
 
+Self-corrective agentic RAG. The compiled graph (`_new_state_graph` in
+`agentic_workflow.py`) has 4 nodes with a bounded grade → rewrite retry loop:
+
 ```
-query_understanding
-  → router (classify intent, select agents)
-  → dispatch_agents (specialists run in parallel via asyncio)
-  → committee (review specialist answers)
-  → synthesis (merge into final response)
+supervisor (route: classify intent, select agents, rewrite query, extract filters)
+  → specialist (fan-out via LangGraph Send; each runs a function-calling ReAct loop)
+  → grade (heuristic, 0 LLM: reads result status + rerank score)
+        ├─ ok / insufficient  → synthesize → END
+        └─ retry (weak/zero results + relaxable filter, cap AGENT_MAX_CORRECTION_ROUNDS)
+               → rewrite (relax SQL filters + LLM paraphrase) → re-dispatch specialists
 ```
 
+- Routing (intent + agent selection + query rewrite + filters) happens inside the
+  `supervisor` node's single router LLM call — there is **no** separate
+  `query_understanding` node in the runtime graph.
+- Specialists fan out concurrently via `Send`; concurrency is capped process-wide by
+  `AGENT_MAX_CONCURRENT_LLM_CALLS` (semaphore in `llm/gemini.py`).
+- `grade` is heuristic (no LLM): retries on zero-results-with-relaxable-filter or on
+  weak rerank score (`AgentSource.score` < `AGENT_GRADE_MIN_SCORE`); otherwise answers,
+  emitting an honest "insufficient data" message when nothing relaxable remains.
+- `synthesize` validates grounding (claims' evidence ⊆ retrieved evidence) and falls
+  back to deterministic concatenation on violation.
+
 Key graph files in `agent_service/graph/`:
-- `agentic_workflow.py` — entry point, `build_default_tool_registry()`, `get_agentic_registry()`
-- `router.py` — intent classification + agent selection
-- `query_understanding.py` — query rewriting and analysis
-- `state.py` — LangGraph state definition
-- `blackboard.py` — shared scratchpad between agents
-- `committee.py` — committee review before synthesis
-- `synthesis.py` — final response synthesis
-- `charts.py` — chart data generation for market responses
-- `memory_extraction.py` — extract memory proposals from responses
-- `investment_model.py` — investment scoring model
+- `agentic_workflow.py` — graph builder + all nodes (supervisor, specialist, grade,
+  rewrite, synthesize), `run_agentic_graph[_stream]`, tool registry.
+- `router.py` — intent classification + agent selection + query rewrite (one LLM call).
+- `state.py` — `GraphState` (incl. `correction_round`).
+- `synthesis.py` — final response synthesis + grounding validation.
+- `charts.py` — chart data generation for market responses.
+
+Present but **not wired into the runtime graph** (imported only by their own tests —
+treat as dead/reference code, do not assume they run): `query_understanding.py`,
+`committee.py`, `memory_extraction.py`, `investment_model.py`, `blackboard.py`.
 
 ## Agents (`agent_service/agents/`)
 
@@ -60,9 +75,15 @@ Key graph files in `agent_service/graph/`:
 
 ## State & Checkpointing
 
-- State checkpointed to SQLite (`AGENT_CHECKPOINT_PATH`, default `data/checkpoints/agent_graph.db`).
+- `GraphState` (in `agentic_workflow.py`) is the runtime state; `_agent_results` and
+  `evidence_by_id` use a reset-aware merge reducer so a rewrite retry clears stale
+  results. `correction_round` bounds the retry loop.
+- Checkpointing is **effectively disabled**: although `AGENT_CHECKPOINT_ENABLED=true`,
+  the async SQLite saver is gated behind an undefined flag and always resolves to
+  `None` (it deadlocks across event loops). Streaming therefore rebuilds final state by
+  merging stream updates, not from a checkpoint.
 - Streaming emits SSE node events when `AGENT_STREAM_ENABLED=true`.
-- `agent_service/contracts.py` defines all inter-service data models (AgentChatRequest, AgentChatResponse, Evidence, AgentSource, etc.).
+- `agent_service/contracts.py` defines all inter-service data models (AgentChatRequest, AgentChatResponse, Evidence, AgentSource, etc.). Note: `AgentSource.score` (not `rerank_score`) carries the rerank/relevance score that `grade` reads.
 
 ## Key Feature Flags (`agent_service/config.py`)
 
@@ -74,9 +95,12 @@ Key graph files in `agent_service/graph/`:
 | `AGENT_SPECIALIST_LLM_ENABLED` | `true` | LLM-powered specialist agents |
 | `AGENT_BLACKBOARD_ENABLED` | `true` | Shared scratchpad between agents |
 | `AGENT_STREAM_ENABLED` | `true` | SSE streaming |
-| `AGENT_CHECKPOINT_ENABLED` | `true` | SQLite graph checkpointing |
-| `AGENT_LLM_COST_TRACKING_ENABLED` | `true` | Track estimated Gemini costs in Redis |
+| `AGENT_CHECKPOINT_ENABLED` | `true` | SQLite graph checkpointing (see note above — inert in practice) |
+| `AGENT_LLM_COST_TRACKING_ENABLED` | `true` | Track estimated Gemini costs in Redis (write is off-loop, fire-and-forget) |
 | `AGENT_MEMORY_FILTERS_ENABLED` | `true` | Apply user preference filters |
+| `AGENT_MAX_CONCURRENT_LLM_CALLS` | `6` | Process-wide cap on concurrent Gemini calls (semaphore); lower on 429s |
+| `AGENT_GRADE_MIN_SCORE` | `0.2` | `grade` retries when best `AgentSource.score` is below this |
+| `AGENT_MAX_CORRECTION_ROUNDS` | `1` | Max grade→rewrite retry rounds (self-correction loop cap) |
 
 ## Backend Chat Plumbing (`backend/app/services/chatbot/`)
 
