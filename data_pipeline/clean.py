@@ -175,7 +175,10 @@ def determine_property_type(row: dict) -> str:
         return "Đất nền"
     if "nha rieng" in text or "nha mat pho" in text or "nha pho" in text:
         return "Nhà riêng"
-    return row.get("property_type", "Khác") or "Khác"
+    # Never leak the raw crawler value: it is title-like ("Nhà riêng tại đường X"),
+    # which pollutes the property_type taxonomy (thousands of distinct values) and
+    # blows up every prompt that embeds the vocabulary.
+    return "Khác"
 
 
 def extract_location(row: dict) -> tuple[str, str, str]:

@@ -30,7 +30,7 @@ class Settings(BaseSettings):
 
     # Google Gemini
     GEMINI_API_KEY: str = ""
-    GEMINI_MODEL: str = "gemini-2.0-flash"
+    GEMINI_MODEL: str = "gemini-2.5-flash"
     GEMINI_EMBEDDING_MODEL: str = "gemini-embedding-001"
     EMBEDDING_PROVIDER: str = "bge_m3"
     HF_EMBEDDING_MODEL: str = "BAAI/bge-m3"
@@ -66,7 +66,7 @@ class Settings(BaseSettings):
     CHATBOT_MEMORY_ENABLED: bool = True
     CHATBOT_ADMIN_ENABLED: bool = True
     CHATBOT_TRACE_LEVEL: str = "full"
-    GEMINI_JUDGE_MODEL: str = "gemini-2.0-flash"
+    GEMINI_JUDGE_MODEL: str = "gemini-2.5-flash"
     OBSERVABILITY_ANON_RETENTION_DAYS: int = 30
     OBSERVABILITY_AUTH_RETENTION_DAYS: int = 90
     OBSERVABILITY_CLEANUP_ENABLED: bool = True

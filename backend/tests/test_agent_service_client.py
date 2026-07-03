@@ -71,7 +71,7 @@ def test_agent_service_settings_defaults(monkeypatch):
     assert settings.CHATBOT_MEMORY_ENABLED is True
     assert settings.CHATBOT_ADMIN_ENABLED is True
     assert settings.CHATBOT_TRACE_LEVEL == "full"
-    assert settings.GEMINI_JUDGE_MODEL == "gemini-2.0-flash"
+    assert settings.GEMINI_JUDGE_MODEL == "gemini-2.5-flash"
     assert settings.ANON_CHAT_DAILY_LIMIT == 20
     assert settings.AUTH_CHAT_DAILY_LIMIT == 200
 

@@ -62,11 +62,18 @@ _PROPERTY_TYPE_VOCAB_TTL = 3600.0
 
 
 async def _fetch_distinct_property_types() -> list[str]:
-    """Read the distinct, non-empty property_type values from the listings data."""
+    """Read the property_type taxonomy from the listings data.
+
+    The real taxonomy is ~10 short category names. Legacy rows may carry raw
+    title-like values ("Nhà riêng tại đường X…"); embedding those in the router
+    prompt once blew it up to ~40K tokens per call. Guard the prompt no matter
+    what is in the DB: keep only short, frequent values, hard-capped.
+    """
     query = text(
-        "SELECT DISTINCT property_type FROM listings "
+        "SELECT property_type FROM listings "
         "WHERE property_type IS NOT NULL AND btrim(property_type) <> '' "
-        "ORDER BY property_type"
+        "AND length(property_type) <= 30 "
+        "GROUP BY property_type ORDER BY COUNT(*) DESC LIMIT 15"
     )
     async with async_session() as session:
         result = await session.execute(query)
