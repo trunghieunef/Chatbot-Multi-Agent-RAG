@@ -34,6 +34,14 @@ services:
       context: .
       dockerfile: pipeline_worker/Dockerfile
     container_name: realestate_pipeline_worker
+    # Reserve the host GPU so bge-m3 embedding runs on CUDA, not CPU.
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     depends_on:
       postgres:
         condition: service_healthy
