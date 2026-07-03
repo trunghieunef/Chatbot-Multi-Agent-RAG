@@ -97,6 +97,9 @@ class Settings(BaseSettings):
     # Intent extraction
     INTENT_EXTRACTOR: str = "rule"                # 'rule' | 'gemini'
     GEMINI_INTENT_MODEL: str = "gemini-2.5-flash"
+    # Max concurrent enrich (intent LLM) calls per batch during ingest.
+    # ponytail: raise on a paid Gemini tier for faster re-embed; lower on 429s.
+    INTENT_MAX_CONCURRENCY: int = 10
 
     @field_validator("DEBUG", mode="before")
     @classmethod

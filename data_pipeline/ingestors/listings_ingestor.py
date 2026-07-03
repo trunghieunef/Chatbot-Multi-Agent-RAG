@@ -317,28 +317,44 @@ async def ingest_listing_rows(rows: list[dict[str, str]], batch_size: int = 50) 
     for start in range(0, len(rows), batch_size):
         batch = rows[start : start + batch_size]
 
-        # Phase 1: clean + enrich structured listing data.
-        prepared: list[dict[str, Any]] = []
+        # Phase 1: clean + enrich structured listing data. Enrichment does one
+        # geocode + one intent LLM call per listing; run the batch concurrently
+        # (bounded) instead of sequentially so the network waits overlap.
+        cleaned: list[dict[str, Any]] = []
         for row in batch:
             try:
                 listing_data = row_to_listing(row)
                 if not listing_data.get("product_id"):
                     continue
                 listing_data[LISTING_IMAGE_META_KEY] = listing_image_urls_from_row(row)
-                listing_data = await enrich_listing_data(
-                    listing_data,
-                    geocoder=geocoder,
-                    intent_extractor=intent_extractor,
-                )
-                prepared.append(listing_data)
-            except asyncio.CancelledError:
-                raise
+                cleaned.append(listing_data)
             except Exception as exc:
                 result["publish_errors"] += 1
                 print(
-                    f"[ingest] clean/enrich failed for {row.get('product_id', '?')}: {exc}",
+                    f"[ingest] clean failed for {row.get('product_id', '?')}: {exc}",
                     file=sys.stderr,
                 )
+
+        enrich_sem = asyncio.Semaphore(settings.INTENT_MAX_CONCURRENCY)
+
+        async def _enrich_one(listing_data: dict[str, Any]) -> dict[str, Any] | None:
+            async with enrich_sem:
+                try:
+                    return await enrich_listing_data(
+                        listing_data, geocoder=geocoder, intent_extractor=intent_extractor,
+                    )
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:
+                    result["publish_errors"] += 1
+                    print(
+                        f"[ingest] enrich failed for {listing_data.get('product_id', '?')}: {exc}",
+                        file=sys.stderr,
+                    )
+                    return None
+
+        enriched_results = await asyncio.gather(*(_enrich_one(ld) for ld in cleaned))
+        prepared: list[dict[str, Any]] = [r for r in enriched_results if r is not None]
 
         if not prepared:
             continue
