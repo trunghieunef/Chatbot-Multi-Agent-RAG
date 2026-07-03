@@ -390,6 +390,15 @@ async def ingest_listing_rows(rows: list[dict[str, str]], batch_size: int = 50) 
         result["chunks"] += index_result["chunks"]
         result["index_errors"] += index_result["index_errors"]
 
+        done = min(start + batch_size, len(rows))
+        print(
+            f"[ingest] progress {done}/{len(rows)} listings "
+            f"(indexed={result['indexed']} chunks={result['chunks']} "
+            f"errors={result['index_errors'] + result['publish_errors']})",
+            file=sys.stderr,
+            flush=True,
+        )
+
     return result
 
 
