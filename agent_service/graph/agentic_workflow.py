@@ -613,14 +613,18 @@ async def run_agentic_graph_stream(request: AgentChatRequest):
     NODE_STATUS: dict[str, str] = {
         "supervisor": "đang phân tích câu hỏi...",
         "specialist": "đang tìm kiếm và phân tích dữ liệu...",
+        "grade": "đang đánh giá kết quả...",
+        "rewrite": "đang tinh chỉnh truy vấn...",
         "synthesize": "đang tổng hợp kết quả...",
     }
     node_started: dict[str, float] = {}
     # Accumulate node outputs as they stream. The graph compiles without a
     # checkpointer by default, so we must read the final answer from the stream
-    # itself — `aget_state` would raise "No checkpointer set". The terminal keys
-    # (final_response/final_sources/suggested_actions, agents_used) are written
-    # by single (non-parallel) nodes, so a plain merge is correct here.
+    # itself — `aget_state` would raise "No checkpointer set". On a self-correction
+    # retry `_agent_results` accumulates stale+new here (plain merge, not the
+    # reset-aware graph reducer), but that key is never read from `vs`: the terminal
+    # keys (final_response/final_sources/suggested_actions, agents_used) are written
+    # once by synthesize, so reading them from a plain merge is correct.
     vs: dict[str, Any] = {}
 
     try:

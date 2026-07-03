@@ -7,6 +7,10 @@ from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
+# Keep strong refs to in-flight fire-and-forget cost-write tasks so they are not
+# garbage-collected mid-execution (see asyncio.create_task docs / ruff RUF006).
+_pending_cost_writes: set[asyncio.Task] = set()
+
 
 @dataclass(frozen=True)
 class LLMCostSummary:
@@ -157,7 +161,9 @@ def estimate_runtime_llm_cost(
 
 
 def _write_cost_to_redis(settings, amount: float) -> None:
-    """Blocking Redis write — run in a thread, never directly on the event loop."""
+    """Blocking Redis write. The async path schedules this in a thread; sync
+    callers run it directly. Any failure is swallowed (cost tracking must never
+    break a request)."""
     try:
         tracker = RedisCostTracker(
             redis_url=settings.REDIS_URL,
@@ -206,5 +212,7 @@ def record_runtime_llm_cost_async(
         _write_cost_to_redis(settings, amount)
         return amount
 
-    loop.create_task(asyncio.to_thread(_write_cost_to_redis, settings, amount))
+    task = loop.create_task(asyncio.to_thread(_write_cost_to_redis, settings, amount))
+    _pending_cost_writes.add(task)
+    task.add_done_callback(_pending_cost_writes.discard)
     return amount
