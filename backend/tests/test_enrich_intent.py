@@ -34,6 +34,17 @@ async def test_gemini_intent_extractor_parses_json_array():
 
 
 @pytest.mark.asyncio
+async def test_gemini_intent_extractor_parses_markdown_fenced_json():
+    # Gemini 2.5 wraps JSON in a ```json ... ``` fence; must still parse.
+    client = FakeClient('```json\n{"tags": ["gần sông", "gần metro"]}\n```')
+    extractor = GeminiIntentExtractor(api_key="k", client=client, model="gemini-2.5-flash")
+
+    tags = await extractor.extract("Căn hộ gần sông, gần metro.")
+
+    assert tags == ["gần sông", "gần metro"]
+
+
+@pytest.mark.asyncio
 async def test_gemini_intent_extractor_returns_empty_on_invalid_json():
     extractor = GeminiIntentExtractor(api_key="k", client=FakeClient("not json"))
 
