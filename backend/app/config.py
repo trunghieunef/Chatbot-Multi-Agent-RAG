@@ -96,7 +96,7 @@ class Settings(BaseSettings):
 
     # Intent extraction
     INTENT_EXTRACTOR: str = "rule"                # 'rule' | 'gemini'
-    GEMINI_INTENT_MODEL: str = "gemini-2.0-flash"
+    GEMINI_INTENT_MODEL: str = "gemini-2.5-flash"
 
     @field_validator("DEBUG", mode="before")
     @classmethod

@@ -55,7 +55,7 @@ class NominatimGeocoder:
 @dataclass
 class GeminiIntentExtractor:
     api_key: str
-    model: str = "gemini-2.0-flash"
+    model: str = "gemini-2.5-flash"
     client: object | None = None
 
     def __post_init__(self) -> None:
