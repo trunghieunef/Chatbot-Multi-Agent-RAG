@@ -320,6 +320,14 @@ async def _node_synthesize(state: dict[str, Any]) -> dict[str, Any]:
                 or "Bạn có thể bổ sung tiêu chí không?",
                 "final_sources": [], "suggested_actions": ["Bổ sung ngân sách", "Bổ sung khu vực"]}
     if not agents_used:
+        # ponytail: off_topic is the future search_web plug point — for now,
+        # politely steer the user back to real-estate topics.
+        if plan.get("intent") == "off_topic":
+            return {"final_response": "Xin lỗi, tôi là trợ lý tư vấn bất động sản nên chưa hỗ trợ "
+                    "chủ đề này. Tôi có thể giúp bạn tìm nhà/căn hộ, phân tích giá thị trường, "
+                    "tư vấn pháp lý hoặc đầu tư bất động sản — bạn quan tâm điều gì?",
+                    "final_sources": [], "suggested_actions":
+                    ["Tìm bất động sản", "Phân tích thị trường", "Tư vấn pháp lý"]}
         return {"final_response": "Xin chào! Tôi có thể giúp bạn tìm bất động sản, phân tích thị "
                 "trường, hoặc tư vấn pháp lý. Bạn muốn tìm hiểu vấn đề gì?",
                 "final_sources": [], "suggested_actions":

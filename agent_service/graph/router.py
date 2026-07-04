@@ -50,6 +50,21 @@ KEYWORDS_BY_AGENT = {
     "property_search": ["tim", "mua", "thue", "can ho", "nha", "dat", "quan "],
 }
 
+# Accent-stripped small-talk openers. A greeting must NOT fall through to the
+# property_search fallback (it used to trigger a full retrieval + LLM chain
+# for "hi"); it short-circuits routing with zero LLM calls instead.
+_GREETINGS = {
+    "hi", "hello", "helo", "hey", "yo", "alo",
+    "chao", "xin chao", "chao ban", "chao bot", "chao ad", "chao anh", "chao chi",
+}
+
+
+def _is_greeting(normalized_query: str) -> bool:
+    q = normalized_query.strip(" \t\n!.?,~^-_")
+    if not q or len(q) > 30:
+        return False
+    return q in _GREETINGS or q.startswith("xin chao ") or q.startswith("chao ")
+
 
 # The canonical property_type taxonomy is whatever the ETL actually wrote to the
 # data (data_pipeline/clean.py::determine_property_type), in Vietnamese. Rather
@@ -168,6 +183,15 @@ def route_with_rules(state: dict[str, Any]) -> RouterDecision:
     ]
 
     if not agents:
+        # Keywords take priority; only a keyword-less short opener is small talk.
+        if _is_greeting(normalized_query):
+            return RouterDecision(
+                intent="greeting",
+                agents=[],
+                confidence=1.0,
+                reason="greeting",
+                mode="rule",
+            )
         agents = ["property_search"]
 
     intent = INTENT_BY_AGENT[agents[0]] if len(agents) == 1 else "mixed"
@@ -244,6 +268,11 @@ def _router_prompt(
         "- Query hỏi PHÁP LÝ, LUẬT, THỦ TỤC → chọn legal_advisor.",
         "- Query hỏi ĐẦU TƯ, LỢI NHUẬN, ROI → chọn investment_advisor.",
         "- Có thể chọn NHIỀU agent nếu query phức tạp.",
+        "- Query chỉ là CHÀO HỎI/XÃ GIAO (hi, chào, cảm ơn, tạm biệt...) → "
+        'intent "greeting", agents = [] (danh sách rỗng).',
+        "- Query KHÔNG LIÊN QUAN bất động sản (thời tiết, thể thao, nấu ăn, "
+        'lập trình, đời tư...) → intent "off_topic", agents = [] (danh sách rỗng), '
+        "confidence cao nếu chắc chắn.",
         "",
         "### Bộ lọc cần trích xuất (nếu có):",
         "- city: Tỉnh/Thành phố.",
@@ -259,7 +288,7 @@ def _router_prompt(
         "",
         "Trả về CHỈ MỘT JSON object (không markdown, không code fence) với định dạng:",
         "{",
-        '  "intent": "market_analysis|property_search|legal_advice|investment_advice|news|project|mixed",',
+        '  "intent": "market_analysis|property_search|legal_advice|investment_advice|news|project|mixed|greeting|off_topic",',
         '  "agents": ["agent_1", "agent_2"],',
         '  "confidence": 0.0-1.0,',
         '  "filters": {"city": "...", "district": "...", ...},',
@@ -326,10 +355,20 @@ async def route_request(
 ) -> RouterDecision:
     settings = get_agent_settings()
     rule = route_with_rules(state)
+    # A rule-detected greeting never needs an LLM: answer it for free.
+    if rule.intent == "greeting":
+        return rule
     if state.get("force_deterministic") or settings.AGENT_ROUTER_MODE == "rule":
         return rule
 
     llm = await route_with_llm(state, client=client)
+    # Off-topic/greeting is a VALID verdict with empty agents — don't let the
+    # rule fallback (property_search) override it and run retrieval for "hi".
+    if (
+        llm.intent in ("greeting", "off_topic")
+        and llm.confidence >= settings.AGENT_LLM_CONFIDENCE_THRESHOLD
+    ):
+        return llm
     if settings.AGENT_ROUTER_MODE == "llm":
         if llm.confidence >= settings.AGENT_LLM_CONFIDENCE_THRESHOLD and llm.agents:
             return llm
