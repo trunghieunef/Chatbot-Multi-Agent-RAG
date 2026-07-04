@@ -72,6 +72,8 @@ async def run_specialist(
         f"Truy vấn: {query_line}\n"
         f"Bộ lọc: {context.routing_filters}\n"
         "Hãy dùng công cụ để lấy dữ liệu rồi đưa ra phân tích ngắn gọn bằng tiếng Việt. "
+        "Nếu kết quả không liên quan hoặc không đủ để trả lời, hãy thử công cụ khác "
+        "phù hợp (nếu có) trước khi kết luận. "
         "KHÔNG bịa thông tin không có trong kết quả công cụ."
     )
 

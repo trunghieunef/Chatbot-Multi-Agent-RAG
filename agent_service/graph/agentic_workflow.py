@@ -158,8 +158,9 @@ def build_default_tool_registry() -> ToolRegistry:
     registry.register(ToolDef(
         name="search_web",
         description=(
-            "Tìm kiếm web (Tavily). CHỈ dùng khi search_articles không trả về "
-            "kết quả nào — bổ sung thông tin pháp lý/tin tức từ internet."
+            "Tìm kiếm web (Tavily) để bổ sung thông tin pháp lý/tin tức từ "
+            "internet. Dùng khi search_articles không trả về kết quả nào, HOẶC "
+            "khi kết quả trả về không liên quan / không đủ để trả lời câu hỏi."
         ),
         parameters={"query": "str", "max_results": "int"},
         required_params=["query"],
