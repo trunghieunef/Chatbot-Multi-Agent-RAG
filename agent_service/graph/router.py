@@ -50,21 +50,6 @@ KEYWORDS_BY_AGENT = {
     "property_search": ["tim", "mua", "thue", "can ho", "nha", "dat", "quan "],
 }
 
-# Accent-stripped small-talk openers. A greeting must NOT fall through to the
-# property_search fallback (it used to trigger a full retrieval + LLM chain
-# for "hi"); it short-circuits routing with zero LLM calls instead.
-_GREETINGS = {
-    "hi", "hello", "helo", "hey", "yo", "alo",
-    "chao", "xin chao", "chao ban", "chao bot", "chao ad", "chao anh", "chao chi",
-}
-
-
-def _is_greeting(normalized_query: str) -> bool:
-    q = normalized_query.strip(" \t\n!.?,~^-_")
-    if not q or len(q) > 30:
-        return False
-    return q in _GREETINGS or q.startswith("xin chao ") or q.startswith("chao ")
-
 
 # The canonical property_type taxonomy is whatever the ETL actually wrote to the
 # data (data_pipeline/clean.py::determine_property_type), in Vietnamese. Rather
@@ -183,15 +168,6 @@ def route_with_rules(state: dict[str, Any]) -> RouterDecision:
     ]
 
     if not agents:
-        # Keywords take priority; only a keyword-less short opener is small talk.
-        if _is_greeting(normalized_query):
-            return RouterDecision(
-                intent="greeting",
-                agents=[],
-                confidence=1.0,
-                reason="greeting",
-                mode="rule",
-            )
         agents = ["property_search"]
 
     intent = INTENT_BY_AGENT[agents[0]] if len(agents) == 1 else "mixed"
@@ -355,9 +331,6 @@ async def route_request(
 ) -> RouterDecision:
     settings = get_agent_settings()
     rule = route_with_rules(state)
-    # A rule-detected greeting never needs an LLM: answer it for free.
-    if rule.intent == "greeting":
-        return rule
     if state.get("force_deterministic") or settings.AGENT_ROUTER_MODE == "rule":
         return rule
 

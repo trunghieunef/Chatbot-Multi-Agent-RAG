@@ -20,48 +20,28 @@ def _state(message: str, normalized: str | None = None) -> dict:
 
 
 class _LLMStub:
-    """generate_json stub; fails the test if called when it must not be."""
-
-    def __init__(self, payload: dict | None = None, forbid_call: bool = False):
-        self.payload = payload or {}
-        self.forbid_call = forbid_call
+    def __init__(self, payload: dict):
+        self.payload = payload
 
     async def generate_json(self, prompt, timeout_seconds=None):
-        if self.forbid_call:
-            raise AssertionError("LLM must not be called for a rule-level greeting")
         return self.payload
 
 
-def test_rule_router_detects_greeting():
-    decision = route_with_rules(_state("hi"))
-    assert decision.intent == "greeting"
-    assert decision.agents == []
-
-
-def test_rule_router_detects_vietnamese_greeting():
-    decision = route_with_rules(_state("Xin chào", normalized="xin chao"))
-    assert decision.intent == "greeting"
-    assert decision.agents == []
-
-
-def test_keywords_beat_greeting_prefix():
-    # "chào giá căn hộ quận 7" opens with a greeting word but carries real
-    # keywords — it must route to agents, not small talk.
+def test_keyword_query_routes_to_agents_not_smalltalk():
     decision = route_with_rules(
         _state("Chào giá căn hộ quận 7", normalized="chao gia can ho quan 7")
     )
-    assert decision.intent != "greeting"
     assert decision.agents
 
 
-def test_keywordless_non_greeting_still_falls_back_to_property_search():
-    decision = route_with_rules(_state("abc xyz", normalized="abc xyz"))
-    assert decision.agents == ["property_search"]
-
-
 @pytest.mark.asyncio
-async def test_route_request_greeting_skips_llm():
-    decision = await route_request(_state("hi"), client=_LLMStub(forbid_call=True))
+async def test_route_request_respects_llm_greeting(monkeypatch):
+    settings = get_agent_settings()
+    monkeypatch.setattr(settings, "AGENT_ROUTER_MODE", "llm")
+    stub = _LLMStub(
+        {"intent": "greeting", "agents": [], "confidence": 0.95, "reason": "small talk"}
+    )
+    decision = await route_request(_state("hi"), client=stub)
     assert decision.intent == "greeting"
     assert decision.agents == []
 
@@ -71,7 +51,7 @@ async def test_route_request_respects_llm_off_topic(monkeypatch):
     settings = get_agent_settings()
     monkeypatch.setattr(settings, "AGENT_ROUTER_MODE", "llm")
     stub = _LLMStub(
-        payload={
+        {
             "intent": "off_topic",
             "agents": [],
             "confidence": 0.95,
@@ -84,6 +64,20 @@ async def test_route_request_respects_llm_off_topic(monkeypatch):
     )
     assert decision.intent == "off_topic"
     assert decision.agents == []
+
+
+@pytest.mark.asyncio
+async def test_route_request_low_confidence_off_topic_falls_back(monkeypatch):
+    # An unsure off_topic verdict must not hijack routing away from agents.
+    settings = get_agent_settings()
+    monkeypatch.setattr(settings, "AGENT_ROUTER_MODE", "llm")
+    stub = _LLMStub(
+        {"intent": "off_topic", "agents": [], "confidence": 0.2, "reason": "unsure"}
+    )
+    decision = await route_request(
+        _state("tìm nhà quận 2", normalized="tim nha quan 2"), client=stub
+    )
+    assert decision.agents  # rule fallback keeps serving the query
 
 
 @pytest.mark.asyncio
