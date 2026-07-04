@@ -37,8 +37,15 @@ class LegalAdvisorAgent(BaseAgent):
         super().__init__(agent_name="legal_advisor", max_iterations=max_iterations, use_llm=use_llm)
 
     def _is_in_domain(self, query: str) -> bool:
-        query_lower = query.lower()
-        return any(kw in query_lower for kw in self.LEGAL_DOMAIN_KEYWORDS)
+        # Keywords are accent-stripped; the query arrives accented ("thủ tục"),
+        # so strip it the same way or the guard never matches real Vietnamese.
+        import unicodedata
+
+        normalized = unicodedata.normalize("NFD", query or "")
+        stripped = "".join(
+            ch for ch in normalized if unicodedata.category(ch) != "Mn"
+        ).replace("đ", "d").replace("Đ", "d").lower()
+        return any(kw in stripped for kw in self.LEGAL_DOMAIN_KEYWORDS)
 
     async def think(
         self,

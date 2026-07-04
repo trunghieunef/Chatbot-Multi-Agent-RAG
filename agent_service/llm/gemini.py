@@ -288,8 +288,12 @@ class GeminiClient:
                 except Exception as exc:  # degrade, do not crash the loop
                     tool_result = {"status": "error", "error": str(exc)[:300]}
                 steps.append(ToolLoopStep(tool_name=fc.name, args=args, result=tool_result))
+                # Tool results may carry non-JSON types (date, Decimal…); the SDK
+                # serializes the function response, so round-trip through json
+                # with default=str or the whole tool loop dies mid-flight.
+                safe_result = json.loads(json.dumps(tool_result, ensure_ascii=False, default=str))
                 response_parts.append(
-                    types.Part.from_function_response(name=fc.name, response={"result": tool_result})
+                    types.Part.from_function_response(name=fc.name, response={"result": safe_result})
                 )
             contents.append(types.Content(role="user", parts=response_parts))
 
