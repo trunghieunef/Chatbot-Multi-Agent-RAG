@@ -30,7 +30,7 @@ async def test_degrades_to_retrieval_without_llm(monkeypatch):
         ]
 
     monkeypatch.setattr(wf, "route_request", fake_route)
-    monkeypatch.setattr("app.services.rag.hybrid_search.hybrid_search", fake_hybrid)
+    monkeypatch.setattr("agent_service.tools.retrieval.hybrid_search", fake_hybrid)
     monkeypatch.setattr(wf, "_make_llm_client", lambda settings: None)
     monkeypatch.setattr(wf, "_registry", None, raising=False)
 
@@ -77,7 +77,7 @@ async def test_stream_emits_final_without_checkpointer(monkeypatch):
         ]
 
     monkeypatch.setattr(wf, "route_request", fake_route)
-    monkeypatch.setattr("app.services.rag.hybrid_search.hybrid_search", fake_hybrid)
+    monkeypatch.setattr("agent_service.tools.retrieval.hybrid_search", fake_hybrid)
     monkeypatch.setattr(wf, "_make_llm_client", lambda settings: None)
     monkeypatch.setattr(wf, "_registry", None, raising=False)
 
