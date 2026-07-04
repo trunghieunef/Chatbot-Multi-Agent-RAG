@@ -81,7 +81,9 @@ async def test_route_request_low_confidence_off_topic_falls_back(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_synthesize_off_topic_steers_back_to_real_estate():
+async def test_synthesize_off_topic_steers_back_to_real_estate(monkeypatch):
+    # Force the no-web path so the test never leaves the machine.
+    monkeypatch.setattr(get_agent_settings(), "TAVILY_API_KEY", "")
     state = {
         "request": AgentChatRequest(
             request_id="req-synth-offtopic",

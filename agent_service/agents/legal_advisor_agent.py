@@ -55,26 +55,33 @@ class LegalAdvisorAgent(BaseAgent):
                 confidence=0.95,
             )
 
-        has_legal_evidence = any(
-            action.tool_result.get("results")
-            for action in previous_actions
-            if action.action_type == "call_tool"
-        )
+        attempts = [a for a in previous_actions if a.action_type == "call_tool"]
+        has_legal_evidence = any(a.tool_result.get("results") for a in attempts)
 
         if not has_legal_evidence:
-            return AgentThought(
-                iteration=iteration,
-                reasoning="Need to search legal knowledge base for relevant articles and regulations.",
-                action="call_tool",
-                tool_name="search_articles",
-                tool_params={
-                    "query": context.normalized_query,
-                    "filters": {"category": "legal"},
-                    "top_k": 15,
-                    "rerank_to": 5,
-                },
-                confidence=0.9,
-            )
+            if not attempts:
+                return AgentThought(
+                    iteration=iteration,
+                    reasoning="Need to search legal knowledge base for relevant articles and regulations.",
+                    action="call_tool",
+                    tool_name="search_articles",
+                    tool_params={
+                        "query": context.normalized_query,
+                        "filters": {"category": "legal"},
+                        "top_k": 15,
+                        "rerank_to": 5,
+                    },
+                    confidence=0.9,
+                )
+            if len(attempts) == 1:
+                return AgentThought(
+                    iteration=iteration,
+                    reasoning="Legal KB returned nothing; falling back to web search.",
+                    action="call_tool",
+                    tool_name="search_web",
+                    tool_params={"query": context.normalized_query},
+                    confidence=0.7,
+                )
 
         listing_context = ""
         for entry in blackboard_entries:

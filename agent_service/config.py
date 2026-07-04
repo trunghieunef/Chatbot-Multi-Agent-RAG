@@ -34,6 +34,10 @@ class AgentSettings(BaseSettings):
     GEMINI_JUDGE_MODEL: str = "gemini-2.5-flash"
 
     COHERE_API_KEY: str = ""
+    # Tavily web search — fallback evidence when the internal KB is empty and
+    # for answering off-topic queries. Empty = web search disabled (degrades
+    # gracefully to the polite refusal).
+    TAVILY_API_KEY: str = ""
     HF_EMBEDDING_MODEL: str = "BAAI/bge-m3"
     EMBEDDING_DIM: int = 1024
 

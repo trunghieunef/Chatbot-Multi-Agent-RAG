@@ -156,6 +156,16 @@ def build_default_tool_registry() -> ToolRegistry:
         allowed_for=["legal_advisor", "news_agent"],
     ))
     registry.register(ToolDef(
+        name="search_web",
+        description=(
+            "Tìm kiếm web (Tavily). CHỈ dùng khi search_articles không trả về "
+            "kết quả nào — bổ sung thông tin pháp lý/tin tức từ internet."
+        ),
+        parameters={"query": "str", "max_results": "int"},
+        required_params=["query"],
+        allowed_for=["legal_advisor", "news_agent"],
+    ))
+    registry.register(ToolDef(
         name="lookup_market_metrics",
         description="Tra cứu giá trung bình/m² theo khu vực",
         parameters={"filters": "dict"},
@@ -192,6 +202,11 @@ def build_default_tool_registry() -> ToolRegistry:
         return {"status": "success", "results": results, "evidence_ids": evidence_ids}
 
     @with_retry
+    async def _search_web_wrapper(*, query, max_results=5):
+        from agent_service.tools.web import search_web
+        return await search_web(query, max_results=max_results)
+
+    @with_retry
     async def _market_metrics_wrapper(*, filters):
         results = await lookup_market_metrics(filters=filters or {})
         # Each metric record carries a stable `source_identity`; expose it as
@@ -218,6 +233,7 @@ def build_default_tool_registry() -> ToolRegistry:
     registry.bind("search_listings", _search_listings_wrapper)
     registry.bind("search_projects", _search_projects_wrapper)
     registry.bind("search_articles", _search_articles_wrapper)
+    registry.bind("search_web", _search_web_wrapper)
     registry.bind("lookup_market_metrics", _market_metrics_wrapper)
     registry.bind("lookup_market_timeseries", _market_timeseries_wrapper)
 
@@ -235,6 +251,55 @@ def get_agentic_registry() -> ToolRegistry:
 
 
 # ── LLM client + supervisor/specialist/synthesize nodes ───────────
+
+_DEFAULT_ACTIONS = ["Tìm bất động sản", "Phân tích thị trường", "Tư vấn pháp lý"]
+
+
+async def _answer_off_topic(query: str, llm_client) -> dict[str, Any] | None:
+    """Best-effort: answer an off-topic query from web results, then steer back.
+
+    Returns a synthesize payload, or None to fall back to the polite refusal
+    (no Tavily key, no results, no LLM, or any failure).
+    """
+    if llm_client is None:
+        return None
+    from agent_service.tools.web import search_web
+    try:
+        web = await search_web(query, max_results=3)
+    except Exception as exc:
+        logger.warning("off-topic web search failed: %s", exc)
+        return None
+    results = web.get("results") or []
+    if not results:
+        return None
+
+    snippets = "\n".join(
+        f"- {r.get('title')}: {r.get('snippet')} (nguồn: {r.get('url')})"
+        for r in results
+    )
+    text = await llm_client.generate_text(
+        "Trả lời NGẮN GỌN (tối đa 3 câu, tiếng Việt) câu hỏi sau, chỉ dựa trên "
+        "các kết quả web bên dưới, nhắc tên nguồn khi phù hợp. Không bịa.\n"
+        f"Câu hỏi: {query}\n"
+        f"Kết quả web:\n{snippets}"
+    )
+    if not (text or "").strip():
+        return None
+
+    steer = (
+        "\n\n💡 Tôi là trợ lý tư vấn bất động sản — nếu bạn cần tìm nhà, "
+        "xem giá thị trường hay hỏi pháp lý, cứ nhắn tôi nhé!"
+    )
+    sources = [
+        AgentSource(type="web", title=r.get("title"), url=r.get("url"))
+        for r in results
+    ]
+    return {
+        "final_response": text.strip() + steer,
+        "final_sources": sources,
+        "suggested_actions": _DEFAULT_ACTIONS,
+    }
+
 
 def _make_llm_client(settings) -> GeminiClient | None:
     if not settings.GEMINI_API_KEY:
@@ -320,18 +385,21 @@ async def _node_synthesize(state: dict[str, Any]) -> dict[str, Any]:
                 or "Bạn có thể bổ sung tiêu chí không?",
                 "final_sources": [], "suggested_actions": ["Bổ sung ngân sách", "Bổ sung khu vực"]}
     if not agents_used:
-        # ponytail: off_topic is the future search_web plug point — for now,
-        # politely steer the user back to real-estate topics.
         if plan.get("intent") == "off_topic":
+            # Try a web-grounded answer first, then steer back to real estate;
+            # degrade to the polite refusal when web search isn't available.
+            answered = await _answer_off_topic(
+                state["request"].message, _make_llm_client(settings)
+            )
+            if answered:
+                return answered
             return {"final_response": "Xin lỗi, tôi là trợ lý tư vấn bất động sản nên chưa hỗ trợ "
                     "chủ đề này. Tôi có thể giúp bạn tìm nhà/căn hộ, phân tích giá thị trường, "
                     "tư vấn pháp lý hoặc đầu tư bất động sản — bạn quan tâm điều gì?",
-                    "final_sources": [], "suggested_actions":
-                    ["Tìm bất động sản", "Phân tích thị trường", "Tư vấn pháp lý"]}
+                    "final_sources": [], "suggested_actions": _DEFAULT_ACTIONS}
         return {"final_response": "Xin chào! Tôi có thể giúp bạn tìm bất động sản, phân tích thị "
                 "trường, hoặc tư vấn pháp lý. Bạn muốn tìm hiểu vấn đề gì?",
-                "final_sources": [], "suggested_actions":
-                ["Tìm bất động sản", "Phân tích thị trường", "Tư vấn pháp lý"]}
+                "final_sources": [], "suggested_actions": _DEFAULT_ACTIONS}
 
     # Collect sources (cards) + evidence.
     all_sources: list[AgentSource] = []
