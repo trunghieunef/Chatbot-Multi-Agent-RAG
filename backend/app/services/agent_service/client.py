@@ -48,7 +48,12 @@ class AgentServiceClient:
             "X-Internal-Agent-Key": self.internal_key,
             "Accept": "text/event-stream",
         }
-        timeout = httpx.Timeout(self.timeout_seconds)
+        # For SSE, a long silent gap between events (e.g. a ~20s specialist pass)
+        # must NOT trip the read timeout. Bound connect/write/pool; let the agent
+        # service's own total-timeout bound the overall run instead.
+        timeout = httpx.Timeout(
+            self.timeout_seconds, read=None, connect=10.0, pool=10.0
+        )
         try:
             async with httpx.AsyncClient(
                 timeout=timeout,

@@ -57,7 +57,10 @@ class Settings(BaseSettings):
     # Internal Agent Service
     AGENT_SERVICE_URL: str = "http://localhost:8100"
     AGENT_INTERNAL_KEY: str = "dev-agent-internal-key"
-    AGENT_SERVICE_TIMEOUT_SECONDS: float = 45.0
+    # Must be >= the agent service's own AGENT_TOTAL_TIMEOUT_SECONDS, or this
+    # httpx client cuts a self-correction run (2 specialist passes) mid-stream
+    # before the `final` event, and the frontend shows a generic error.
+    AGENT_SERVICE_TIMEOUT_SECONDS: float = 95.0
     CHATBOT_AGENT_SERVICE_ENABLED: bool = True
     CHATBOT_LLM_JUDGE_ENABLED: bool = False
     CHATBOT_EVAL_ENABLED: bool = False
