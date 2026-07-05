@@ -727,8 +727,14 @@ async def run_agentic_graph_stream(request: AgentChatRequest):
             sources=vs.get("final_sources", []),
             suggested_actions=vs.get("suggested_actions", []),
             charts=vs.get("final_charts", []),
-            trace_summary=TraceSummary(intent="streaming", agents=vs.get("agents_used", []),
-                source_count=len(vs.get("final_sources", [])), latency_ms=round((time.perf_counter() - started) * 1000, 2)),
+            trace_summary=TraceSummary(
+                # Real router intent (supervisor wrote supervisor_plan into vs),
+                # not the "streaming" placeholder — keeps intent stats correct.
+                intent=(vs.get("supervisor_plan") or {}).get("intent", "unknown"),
+                agents=vs.get("agents_used", []),
+                source_count=len(vs.get("final_sources", [])),
+                latency_ms=round((time.perf_counter() - started) * 1000, 2),
+            ),
             full_trace={
                 "graph_version": settings.AGENT_GRAPH_VERSION,
                 "streaming": True,
