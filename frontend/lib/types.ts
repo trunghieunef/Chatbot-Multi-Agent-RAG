@@ -257,12 +257,23 @@ export interface AdminAgentHealth {
   };
 }
 
+export interface AdminLlmCall {
+  node_name?: string;
+  model_name?: string;
+  latency_ms?: number;
+  token_input_estimate?: number | null;
+  token_output_estimate?: number | null;
+  status?: string;
+  [key: string]: unknown;
+}
+
 export interface AdminTraceDetail extends AdminTraceListItem {
   full_trace_json: Record<string, unknown>;
   readiness_json: Record<string, unknown>;
   steps: Record<string, unknown>[];
   retrieval_events: Record<string, unknown>[];
   eval_runs: Record<string, unknown>[];
+  llm_calls: AdminLlmCall[];
 }
 
 export interface TokenResponse {

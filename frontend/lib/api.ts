@@ -304,6 +304,23 @@ export async function getAdminTraceDetail(
   });
 }
 
+export async function searchAdminTraces(params: {
+  status?: string;
+  intent?: string;
+  q?: string;
+  limit?: number;
+}): Promise<{ items: AdminTraceListItem[]; total: number }> {
+  const qs = buildQuery({
+    status: params.status || undefined,
+    intent: params.intent || undefined,
+    q: params.q || undefined,
+    limit: params.limit ?? 50,
+  });
+  return fetchJSON(`${BASE}/admin/chat-traces/search${qs}`, {
+    headers: authHeaders(),
+  });
+}
+
 export async function getAdminFeedback(): Promise<AdminFeedbackItem[]> {
   return fetchJSON(`${BASE}/admin/feedback`, { headers: authHeaders() });
 }

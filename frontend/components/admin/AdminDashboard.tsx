@@ -8,6 +8,8 @@ import {
   DollarSign,
   Star,
   Loader2,
+  X,
+  Search,
 } from "lucide-react";
 import {
   BarChart,
@@ -23,12 +25,15 @@ import {
   getAdminPipelineReadiness,
   getAdminFeedback,
   getAdminAgentHealth,
+  searchAdminTraces,
+  getAdminTraceDetail,
 } from "@/lib/api";
 import type {
   AdminTraceListItem,
   AdminPipelineReadinessItem,
   AdminFeedbackItem,
   AdminAgentHealth,
+  AdminTraceDetail,
 } from "@/lib/types";
 
 type TabKey = "data" | "traces" | "feedback" | "cost";
@@ -223,7 +228,7 @@ export default function AdminDashboard() {
       ) : (
         <div className="overflow-x-auto rounded-xl border border-border bg-card">
           {tab === "data" && <DataTab items={readiness} />}
-          {tab === "traces" && <TracesTab items={traces} />}
+          {tab === "traces" && <TracesTab initial={traces} />}
           {tab === "feedback" && <FeedbackTab items={feedback} />}
           {tab === "cost" && <CostTab health={health} traces={traces} />}
         </div>
@@ -254,35 +259,254 @@ function DataTab({ items }: { items: AdminPipelineReadinessItem[] }) {
 }
 
 /* ── Tab 2: Traces ────────────────────────────────────── */
-function TracesTab({ items }: { items: AdminTraceListItem[] }) {
-  if (!items.length) return <Empty label="Chưa có vết tác tử nào." />;
+function TracesTab({ initial }: { initial: AdminTraceListItem[] }) {
+  const [rows, setRows] = useState<AdminTraceListItem[]>(initial);
+  const [status, setStatus] = useState("");
+  const [intent, setIntent] = useState("");
+  const [q, setQ] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [selected, setSelected] = useState<string | null>(null);
+
+  // Distinct values from the current rows drive the filter dropdowns.
+  const statuses = useMemo(
+    () => Array.from(new Set(initial.map((t) => t.status).filter(Boolean))),
+    [initial]
+  );
+  const intents = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          initial
+            .map((t) => t.intent || (typeof t.trace_summary_json?.intent === "string" ? (t.trace_summary_json.intent as string) : ""))
+            .filter(Boolean)
+        )
+      ),
+    [initial]
+  );
+
+  const applyFilter = useCallback(async () => {
+    setBusy(true);
+    try {
+      const res = await searchAdminTraces({ status, intent, q });
+      setRows(res.items);
+    } catch {
+      /* keep current rows on error */
+    } finally {
+      setBusy(false);
+    }
+  }, [status, intent, q]);
+
   return (
-    <table className="w-full min-w-[820px] text-sm">
-      <THead cols={["Thời gian", "Intent", "Tác tử", "Latency", "Trạng thái", "Request ID"]} />
-      <tbody>
-        {items.slice(0, 50).map((t) => {
-          const summaryIntent = t.trace_summary_json?.intent;
-          const intent =
-            t.intent || (typeof summaryIntent === "string" ? summaryIntent : "unknown");
-          return (
-            <tr key={t.id} className="border-t border-border">
-              <Td className="whitespace-nowrap text-muted-foreground">{fmtDate(t.created_at)}</Td>
-              <Td>{intent}</Td>
-              <Td className="text-muted-foreground">
-                {(t.agents_used || []).map(String).join(", ") || "—"}
-              </Td>
-              <Td className="whitespace-nowrap tabular-nums">
-                {Math.round(Number(t.latency_ms || 0)).toLocaleString("vi-VN")} ms
-              </Td>
-              <Td><StatusPill status={t.status} /></Td>
-              <Td className="font-mono text-xs text-muted-foreground">
-                {t.request_id.slice(0, 8)}…
-              </Td>
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>
+    <div>
+      {/* Filters */}
+      <div className="flex flex-wrap items-center gap-2 border-b border-border p-3">
+        <select
+          value={status}
+          onChange={(e) => setStatus(e.target.value)}
+          className="rounded-lg border border-border bg-background px-2 py-1.5 text-sm"
+        >
+          <option value="">Mọi trạng thái</option>
+          {statuses.map((s) => (
+            <option key={s} value={s}>{s}</option>
+          ))}
+        </select>
+        <select
+          value={intent}
+          onChange={(e) => setIntent(e.target.value)}
+          className="rounded-lg border border-border bg-background px-2 py-1.5 text-sm"
+        >
+          <option value="">Mọi tác tử/intent</option>
+          {intents.map((i) => (
+            <option key={i} value={i}>{i}</option>
+          ))}
+        </select>
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && applyFilter()}
+          placeholder="Request ID…"
+          className="rounded-lg border border-border bg-background px-2 py-1.5 text-sm"
+        />
+        <button
+          onClick={applyFilter}
+          disabled={busy}
+          className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground disabled:opacity-60"
+        >
+          {busy ? <Loader2 className="animate-spin" size={14} /> : <Search size={14} />}
+          Lọc
+        </button>
+      </div>
+
+      {rows.length === 0 ? (
+        <Empty label="Không có vết tác tử khớp bộ lọc." />
+      ) : (
+        <table className="w-full min-w-[860px] text-sm">
+          <THead cols={["Thời gian", "Intent", "Tác tử", "Latency", "Trạng thái", "Request ID", ""]} />
+          <tbody>
+            {rows.slice(0, 100).map((t) => {
+              const summaryIntent = t.trace_summary_json?.intent;
+              const it =
+                t.intent || (typeof summaryIntent === "string" ? summaryIntent : "unknown");
+              return (
+                <tr
+                  key={t.id}
+                  onClick={() => setSelected(t.request_id)}
+                  className="cursor-pointer border-t border-border hover:bg-muted/40"
+                >
+                  <Td className="whitespace-nowrap text-muted-foreground">{fmtDate(t.created_at)}</Td>
+                  <Td>{it}</Td>
+                  <Td className="text-muted-foreground">
+                    {(t.agents_used || []).map(String).join(", ") || "—"}
+                  </Td>
+                  <Td className="whitespace-nowrap tabular-nums">
+                    {Math.round(Number(t.latency_ms || 0)).toLocaleString("vi-VN")} ms
+                  </Td>
+                  <Td><StatusPill status={t.status} /></Td>
+                  <Td className="font-mono text-xs text-muted-foreground">
+                    {t.request_id.slice(0, 8)}…
+                  </Td>
+                  <Td className="text-xs text-primary">Chi tiết →</Td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+
+      {selected && (
+        <TraceDetailModal requestId={selected} onClose={() => setSelected(null)} />
+      )}
+    </div>
+  );
+}
+
+/* ── Trace detail modal (steps / LLM calls with tokens / retrieval) ─── */
+function TraceDetailModal({
+  requestId,
+  onClose,
+}: {
+  requestId: string;
+  onClose: () => void;
+}) {
+  const [detail, setDetail] = useState<AdminTraceDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    getAdminTraceDetail(requestId)
+      .then((d) => alive && setDetail(d))
+      .catch(() => alive && setErr(true))
+      .finally(() => alive && setLoading(false));
+    return () => {
+      alive = false;
+    };
+  }, [requestId]);
+
+  const totalTokens = (detail?.llm_calls || []).reduce(
+    (s, c) => s + Number(c.token_input_estimate || 0) + Number(c.token_output_estimate || 0),
+    0
+  );
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="my-8 w-full max-w-3xl rounded-xl border border-border bg-card shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between border-b border-border px-5 py-3">
+          <h3 className="font-mono text-sm font-semibold">Trace · {requestId.slice(0, 12)}…</h3>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
+            <X size={18} />
+          </button>
+        </div>
+
+        {loading ? (
+          <div className="flex items-center justify-center gap-2 py-12 text-muted-foreground">
+            <Loader2 className="animate-spin" size={16} /> Đang tải…
+          </div>
+        ) : err || !detail ? (
+          <Empty label="Không tải được chi tiết trace." />
+        ) : (
+          <div className="space-y-5 px-5 py-4">
+            {/* summary */}
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <MiniStat label="Latency" value={`${Math.round(Number(detail.latency_ms || 0))} ms`} />
+              <MiniStat label="Trạng thái" value={detail.status} />
+              <MiniStat label="LLM calls" value={String(detail.llm_calls?.length || 0)} />
+              <MiniStat label="Token" value={totalTokens.toLocaleString("vi-VN")} />
+            </div>
+
+            {/* LLM calls */}
+            <Section title={`Lời gọi LLM (${detail.llm_calls?.length || 0})`}>
+              {detail.llm_calls?.length ? (
+                <table className="w-full text-xs">
+                  <THead cols={["Node", "Model", "In", "Out", "Latency", "TT"]} />
+                  <tbody>
+                    {detail.llm_calls.map((c, i) => (
+                      <tr key={i} className="border-t border-border">
+                        <Td>{c.node_name || "—"}</Td>
+                        <Td className="text-muted-foreground">{c.model_name || "—"}</Td>
+                        <Td className="tabular-nums">{c.token_input_estimate ?? "—"}</Td>
+                        <Td className="tabular-nums">{c.token_output_estimate ?? "—"}</Td>
+                        <Td className="tabular-nums">{Math.round(Number(c.latency_ms || 0))} ms</Td>
+                        <Td><StatusPill status={c.status} /></Td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <p className="text-xs text-muted-foreground">Không có.</p>
+              )}
+            </Section>
+
+            {/* retrieval events */}
+            <Section title={`Sự kiện truy xuất (${detail.retrieval_events?.length || 0})`}>
+              {detail.retrieval_events?.length ? (
+                <pre className="max-h-48 overflow-auto rounded-lg bg-muted/40 p-3 text-[11px] leading-relaxed">
+                  {JSON.stringify(detail.retrieval_events, null, 2)}
+                </pre>
+              ) : (
+                <p className="text-xs text-muted-foreground">Không có.</p>
+              )}
+            </Section>
+
+            {/* steps */}
+            <Section title={`Các bước (${detail.steps?.length || 0})`}>
+              {detail.steps?.length ? (
+                <pre className="max-h-48 overflow-auto rounded-lg bg-muted/40 p-3 text-[11px] leading-relaxed">
+                  {JSON.stringify(detail.steps, null, 2)}
+                </pre>
+              ) : (
+                <p className="text-xs text-muted-foreground">Không có.</p>
+              )}
+            </Section>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function MiniStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg bg-muted/40 px-3 py-2">
+      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className="text-sm font-semibold tabular-nums">{value}</div>
+    </div>
+  );
+}
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <h4 className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        {title}
+      </h4>
+      {children}
+    </div>
   );
 }
 
@@ -368,6 +592,11 @@ function CostTab({
           sublabel="Redis cost tracker"
         />
       </div>
+
+      <p className="mb-5 text-xs text-muted-foreground">
+        💡 Token đã dùng của từng yêu cầu (đầu vào/đầu ra) xem ở tab{" "}
+        <span className="font-medium">Vết tác tử</span> → nhấn một dòng để mở chi tiết.
+      </p>
 
       <h3 className="mb-2 text-sm font-medium text-foreground">
         Latency trung bình theo trạng thái

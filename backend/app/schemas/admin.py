@@ -39,6 +39,7 @@ class AgentTraceDetail(AgentTraceListItem):
     steps: list[dict[str, Any]] = Field(default_factory=list)
     retrieval_events: list[dict[str, Any]] = Field(default_factory=list)
     eval_runs: list[dict[str, Any]] = Field(default_factory=list)
+    llm_calls: list[dict[str, Any]] = Field(default_factory=list)
 
     class Config:
         from_attributes = True
