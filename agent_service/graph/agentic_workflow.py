@@ -324,18 +324,39 @@ async def _node_supervisor(state: dict[str, Any]) -> dict[str, Any]:
         return {"supervisor_plan": {"selected_agents": [], "needs_clarification": False,
                                     "intent": "general", "filters": {}},
                 "agents_used": []}
+    settings = get_agent_settings()
+    client = _make_llm_client(settings)
+    started = time.perf_counter()
     decision = await route_request({
         "request": request,
         "conversation_context": state.get("conversation_context", []),
         "normalized_query": request.message.lower(),
-    })
+    }, client=client)
     plan = decision.model_dump(mode="python")
     plan["selected_agents"] = decision.agents
     return {
         "supervisor_plan": plan,
         "routing_filters": decision.filters,
         "agents_used": decision.agents if not decision.needs_clarification else [],
+        "llm_calls": _usage_calls("router", settings.GEMINI_MODEL, client,
+                                  round((time.perf_counter() - started) * 1000, 2)),
     }
+
+
+def _usage_calls(node: str, model: str, client: Any, latency_ms: float) -> list[dict]:
+    """Build one llm_call record per Gemini call a node's client made."""
+    usages = getattr(client, "usages", None) or []
+    if not usages:
+        return []
+    # Spread node latency across the calls (fine-grained per-call timing isn't
+    # tracked); tokens are exact per call.
+    per = round(latency_ms / len(usages), 2)
+    return [
+        {"node_name": node, "model_name": model, "latency_ms": per, "status": "success",
+         "token_input_estimate": u.get("token_input_estimate"),
+         "token_output_estimate": u.get("token_output_estimate")}
+        for u in usages
+    ]
 
 
 def _dispatch(state: dict[str, Any]):
@@ -363,29 +384,30 @@ async def _node_specialist(state: dict[str, Any]) -> dict[str, Any]:
         locale=request.locale,
         query_understanding={"rewritten_query": rewritten_query, "original_query": request.message},
     )
+    client = _make_llm_client(settings)
     started = time.perf_counter()
     result = await run_specialist(
         agent_name=agent_name, context=context, registry=registry,
-        llm_client=_make_llm_client(settings), settings=settings,
+        llm_client=client, settings=settings,
     )
     latency_ms = round((time.perf_counter() - started) * 1000, 2)
     rd = result.model_dump(mode="python")
     evidence = {eid: {"agent": agent_name} for eid in result.evidence_ids_used}
 
-    # Observability: pull retrieval events out of the tool results this agent
-    # produced, and record one LLM-call entry per specialist node run.
+    # Observability: retrieval events from this agent's tool calls, and one
+    # llm_call per Gemini call it made (with real token counts).
     retrieval_events = _extract_retrieval_events(result, agent_name)
-    llm_call = {
-        "node_name": f"specialist:{agent_name}",
-        "model_name": settings.GEMINI_MODEL,
-        "latency_ms": latency_ms,
-        "status": result.status,
-        "iterations": result.iterations,
-    }
+    llm_calls = _usage_calls(f"specialist:{agent_name}", settings.GEMINI_MODEL,
+                             client, latency_ms)
+    if not llm_calls:
+        # Deterministic path made no Gemini calls; still record the node run.
+        llm_calls = [{"node_name": f"specialist:{agent_name}",
+                      "model_name": settings.GEMINI_MODEL, "latency_ms": latency_ms,
+                      "status": result.status, "iterations": result.iterations}]
     return {
         "_agent_results": {agent_name: rd},
         "evidence_by_id": evidence,
-        "llm_calls": [llm_call],
+        "llm_calls": llm_calls,
         "retrieval_events": retrieval_events,
     }
 
@@ -485,7 +507,9 @@ async def _node_synthesize(state: dict[str, Any]) -> dict[str, Any]:
     deduped = list({(s.type, s.id or s.url or s.title): s for s in all_sources}.values())
     return {"final_response": final, "final_sources": deduped,
             "suggested_actions": synth.suggested_actions[:5],
-            "final_charts": _collect_charts(raw_results, agents_used)}
+            "final_charts": _collect_charts(raw_results, agents_used),
+            "llm_calls": _usage_calls("synthesize", settings.GEMINI_MODEL,
+                                      llm_client, 0.0)}
 
 
 # ── Self-correction (grade → rewrite) ─────────────────────────────

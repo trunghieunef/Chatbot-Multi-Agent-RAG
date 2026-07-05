@@ -57,6 +57,10 @@ class GeminiClient:
         self.model = model or settings.GEMINI_MODEL
         self.timeout_seconds = settings.AGENT_LLM_TIMEOUT_SECONDS
         self.thinking_budget = settings.AGENT_GEMINI_THINKING_BUDGET
+        # Per-call usage records (input/output tokens) accumulated on this
+        # instance; the graph reads them for observability. A fresh client is
+        # made per node, so each list is scoped to that node's calls.
+        self.usages: list[dict[str, Any]] = []
 
     def _thinking_config(self) -> types.ThinkingConfig | None:
         """Gemini 2.5 thinking config. budget=0 disables thinking (faster, fewer
@@ -153,12 +157,15 @@ class GeminiClient:
             "usageMetadata",
             None,
         )
+        input_tokens = getattr(usage, "prompt_token_count", None)
+        output_tokens = getattr(usage, "candidates_token_count", None)
+        self.usages.append(
+            {"token_input_estimate": input_tokens, "token_output_estimate": output_tokens}
+        )
         return GeminiResult(
             text=response.text or "",
-            input_tokens=(input_tokens := getattr(usage, "prompt_token_count", None)),
-            output_tokens=(
-                output_tokens := getattr(usage, "candidates_token_count", None)
-            ),
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
             estimated_cost_usd=record_runtime_llm_cost_async(
                 self.settings,
                 input_tokens=input_tokens,
@@ -259,10 +266,13 @@ class GeminiClient:
                 )
 
             usage = getattr(response, "usage_metadata", None)
+            _in = getattr(usage, "prompt_token_count", None)
+            _out = getattr(usage, "candidates_token_count", None)
+            self.usages.append(
+                {"token_input_estimate": _in, "token_output_estimate": _out}
+            )
             record_runtime_llm_cost_async(
-                self.settings,
-                input_tokens=getattr(usage, "prompt_token_count", None),
-                output_tokens=getattr(usage, "candidates_token_count", None),
+                self.settings, input_tokens=_in, output_tokens=_out,
             )
 
             function_calls = list(getattr(response, "function_calls", None) or [])
