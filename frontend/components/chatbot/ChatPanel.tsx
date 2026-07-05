@@ -174,9 +174,20 @@ export default function ChatPanel({
                       ))}
                     </div>
                   )}
-                  <p className="whitespace-pre-wrap text-sm leading-relaxed">
-                    {msg.content}
-                  </p>
+                  {msg.streaming ? (
+                    <p className="flex items-center gap-2 text-sm italic text-muted-foreground">
+                      <span className="inline-flex gap-1">
+                        <span className="inline-block h-1.5 w-1.5 rounded-full bg-muted-foreground/50 animate-bounce" style={{ animationDelay: "0ms" }} />
+                        <span className="inline-block h-1.5 w-1.5 rounded-full bg-muted-foreground/50 animate-bounce" style={{ animationDelay: "150ms" }} />
+                        <span className="inline-block h-1.5 w-1.5 rounded-full bg-muted-foreground/50 animate-bounce" style={{ animationDelay: "300ms" }} />
+                      </span>
+                      {msg.status || "đang xử lý…"}
+                    </p>
+                  ) : (
+                    <p className="whitespace-pre-wrap text-sm leading-relaxed">
+                      {msg.content}
+                    </p>
+                  )}
 
                   {msg.charts && msg.charts.length > 0 && (
                     <div className="mt-2 space-y-2">
@@ -310,7 +321,7 @@ export default function ChatPanel({
                 )}
             </div>
           ))}
-          {loading && (
+          {loading && !messages.some((m) => m.streaming) && (
             <div className="flex gap-3">
               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
                 <Bot size={15} />
