@@ -385,9 +385,7 @@ function CostTab({
                 width={56}
               />
               <Tooltip
-                formatter={(v: number, n: string) =>
-                  n === "latency" ? [`${v} ms`, "Latency TB"] : [v, n]
-                }
+                formatter={(v) => [`${v} ms`, "Latency TB"]}
                 contentStyle={{ fontSize: 12, borderRadius: 8 }}
               />
               <Bar dataKey="latency" radius={[4, 4, 0, 0]}>
