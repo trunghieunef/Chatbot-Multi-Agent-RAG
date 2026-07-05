@@ -168,7 +168,17 @@ export function useChat(options: UseChatOptions = { mode: "mini" }) {
                 ),
               onFinal: (res) => {
                 got = true;
-                applyResult(res);
+                // The SSE `final` payload is AgentChatResponse (field
+                // `final_response`), but applyResult reads `content` like the
+                // plain POST /chat response — normalize so the answer text shows.
+                const r = res as unknown as {
+                  final_response?: string;
+                  content?: string;
+                };
+                applyResult({
+                  ...res,
+                  content: r.content ?? r.final_response ?? "",
+                });
               },
               onError: (message) => {
                 got = true;
