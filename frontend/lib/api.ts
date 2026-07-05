@@ -1,7 +1,10 @@
 /* ─── API Client for FastAPI Backend ─── */
 
 import type {
+  AdminAgentHealth,
+  AdminFeedbackItem,
   AdminPipelineReadinessItem,
+  AdminTraceDetail,
   AdminTraceListItem,
   ArticleCard,
   ArticleDetail,
@@ -291,6 +294,22 @@ export async function getAdminPipelineReadiness(): Promise<{
     items = data.items;
   }
   return { items };
+}
+
+export async function getAdminTraceDetail(
+  requestId: string
+): Promise<AdminTraceDetail> {
+  return fetchJSON(`${BASE}/admin/chat-traces/${requestId}`, {
+    headers: authHeaders(),
+  });
+}
+
+export async function getAdminFeedback(): Promise<AdminFeedbackItem[]> {
+  return fetchJSON(`${BASE}/admin/feedback`, { headers: authHeaders() });
+}
+
+export async function getAdminAgentHealth(): Promise<AdminAgentHealth> {
+  return fetchJSON(`${BASE}/admin/agent-health`, { headers: authHeaders() });
 }
 
 /* ─── Auth ─── */

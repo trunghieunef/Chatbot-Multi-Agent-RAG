@@ -232,6 +232,37 @@ export interface AuthUser {
   full_name: string | null;
   phone: string | null;
   avatar_url: string | null;
+  is_admin?: boolean;
+}
+
+export interface AdminFeedbackItem {
+  id?: number | string;
+  session_id?: string | null;
+  request_id?: string | null;
+  rating?: string | null;
+  comment?: string | null;
+  created_at?: string | null;
+  [key: string]: unknown;
+}
+
+export interface AdminAgentHealth {
+  items: { status: string; count: number; avg_latency_ms: number }[];
+  llm_cost: {
+    tracking_available: boolean;
+    budget_exceeded: boolean;
+    estimated_cost_usd: number;
+    month?: string;
+    monthly_budget_usd?: number;
+    [key: string]: unknown;
+  };
+}
+
+export interface AdminTraceDetail extends AdminTraceListItem {
+  full_trace_json: Record<string, unknown>;
+  readiness_json: Record<string, unknown>;
+  steps: Record<string, unknown>[];
+  retrieval_events: Record<string, unknown>[];
+  eval_runs: Record<string, unknown>[];
 }
 
 export interface TokenResponse {
