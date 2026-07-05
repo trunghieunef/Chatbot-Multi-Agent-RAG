@@ -192,7 +192,11 @@ def _fallback_retrieval_events(full_trace: dict[str, Any]) -> list[dict[str, Any
 
 
 def _retrieval_events(full_trace: dict[str, Any], steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    events = _retrieval_events_from_steps(steps)
+    # The agentic graph emits events directly under full_trace["retrieval_events"];
+    # older shapes hid them in steps / retrieval_plan, so keep those as fallbacks.
+    direct = full_trace.get("retrieval_events")
+    events = list(direct) if isinstance(direct, list) else []
+    events.extend(_retrieval_events_from_steps(steps))
     events.extend(_fallback_retrieval_events(full_trace))
     return events
 
