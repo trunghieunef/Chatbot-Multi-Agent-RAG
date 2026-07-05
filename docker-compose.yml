@@ -94,6 +94,15 @@ services:
       context: .
       dockerfile: agent_service/Dockerfile
     container_name: realestate_agent_service
+    # Reserve the host GPU so bge-m3 query embedding runs on CUDA, not CPU
+    # (CPU embedding was the dominant per-request latency).
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     depends_on:
       postgres:
         condition: service_healthy
