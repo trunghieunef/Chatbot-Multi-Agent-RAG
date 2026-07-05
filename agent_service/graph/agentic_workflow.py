@@ -51,6 +51,11 @@ def _merge_dicts(a: dict, b: dict) -> dict:
     return {**(a or {}), **(b or {})}
 
 
+def _append_list(a: list, b: list) -> list:
+    """Reducer that concatenates lists from parallel Send branches (observability)."""
+    return (a or []) + (b or [])
+
+
 class GraphState(TypedDict, total=False):
     request: Any
     conversation_context: list
@@ -59,6 +64,8 @@ class GraphState(TypedDict, total=False):
     agents_used: list
     _agent_results: Annotated[dict, _merge_dicts]
     evidence_by_id: Annotated[dict, _merge_dicts]
+    llm_calls: Annotated[list, _append_list]
+    retrieval_events: Annotated[list, _append_list]
     final_response: str
     final_sources: list
     suggested_actions: list
@@ -186,21 +193,24 @@ def build_default_tool_registry() -> ToolRegistry:
         trace = RetrievalTrace(request_id="agentic")
         results = await search_listings(query=query, filters=filters, trace=trace, top_k=top_k, rerank_to=rerank_to)
         evidence_ids = [f"ev_{r.get('id', f'listing_{i}')}" for i, r in enumerate(results) if isinstance(r, dict)]
-        return {"status": "success", "results": results, "evidence_ids": evidence_ids}
+        return {"status": "success", "results": results, "evidence_ids": evidence_ids,
+                "retrieval_events": trace.events}
 
     @with_retry
     async def _search_projects_wrapper(*, query, filters=None, top_k=20, rerank_to=5):
         trace = RetrievalTrace(request_id="agentic")
         results = await search_projects(query=query, filters=filters, trace=trace, top_k=top_k, rerank_to=rerank_to)
         evidence_ids = [f"ev_{r.get('id', f'project_{i}')}" for i, r in enumerate(results) if isinstance(r, dict)]
-        return {"status": "success", "results": results, "evidence_ids": evidence_ids}
+        return {"status": "success", "results": results, "evidence_ids": evidence_ids,
+                "retrieval_events": trace.events}
 
     @with_retry
     async def _search_articles_wrapper(*, query, filters=None, top_k=20, rerank_to=5):
         trace = RetrievalTrace(request_id="agentic")
         results = await search_articles(query=query, filters=filters, trace=trace, top_k=top_k, rerank_to=rerank_to)
         evidence_ids = [f"ev_{r.get('id', f'article_{i}')}" for i, r in enumerate(results) if isinstance(r, dict)]
-        return {"status": "success", "results": results, "evidence_ids": evidence_ids}
+        return {"status": "success", "results": results, "evidence_ids": evidence_ids,
+                "retrieval_events": trace.events}
 
     @with_retry
     async def _search_web_wrapper(*, query, max_results=5):
@@ -353,13 +363,43 @@ async def _node_specialist(state: dict[str, Any]) -> dict[str, Any]:
         locale=request.locale,
         query_understanding={"rewritten_query": rewritten_query, "original_query": request.message},
     )
+    started = time.perf_counter()
     result = await run_specialist(
         agent_name=agent_name, context=context, registry=registry,
         llm_client=_make_llm_client(settings), settings=settings,
     )
+    latency_ms = round((time.perf_counter() - started) * 1000, 2)
     rd = result.model_dump(mode="python")
     evidence = {eid: {"agent": agent_name} for eid in result.evidence_ids_used}
-    return {"_agent_results": {agent_name: rd}, "evidence_by_id": evidence}
+
+    # Observability: pull retrieval events out of the tool results this agent
+    # produced, and record one LLM-call entry per specialist node run.
+    retrieval_events = _extract_retrieval_events(result, agent_name)
+    llm_call = {
+        "node_name": f"specialist:{agent_name}",
+        "model_name": settings.GEMINI_MODEL,
+        "latency_ms": latency_ms,
+        "status": result.status,
+        "iterations": result.iterations,
+    }
+    return {
+        "_agent_results": {agent_name: rd},
+        "evidence_by_id": evidence,
+        "llm_calls": [llm_call],
+        "retrieval_events": retrieval_events,
+    }
+
+
+def _extract_retrieval_events(result: Any, agent_name: str) -> list[dict]:
+    """Collect retrieval_events emitted by tool calls in an agent's trace."""
+    events: list[dict] = []
+    for action in getattr(result, "trace", []) or []:
+        tr = action.get("tool_result") if isinstance(action, dict) else None
+        if isinstance(tr, dict):
+            for ev in tr.get("retrieval_events", []) or []:
+                if isinstance(ev, dict):
+                    events.append({**ev, "agent": agent_name})
+    return events
 
 
 def _collect_charts(raw_results: dict[str, Any], agents_used: list[str]) -> list[dict]:
@@ -672,6 +712,8 @@ async def run_agentic_graph(request: AgentChatRequest) -> AgentChatResponse:
             "graph_version": settings.AGENT_GRAPH_VERSION,
             "mode": "supervisor_specialist_fc",
             "correction_round": final_state.get("correction_round", 0),
+            "llm_calls": final_state.get("llm_calls", []),
+            "retrieval_events": final_state.get("retrieval_events", []),
         },
     )
 
@@ -712,7 +754,14 @@ async def run_agentic_graph_stream(request: AgentChatRequest):
         async for event in graph.astream(initial, config, stream_mode="updates"):
             for node_name, node_output in event.items():
                 now = time.perf_counter()
-                vs.update(node_output or {})
+                out = node_output or {}
+                # These are append-reducer keys in the graph; a plain vs.update
+                # would drop all but the last parallel branch, so accumulate them.
+                obs_llm = [*vs.get("llm_calls", []), *out.get("llm_calls", [])]
+                obs_ret = [*vs.get("retrieval_events", []), *out.get("retrieval_events", [])]
+                vs.update(out)
+                vs["llm_calls"] = obs_llm
+                vs["retrieval_events"] = obs_ret
                 if node_name not in node_started:
                     node_started[node_name] = now
                     yield {"event": "node_start", "node": node_name, "status": NODE_STATUS.get(node_name, f"xử lý {node_name}..."), "payload": {}}
@@ -739,6 +788,8 @@ async def run_agentic_graph_stream(request: AgentChatRequest):
                 "graph_version": settings.AGENT_GRAPH_VERSION,
                 "streaming": True,
                 "correction_round": vs.get("correction_round", 0),
+                "llm_calls": vs.get("llm_calls", []),
+                "retrieval_events": vs.get("retrieval_events", []),
             },
         )
         yield {"event": "final", "request_id": request.request_id, "payload": response.model_dump(mode="json")}

@@ -97,6 +97,15 @@ async def run_specialist(
     actions = _deterministic_actions_from_steps(loop.steps)
     base_result = agent.build_result(context, thoughts=[], actions=actions)
 
+    # Keep tool results in the trace so the graph can pull observability data
+    # (retrieval events) out of them for the admin trace detail.
+    trace = [
+        {"tool_name": a.tool_result.get("tool"), "tool_result": a.tool_result}
+        for a in actions if isinstance(a.tool_result, dict)
+    ]
+
     # Prefer LLM analysis text for content; keep structured sources/evidence.
     content = loop.text.strip() or base_result.content
-    return base_result.model_copy(update={"content": content, "iterations": loop.iterations})
+    return base_result.model_copy(
+        update={"content": content, "iterations": loop.iterations, "trace": trace}
+    )
