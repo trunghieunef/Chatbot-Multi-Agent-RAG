@@ -20,12 +20,27 @@ from app.database import async_session
 from agent_service.tools.market_stats import district_price_overview
 
 
+def _infer_city_from_district(district: str | None) -> str | None:
+    """Users say 'Quận 7' without a city; numbered districts are HCM-specific.
+
+    Returns 'Hồ Chí Minh' for a district that is a bare/prefixed number
+    (Quận 1–12) so the market lookup isn't skipped for lack of a city.
+    """
+    if not district:
+        return None
+    import re
+
+    return "Hồ Chí Minh" if re.search(r"\d", district) else None
+
+
 async def lookup_market_metrics(filters: dict[str, Any]) -> list[dict[str, Any]]:
     """Current snapshot lookup (existing tool)."""
     city = filters.get("city")
     listing_type = filters.get("listing_type") or "sale"
     property_type = filters.get("property_type")
     district = filters.get("district")
+    if not city:
+        city = _infer_city_from_district(district)
     if not city:
         logger.info("[market_metrics] skipped: no 'city' in filters (district=%s)", district)
         return []
