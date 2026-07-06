@@ -87,8 +87,11 @@ async def lookup_market_timeseries(
         clauses.append("city ILIKE :city")
         params["city"] = f"%{city}%"
     if district:
-        clauses.append("district ILIKE :district")
-        params["district"] = f"%{district}%"
+        # Match "Quận 7" against the bare-number district ("7") the snapshots use.
+        from agent_service.tools.market_stats import _district_bind
+        clause, dparams = _district_bind(str(district))
+        clauses.append(clause)
+        params.update(dparams)
     if property_type:
         clauses.append("property_type ILIKE :property_type")
         params["property_type"] = f"%{property_type}%"
