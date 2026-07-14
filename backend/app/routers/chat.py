@@ -50,6 +50,7 @@ from app.services.agent_service.observability import (
 from app.services.chatbot.context import (
     build_conversation_context,
     load_user_preferences,
+    split_agents,
 )
 from app.services.chatbot.memory import (
     decide_memory_status,
@@ -61,7 +62,11 @@ from app.services.chatbot.abuse_guard import (
     enforce_chat_abuse_guard,
 )
 from app.services.chatbot.quota import enforce_chat_quota
-from app.services.chatbot.session_guard import verify_session_ownership
+def verify_session_ownership(session: ChatSession, user: User | None) -> None:
+    """Raise 404 when an authenticated session is accessed by a non-owner."""
+    if session.user_id is not None and (user is None or session.user_id != user.id):
+        raise HTTPException(status_code=404, detail="Session not found")
+
 
 router = APIRouter(prefix="/chat", tags=["Chat"])
 logger = logging.getLogger(__name__)
@@ -369,7 +374,10 @@ async def schedule_agent_evaluation(
     full_trace = response.full_trace if isinstance(response.full_trace, dict) else {}
     graph_version = _trace_value(full_trace, "graph_version", "unknown_graph")
     prompt_version = _trace_value(full_trace, "prompt_version", "unknown_prompt")
-    model_name = _trace_value(full_trace, "model_name", "unknown_model")
+    # Empty when the trace doesn't say: the agent service then falls back to its
+    # GEMINI_JUDGE_MODEL. Never send a fabricated name — "unknown_model" used to be
+    # forwarded verbatim and every judge call 404'd against Gemini.
+    model_name = _trace_value(full_trace, "model_name", "")
     payload = _eval_payload(
         question=question,
         answer=response.final_response,
@@ -388,7 +396,7 @@ async def schedule_agent_evaluation(
             evaluator="gemini",
             graph_version=graph_version,
             prompt_version=prompt_version,
-            model_name=model_name,
+            model_name=model_name or "unknown_model",
             summary_json={},
         )
         db.add(eval_run)

@@ -221,6 +221,7 @@ class PropertySearchAgent(BaseAgent):
                 title=listing.get("title"),
                 url=listing.get("url") or f"/nha-dat-ban/{listing.get('id')}" if listing.get("id") else None,
                 location={"district": listing.get("district"), "city": listing.get("city")},
+                score=(listing.get("matched_chunk") or {}).get("rerank_score"),
                 metadata={
                     "price_text": listing.get("price_text"),
                     "area_text": listing.get("area_text"),

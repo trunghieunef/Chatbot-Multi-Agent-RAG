@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import {
   sendChatMessage,
+  streamChatMessage,
   getChatSessions,
   getChatSessionHistory,
   deleteChatSession,
@@ -41,6 +42,8 @@ export interface Message {
   memory_hints?: ChatMessageResponse["memory_hints"];
   feedback_id?: string | null;
   request_id?: string | null;
+  streaming?: boolean;
+  status?: string;
 }
 
 export type ChatMode = "mini" | "full";
@@ -111,49 +114,93 @@ export function useChat(options: UseChatOptions = { mode: "mini" }) {
       setMessages((prev) => [...prev, { role: "user", content: msg }]);
       setLoading(true);
 
-      try {
-        let res: ChatMessageResponse;
-        if (isDemoChatEnabled()) {
-          await new Promise((resolve) => setTimeout(resolve, 450));
-          res = buildDemoChatResponse(
-            msg,
-            sessionId || `demo-session-${Date.now()}`
-          );
-        } else {
-          res = await sendChatMessage({
-            message: msg,
-            session_id: sessionId || undefined,
-          });
-        }
+      const applyResult = (res: ChatMessageResponse) => {
         setSessionId(res.session_id);
         setLastSessionId(res.session_id);
         if (!hasAuthToken()) {
-          // First user message becomes the conversation title; later sends only
-          // refresh updatedAt (upsert keeps the original title).
           upsertConversation(res.session_id, msg);
           if (isFull) loadSessions();
         }
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: "assistant",
-            content: res.content,
-            agent_used: res.agent_used,
-            agents_used: res.agents_used,
-            sources: res.sources,
-            charts: res.charts,
-            suggested_actions: res.suggested_actions,
-            trace_summary: res.trace_summary,
-            memory_hints: res.memory_hints,
-            feedback_id: res.feedback_id,
-            request_id: res.request_id,
-          },
-        ]);
-        // Refresh session list in full mode (logged-in path)
-        if (isFull && !sessionId && hasAuthToken()) {
-          loadSessions();
+        // Replace the streaming placeholder (if any) with the final message.
+        setMessages((prev) => {
+          const next = prev.filter((m) => !m.streaming);
+          return [
+            ...next,
+            {
+              role: "assistant",
+              content: res.content,
+              agent_used: res.agent_used,
+              agents_used: res.agents_used,
+              sources: res.sources,
+              charts: res.charts,
+              suggested_actions: res.suggested_actions,
+              trace_summary: res.trace_summary,
+              memory_hints: res.memory_hints,
+              feedback_id: res.feedback_id,
+              request_id: res.request_id,
+            },
+          ];
+        });
+        if (isFull && !sessionId && hasAuthToken()) loadSessions();
+      };
+
+      try {
+        if (isDemoChatEnabled()) {
+          await new Promise((resolve) => setTimeout(resolve, 450));
+          applyResult(
+            buildDemoChatResponse(msg, sessionId || `demo-session-${Date.now()}`)
+          );
+        } else {
+          // Streaming: show a live status placeholder, swap it for the answer.
+          setMessages((prev) => [
+            ...prev,
+            { role: "assistant", content: "", streaming: true, status: "đang xử lý…" },
+          ]);
+          let got = false;
+          await streamChatMessage(
+            { message: msg, session_id: sessionId || undefined },
+            {
+              onNode: (_node, status) =>
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.streaming ? { ...m, status: status || m.status } : m
+                  )
+                ),
+              onFinal: (res) => {
+                got = true;
+                // The SSE `final` payload is AgentChatResponse (field
+                // `final_response`), but applyResult reads `content` like the
+                // plain POST /chat response — normalize so the answer text shows.
+                const r = res as unknown as {
+                  final_response?: string;
+                  content?: string;
+                };
+                applyResult({
+                  ...res,
+                  content: r.content ?? r.final_response ?? "",
+                });
+              },
+              onError: (message) => {
+                got = true;
+                setMessages((prev) => [
+                  ...prev.filter((m) => !m.streaming),
+                  { role: "assistant", content: message },
+                ]);
+              },
+            }
+          );
+          if (!got) {
+            // Stream ended without a final event — fall back to plain POST.
+            applyResult(
+              await sendChatMessage({
+                message: msg,
+                session_id: sessionId || undefined,
+              })
+            );
+          }
         }
       } catch {
+        setMessages((prev) => prev.filter((m) => !m.streaming));
         setMessages((prev) => [
           ...prev,
           {

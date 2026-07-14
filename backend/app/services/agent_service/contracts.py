@@ -1,3 +1,8 @@
+# NOTE: This file is an intentional mirror of the public backend <-> agent_service
+# API contract (AgentChatRequest, AgentChatResponse, and supporting models).
+# Do NOT import from agent_service.contracts here — the backend Docker image does
+# not install agent_service. Keep this file in sync with agent_service/contracts.py
+# manually whenever the shared public models change.
 from __future__ import annotations
 
 from typing import Any, Literal

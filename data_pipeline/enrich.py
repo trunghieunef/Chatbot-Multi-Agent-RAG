@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import Callable
 
@@ -10,6 +11,15 @@ import httpx
 
 
 logger = logging.getLogger(__name__)
+
+
+def _strip_json_fence(text: str) -> str:
+    """Remove a ```json ... ``` markdown fence Gemini often wraps JSON in."""
+    text = (text or "").strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*", "", text)
+        text = re.sub(r"\s*```$", "", text)
+    return text
 
 
 INTENT_PROMPT = (
@@ -55,7 +65,7 @@ class NominatimGeocoder:
 @dataclass
 class GeminiIntentExtractor:
     api_key: str
-    model: str = "gemini-2.0-flash"
+    model: str = "gemini-2.5-flash"
     client: object | None = None
 
     def __post_init__(self) -> None:
@@ -75,7 +85,7 @@ class GeminiIntentExtractor:
             contents=INTENT_PROMPT.format(content=content[:1500]),
         )
         try:
-            payload = json.loads(response.text)
+            payload = json.loads(_strip_json_fence(response.text))
             tags = payload.get("tags", [])
             return [tag for tag in tags if isinstance(tag, str) and tag.strip()]
         except (json.JSONDecodeError, AttributeError, TypeError):

@@ -31,10 +31,18 @@ def build_synthesis_prompt(
     agent_results: dict[str, dict[str, Any]],
     supervisor_plan: dict[str, Any] | None = None,
 ) -> str:
+    # Each agent's `content` is already a fully-formatted answer. Feeding all of
+    # them verbatim makes the synthesizer concatenate (and repeat sections like
+    # "lưu ý pháp lý" once per agent). Cap each so it reads as source material,
+    # not a finished answer to copy.
+    def _cap(text: Any, limit: int = 700) -> str:
+        s = str(text or "").strip()
+        return s if len(s) <= limit else s[:limit] + "…"
+
     compact_results = {
         agent: {
             "status": result.get("status"),
-            "content": result.get("content"),
+            "content": _cap(result.get("content")),
             "evidence_ids_used": result.get("evidence_ids_used", []),
             "warnings": [
                 warning.code if hasattr(warning, "code") else warning
@@ -52,6 +60,16 @@ def build_synthesis_prompt(
             ),
             "Use only the agent outputs and evidence IDs provided.",
             "Do not invent listings, prices, laws, market facts, or citations.",
+            (
+                "The agent outputs are SOURCE MATERIAL, not a draft to copy. Write "
+                "ONE fresh, unified answer in your own words. Do NOT paste an agent's "
+                "text verbatim and do NOT append agents one after another."
+            ),
+            (
+                "Merge overlapping topics into a single section. If multiple agents "
+                "mention legal notes, write the legal guidance ONCE — never repeat a "
+                "section (e.g. 'lưu ý pháp lý') more than once in the whole answer."
+            ),
             (
                 "When naming a listing, use the exact listing title from the agent "
                 "outputs for THIS query. Never invent or rename projects, and never "

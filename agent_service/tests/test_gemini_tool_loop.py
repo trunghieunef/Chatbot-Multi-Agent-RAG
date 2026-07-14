@@ -81,6 +81,54 @@ async def test_run_tool_loop_executes_tool_then_returns_text(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_run_tool_loop_sanitizes_non_json_tool_results(monkeypatch):
+    # Article records carry datetime.date (post_date); the function response
+    # must be JSON-safe or the whole loop dies mid-flight (seen in prod).
+    import datetime
+
+    _patch_cost_tracking_available(monkeypatch)
+    captured_contents = []
+
+    class _RecordingModels(_FakeModels):
+        def generate_content(self, **kwargs):
+            captured_contents.append(kwargs.get("contents"))
+            return super().generate_content(**kwargs)
+
+    class _RecordingClient:
+        def __init__(self, responses):
+            self.models = _RecordingModels(responses)
+
+    responses = [
+        _FakeResponse(function_calls=[_FakeFunctionCall("search_articles", {"query": "q"})]),
+        _FakeResponse(text="ok"),
+    ]
+    monkeypatch.setattr(
+        gemini.genai, "Client", lambda **kw: _RecordingClient(responses), raising=False
+    )
+
+    async def executor(name, args):
+        return {"status": "success",
+                "results": [{"id": 1, "post_date": datetime.date(2026, 1, 2)}]}
+
+    client = gemini.GeminiClient(api_key="k", model="gemini-2.5-flash")
+    result = await client.run_tool_loop(
+        system_prompt="role", user_message="x",
+        function_declarations=[{"name": "search_articles"}], executor=executor,
+        max_iterations=3, timeout_seconds=5.0,
+    )
+
+    assert result.text == "ok"
+    # The function-response part sent back to Gemini must hold a string date.
+    second_turn = captured_contents[1]
+    fn_parts = [
+        p for content in second_turn for p in getattr(content, "parts", [])
+        if getattr(p, "function_response", None) is not None
+    ]
+    sent = fn_parts[0].function_response.response["result"]
+    assert sent["results"][0]["post_date"] == "2026-01-02"
+
+
+@pytest.mark.asyncio
 async def test_run_tool_loop_skips_without_api_key():
     client = gemini.GeminiClient(api_key="", model="gemini-2.5-flash")
 

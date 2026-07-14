@@ -1,3 +1,7 @@
+# NOTE: The public models in this file (AgentChatRequest, AgentChatResponse, and
+# their supporting types up to AgentChatResponse) are mirrored verbatim in
+# backend/app/services/agent_service/contracts.py. The backend Docker image cannot
+# import this package directly. Keep both files in sync when editing public models.
 from __future__ import annotations
 
 from typing import Any, Literal

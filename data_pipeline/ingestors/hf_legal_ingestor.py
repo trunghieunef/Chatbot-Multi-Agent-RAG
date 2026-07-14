@@ -199,17 +199,49 @@ def fetch_content_for_ids(
         print(f"[hf_legal] streaming failed ({exc}), falling back to non‑streaming…", file=sys.stderr)
 
     # 2. Fallback: non‑streaming – loads all 179k rows once then filters
-    ds = load_dataset(DATASET_NAME, "content", split="data", streaming=False)
+    try:
+        ds = load_dataset(DATASET_NAME, "content", split="data", streaming=False)
+        rows: list[dict[str, Any]] = []
+        scanned = 0
+        for row in ds:
+            if scan_limit is not None and scanned >= scan_limit:
+                break
+            scanned += 1
+            row_dict = dict(row)
+            row_id = str(_clean_text(row_dict.get("id") or ""))
+            if row_id in doc_ids:
+                rows.append(row_dict)
+        return rows
+    except Exception as exc:
+        msg = str(exc)
+        if "large_string" not in msg and "ArrowInvalid" not in msg:
+            raise
+        print(f"[hf_legal] non-streaming also failed ({exc}); reading parquet "
+              "directly via pyarrow…", file=sys.stderr)
+
+    # 3. Last resort: read the parquet file(s) with pyarrow directly, which
+    #    keeps large_string natively (datasets' cast to string is what breaks).
+    return _fetch_content_via_pyarrow(doc_ids)
+
+
+def _fetch_content_via_pyarrow(doc_ids: set[str]) -> list[dict[str, Any]]:
+    from huggingface_hub import HfApi, hf_hub_download
+    import pyarrow.parquet as pq
+
+    api = HfApi()
+    files = [
+        f for f in api.list_repo_files(DATASET_NAME, repo_type="dataset")
+        if f.startswith("data/") and "content" in f and f.endswith(".parquet")
+    ]
     rows: list[dict[str, Any]] = []
-    scanned = 0
-    for row in ds:
-        if scan_limit is not None and scanned >= scan_limit:
-            break
-        scanned += 1
-        row_dict = dict(row)
-        row_id = str(_clean_text(row_dict.get("id") or ""))
-        if row_id in doc_ids:
-            rows.append(row_dict)
+    for fname in files:
+        path = hf_hub_download(DATASET_NAME, fname, repo_type="dataset")
+        table = pq.read_table(path)  # large_string stays large_string here
+        for batch in table.to_batches():
+            for row_dict in batch.to_pylist():
+                row_id = str(_clean_text(row_dict.get("id") or ""))
+                if row_id in doc_ids:
+                    rows.append(row_dict)
     return rows
 
 

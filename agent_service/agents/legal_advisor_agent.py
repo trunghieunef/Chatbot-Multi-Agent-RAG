@@ -37,8 +37,15 @@ class LegalAdvisorAgent(BaseAgent):
         super().__init__(agent_name="legal_advisor", max_iterations=max_iterations, use_llm=use_llm)
 
     def _is_in_domain(self, query: str) -> bool:
-        query_lower = query.lower()
-        return any(kw in query_lower for kw in self.LEGAL_DOMAIN_KEYWORDS)
+        # Keywords are accent-stripped; the query arrives accented ("thủ tục"),
+        # so strip it the same way or the guard never matches real Vietnamese.
+        import unicodedata
+
+        normalized = unicodedata.normalize("NFD", query or "")
+        stripped = "".join(
+            ch for ch in normalized if unicodedata.category(ch) != "Mn"
+        ).replace("đ", "d").replace("Đ", "d").lower()
+        return any(kw in stripped for kw in self.LEGAL_DOMAIN_KEYWORDS)
 
     async def think(
         self,
@@ -55,26 +62,33 @@ class LegalAdvisorAgent(BaseAgent):
                 confidence=0.95,
             )
 
-        has_legal_evidence = any(
-            action.tool_result.get("results")
-            for action in previous_actions
-            if action.action_type == "call_tool"
-        )
+        attempts = [a for a in previous_actions if a.action_type == "call_tool"]
+        has_legal_evidence = any(a.tool_result.get("results") for a in attempts)
 
         if not has_legal_evidence:
-            return AgentThought(
-                iteration=iteration,
-                reasoning="Need to search legal knowledge base for relevant articles and regulations.",
-                action="call_tool",
-                tool_name="search_articles",
-                tool_params={
-                    "query": context.normalized_query,
-                    "filters": {"category": "legal"},
-                    "top_k": 15,
-                    "rerank_to": 5,
-                },
-                confidence=0.9,
-            )
+            if not attempts:
+                return AgentThought(
+                    iteration=iteration,
+                    reasoning="Need to search legal knowledge base for relevant articles and regulations.",
+                    action="call_tool",
+                    tool_name="search_articles",
+                    tool_params={
+                        "query": context.normalized_query,
+                        "filters": {"category": "legal"},
+                        "top_k": 15,
+                        "rerank_to": 5,
+                    },
+                    confidence=0.9,
+                )
+            if len(attempts) == 1:
+                return AgentThought(
+                    iteration=iteration,
+                    reasoning="Legal KB returned nothing; falling back to web search.",
+                    action="call_tool",
+                    tool_name="search_web",
+                    tool_params={"query": context.normalized_query},
+                    confidence=0.7,
+                )
 
         listing_context = ""
         for entry in blackboard_entries:
@@ -221,6 +235,7 @@ class LegalAdvisorAgent(BaseAgent):
                 title=article.get("title"),
                 citation=article.get("citation"),
                 snippet=article.get("snippet", ""),
+                score=(article.get("matched_chunk") or {}).get("rerank_score"),
             )
             for article in all_articles[:5]
         ]

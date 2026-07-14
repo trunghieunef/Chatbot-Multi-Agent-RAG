@@ -33,26 +33,33 @@ class NewsAgent(BaseAgent):
         previous_actions: list[AgentAction],
         blackboard_entries: list[dict[str, Any]],
     ) -> AgentThought:
-        has_news = any(
-            action.tool_result.get("results")
-            for action in previous_actions
-            if action.action_type == "call_tool"
-        )
+        attempts = [a for a in previous_actions if a.action_type == "call_tool"]
+        has_news = any(a.tool_result.get("results") for a in attempts)
 
         if not has_news:
-            return AgentThought(
-                iteration=iteration,
-                reasoning="Need to search for relevant news articles.",
-                action="call_tool",
-                tool_name="search_articles",
-                tool_params={
-                    "query": context.normalized_query,
-                    "filters": {"exclude_category": "legal"},
-                    "top_k": 15,
-                    "rerank_to": 5,
-                },
-                confidence=0.9,
-            )
+            if not attempts:
+                return AgentThought(
+                    iteration=iteration,
+                    reasoning="Need to search for relevant news articles.",
+                    action="call_tool",
+                    tool_name="search_articles",
+                    tool_params={
+                        "query": context.normalized_query,
+                        "filters": {"exclude_category": "legal"},
+                        "top_k": 15,
+                        "rerank_to": 5,
+                    },
+                    confidence=0.9,
+                )
+            if len(attempts) == 1:
+                return AgentThought(
+                    iteration=iteration,
+                    reasoning="Internal KB returned nothing; falling back to web search.",
+                    action="call_tool",
+                    tool_name="search_web",
+                    tool_params={"query": context.normalized_query},
+                    confidence=0.7,
+                )
 
         return AgentThought(
             iteration=iteration,
@@ -148,6 +155,7 @@ class NewsAgent(BaseAgent):
                 title=article.get("title"),
                 url=article.get("url"),
                 snippet=article.get("snippet", ""),
+                score=(article.get("matched_chunk") or {}).get("rerank_score"),
             )
             for article in all_articles[:5]
         ]

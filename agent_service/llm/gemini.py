@@ -13,13 +13,12 @@ from google import genai
 from google.genai import types
 
 from agent_service.config import get_agent_settings
-from agent_service.llm.cost import get_runtime_cost_summary, record_runtime_llm_cost
+from agent_service.llm.cost import get_runtime_cost_summary, record_runtime_llm_cost_async
 
 logger = logging.getLogger(__name__)
 
 # Limit concurrent Gemini calls to avoid 429 rate limits
-_MAX_CONCURRENT_LLM_CALLS = 2
-_llm_semaphore = asyncio.Semaphore(_MAX_CONCURRENT_LLM_CALLS)
+_llm_semaphore = asyncio.Semaphore(get_agent_settings().AGENT_MAX_CONCURRENT_LLM_CALLS)
 
 
 @dataclass(frozen=True)
@@ -58,6 +57,10 @@ class GeminiClient:
         self.model = model or settings.GEMINI_MODEL
         self.timeout_seconds = settings.AGENT_LLM_TIMEOUT_SECONDS
         self.thinking_budget = settings.AGENT_GEMINI_THINKING_BUDGET
+        # Per-call usage records (input/output tokens) accumulated on this
+        # instance; the graph reads them for observability. A fresh client is
+        # made per node, so each list is scoped to that node's calls.
+        self.usages: list[dict[str, Any]] = []
 
     def _thinking_config(self) -> types.ThinkingConfig | None:
         """Gemini 2.5 thinking config. budget=0 disables thinking (faster, fewer
@@ -154,13 +157,16 @@ class GeminiClient:
             "usageMetadata",
             None,
         )
+        input_tokens = getattr(usage, "prompt_token_count", None)
+        output_tokens = getattr(usage, "candidates_token_count", None)
+        self.usages.append(
+            {"token_input_estimate": input_tokens, "token_output_estimate": output_tokens}
+        )
         return GeminiResult(
             text=response.text or "",
-            input_tokens=(input_tokens := getattr(usage, "prompt_token_count", None)),
-            output_tokens=(
-                output_tokens := getattr(usage, "candidates_token_count", None)
-            ),
-            estimated_cost_usd=record_runtime_llm_cost(
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            estimated_cost_usd=record_runtime_llm_cost_async(
                 self.settings,
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
@@ -260,10 +266,13 @@ class GeminiClient:
                 )
 
             usage = getattr(response, "usage_metadata", None)
-            record_runtime_llm_cost(
-                self.settings,
-                input_tokens=getattr(usage, "prompt_token_count", None),
-                output_tokens=getattr(usage, "candidates_token_count", None),
+            _in = getattr(usage, "prompt_token_count", None)
+            _out = getattr(usage, "candidates_token_count", None)
+            self.usages.append(
+                {"token_input_estimate": _in, "token_output_estimate": _out}
+            )
+            record_runtime_llm_cost_async(
+                self.settings, input_tokens=_in, output_tokens=_out,
             )
 
             function_calls = list(getattr(response, "function_calls", None) or [])
@@ -289,8 +298,12 @@ class GeminiClient:
                 except Exception as exc:  # degrade, do not crash the loop
                     tool_result = {"status": "error", "error": str(exc)[:300]}
                 steps.append(ToolLoopStep(tool_name=fc.name, args=args, result=tool_result))
+                # Tool results may carry non-JSON types (date, Decimal…); the SDK
+                # serializes the function response, so round-trip through json
+                # with default=str or the whole tool loop dies mid-flight.
+                safe_result = json.loads(json.dumps(tool_result, ensure_ascii=False, default=str))
                 response_parts.append(
-                    types.Part.from_function_response(name=fc.name, response={"result": tool_result})
+                    types.Part.from_function_response(name=fc.name, response={"result": safe_result})
                 )
             contents.append(types.Content(role="user", parts=response_parts))
 

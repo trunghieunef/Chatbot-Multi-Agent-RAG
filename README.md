@@ -1,146 +1,186 @@
 # RealEstate Chatbot v2
 
-Nền tảng tìm kiếm, phân tích và tư vấn bất động sản Việt Nam — end-to-end từ crawl dữ liệu, xử lý pipeline, đến web frontend và chatbot multi-agent RAG.
+Nền tảng tìm kiếm, phân tích và tư vấn bất động sản Việt Nam — end-to-end từ crawl dữ liệu, ETL pipeline, đến web frontend và chatbot multi-agent RAG.
 
-## 🏗 Kiến Trúc Tổng Quan
+> Đồ án tốt nghiệp — Trần Trung Hiếu
+
+---
+
+## Mục lục
+
+- [Kiến trúc tổng quan](#kiến-trúc-tổng-quan)
+- [Công nghệ sử dụng](#công-nghệ-sử-dụng)
+- [Yêu cầu hệ thống](#yêu-cầu-hệ-thống)
+- [Cài đặt nhanh bằng Docker](#cài-đặt-nhanh-bằng-docker)
+- [Cài đặt thủ công (phát triển local)](#cài-đặt-thủ-công-phát-triển-local)
+- [Biến môi trường](#biến-môi-trường)
+- [Cấu trúc dự án](#cấu-trúc-dự-án)
+- [Chatbot multi-agent RAG](#chatbot-multi-agent-rag)
+- [Data pipeline & Crawler](#data-pipeline--crawler)
+- [Monitoring](#monitoring)
+- [API Backend](#api-backend)
+- [Testing](#testing)
+- [Troubleshooting](#troubleshooting)
+
+---
+
+## Kiến trúc tổng quan
+
+Hệ thống gồm **4 service Python + 1 frontend Next.js**, giao tiếp qua HTTP nội bộ:
+
+```
+Browser ──► Frontend (Next.js :3000)
+               │
+               ▼
+         Backend (FastAPI :8000)          ← public API, auth, listings, chat
+               │  POST /internal/agent/chat
+               │  header: X-Internal-Agent-Key
+               ▼
+         Agent Service (LangGraph :8100)  ← multi-agent RAG (internal only)
+
+         Pipeline Worker (FastAPI :8200)  ← crawl / embed / ingest (internal only)
+
+         PostgreSQL 16 + pgvector   Redis 7
+```
 
 ```mermaid
 flowchart TD
-    User["👤 Người dùng"] --> Frontend["Next.js 16<br/>localhost:3000"]
-    Frontend --> Backend["FastAPI v2<br/>localhost:8000"]
-
-    Backend --> Postgres["PostgreSQL 16 + pgvector"]
-    Backend --> Redis["Redis 7"]
-    Backend --> AgentSvc["Agent Service<br/>LangGraph multi-agent<br/>localhost:8100"]
-    Backend --> PipelineW["Pipeline Worker<br/>localhost:8200"]
-
-    AgentSvc --> Gemini["Google Gemini 2.0 Flash"]
-
-    PipelineW --> Crawler["Playwright crawlers"]
-    PipelineW --> Ingestor["Data pipeline ingestors"]
-    Ingestor --> Postgres
-
-    Prometheus["Prometheus"] --> Backend
-    Prometheus --> Postgres
-    Prometheus --> Redis
-    Grafana["Grafana"] --> Prometheus
-    AlertMgr["AlertManager"] --> Slack
-    Prometheus --> AlertMgr
+    User["Người dùng"] --> FE["Next.js 16\n:3000"]
+    FE --> BE["FastAPI Backend\n:8000"]
+    BE --> PG["PostgreSQL 16 + pgvector"]
+    BE --> RD["Redis 7"]
+    BE --> AS["Agent Service\nLangGraph :8100"]
+    BE --> PW["Pipeline Worker\n:8200"]
+    AS --> Gemini["Google Gemini 2.5 Flash"]
+    PW --> Crawler["Playwright Crawlers"]
+    PW --> Ingestor["Data Pipeline"]
+    Ingestor --> PG
+    Prometheus --> BE & PG & RD
+    Grafana --> Prometheus
 ```
 
-## 📁 Cấu Trúc Dự Án
+---
 
-```
-RealEstate_Chatbot_v2/
-├── agent_service/          # Internal LangGraph multi-agent RAG service
-│   ├── main.py             # FastAPI: /internal/agent/chat, /health, /evaluate
-│   ├── config.py           # Agent settings (Pydantic)
-│   ├── contracts.py        # AgentChatRequest/Response, Evidence, RetrievalTask
-│   ├── agents/             # 6 specialist agents (property, market, legal, investment...)
-│   ├── graph/              # LangGraph StateGraph: router → planner → specialists → synthesis
-│   ├── llm/                # Gemini wrapper + cost tracking
-│   ├── tools/              # Retrieval tools, readiness snapshot
-│   └── evaluation/         # LLM-as-judge (5 metrics)
-│
-├── backend/                # FastAPI v2 (main backend)
-│   ├── app/
-│   │   ├── main.py         # Entrypoint: uvicorn app.main:app
-│   │   ├── config.py       # Settings from .env
-│   │   ├── database.py     # Async SQLAlchemy engine
-│   │   ├── models/         # ORM: User, Listing, Project, Article, Chunk, Chat, PipelineRun...
-│   │   ├── routers/        # admin, auth, chat, listings, market, metrics, preferences, projects
-│   │   └── services/       # agent_service client, chatbot orchestrator, hybrid search
-│   ├── alembic/            # Database migrations
-│   └── tests/              # Pytest suite
-│
-├── frontend/               # Next.js 16 App Router + React 19 + Tailwind CSS 4
-│   ├── app/                # /, /nha-dat-ban, /thi-truong, /dang-nhap, /admin...
-│   ├── components/         # Layout, ListingCard, FilterPanel, ChatWidget, AdminDashboard
-│   └── lib/                # api.ts, types.ts, utils.ts
-│
-├── pipeline_worker/        # Internal service: crawl, ingest, chunk, embed
-│   ├── main.py             # FastAPI: /internal/pipeline/crawler, /csv-ingest...
-│   ├── runner.py           # Run crawl modules
-│   └── maintenance.py      # Cleanup, mark inactive listings
-│
-├── crawler/                # Playwright headless crawlers
-│   ├── core/               # Parser helpers, CSV utils
-│   ├── sale/               # Tin bán
-│   ├── rent/               # Tin thuê
-│   ├── projects/           # Dự án
-│   └── news/               # Tin tức
-│
-├── data_pipeline/          # ETL: clean, enrich, chunk, embed, ingest
-│   ├── ingestors/          # listings, projects, news, legal KB
-│   └── legal/              # PDF/HTML legal parser
-│
-├── airflow/                # Airflow DAGs + docker-compose
-├── infra/                  # Monitoring: Prometheus, Grafana, AlertManager configs
-├── data/                   # CSV samples, knowledge base, raw crawl outputs
-├── docs/                   # Architecture docs, implementation plans
-├── docker-compose.yml      # Full stack: 11 services
-└── .env                    # Environment variables
-```
+## Công nghệ sử dụng
 
-> ⚠️ **Lưu ý:** `backend/main.py` là legacy (đọc CSV trực tiếp). Entrypoint chính là `backend/app/main.py`. Tương tự, `chatbot/` và `batdongsancom-crawler/` là code cũ, chỉ tham khảo.
+| Lớp | Công nghệ |
+|---|---|
+| **Frontend** | Next.js 16, React 19, TypeScript, Tailwind CSS v4, Recharts |
+| **Backend** | FastAPI, SQLAlchemy 2.0 async (asyncpg), Alembic, Pydantic v2 |
+| **AI / RAG** | LangGraph, Google Gemini 2.5 Flash, BAAI/bge-m3 (1024-dim), pgvector HNSW |
+| **Reranker** | Cohere `rerank-multilingual-v3.0` (tùy chọn) |
+| **Database** | PostgreSQL 16 + pgvector, Redis 7 |
+| **Crawler** | Playwright, playwright-stealth |
+| **Pipeline** | pandas, PyMuPDF, Apache Airflow |
+| **Monitoring** | Prometheus, Grafana, AlertManager |
+| **Infra** | Docker Compose, Nginx, Let's Encrypt |
 
-## 🚀 Chạy Nhanh Bằng Docker
+---
 
-**Yêu cầu:** Docker Desktop / Docker Engine + Compose v2.
+## Yêu cầu hệ thống
+
+### Cài đặt bằng Docker (khuyến nghị)
+
+- Docker Desktop >= 4.x (hoặc Docker Engine + Compose v2)
+- RAM: tối thiểu 8 GB (khuyến nghị 16 GB — model bge-m3 chiếm ~2.2 GB)
+- Disk: ~5 GB trống (model cache + data)
+
+### Cài đặt thủ công
+
+- Python 3.12
+- Node.js >= 20
+- PostgreSQL 16 với extension `pgvector`
+- Redis 7
+
+---
+
+## Cài đặt nhanh bằng Docker
+
+### Bước 1 — Cấu hình môi trường
 
 ```bash
-# 1. Cấu hình biến môi trường (đã có sẵn .env trong repo)
-# 2. Khởi động toàn bộ stack
-docker compose up -d --build
-
-# 3. Kiểm tra trạng thái
-docker compose ps
+cp .env.example .env
 ```
 
-### Các Service & Port
+Mở `.env` và điền 3 giá trị bắt buộc:
+
+```env
+GEMINI_API_KEY=your_gemini_api_key_here
+AGENT_INTERNAL_KEY=some-random-secret-string
+JWT_SECRET_KEY=another-random-secret-string
+```
+
+> Xem đầy đủ tại mục [Biến môi trường](#biến-môi-trường).
+
+### Bước 2 — Tải model embedding (lần đầu)
+
+Model `BAAI/bge-m3` (~2.2 GB) cần tải về host trước — container sẽ dùng chung cache:
+
+```bash
+pip install sentence-transformers
+python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('BAAI/bge-m3')"
+```
+
+> Cache tại `~/.cache/huggingface/` — đã được mount vào container trong `docker-compose.yml`.
+
+### Bước 3 — Khởi động toàn bộ stack
+
+```bash
+docker compose up -d --build
+docker compose exec backend alembic upgrade head
+```
+
+### Bước 4 — Kiểm tra
+
+```bash
+docker compose ps
+curl http://localhost:8000/api/v1/health
+```
+
+### Các service và port
 
 | Service | Port | Mô tả |
 |---|---|---|
 | **Frontend** | `3000` | Next.js web app |
 | **Backend API** | `8000` | FastAPI REST API + Swagger docs |
-| **Agent Service** | `8100` | LangGraph multi-agent (internal) |
-| **Pipeline Worker** | `8200` | Crawl + ingest jobs (internal) |
+| **Agent Service** | `8100` | LangGraph multi-agent (internal only) |
+| **Pipeline Worker** | `8200` | Crawl + ingest jobs (internal only) |
 | **PostgreSQL** | `5432` | Database chính + pgvector |
-| **Redis** | `6379` | Cache |
+| **Redis** | `6379` | Cache + session store |
 | **Prometheus** | `9090` | Metrics collection |
-| **Grafana** | `3001` | Dashboards (admin/admin) |
+| **Grafana** | `3001` | Dashboards (admin / admin) |
 | **AlertManager** | `9093` | Cảnh báo → Slack |
-| **Postgres Exporter** | `9187` | PG metrics |
-| **Redis Exporter** | `9121` | Redis metrics |
-
-### URLs quan trọng
+| **Nginx** | `80` / `443` | Reverse proxy |
 
 | URL | Mô tả |
 |---|---|
 | http://localhost:3000 | Frontend |
-| http://localhost:8000/docs | Backend Swagger UI |
-| http://localhost:8000/api/v1/health | Backend health check |
-| http://localhost:3001 | Grafana dashboards |
-| http://localhost:9090 | Prometheus UI |
-| http://localhost:8080 | Airflow UI (nếu chạy riêng) |
+| http://localhost:8000/docs | Swagger UI |
+| http://localhost:3001 | Grafana (admin / admin) |
 
-## 🛠 Phát Triển Local
+---
 
-### 1. Khởi động infrastructure
+## Cài đặt thủ công (phát triển local)
+
+Chạy theo đúng thứ tự: infra → agent-service → pipeline-worker → backend → frontend.
+
+### Bước 1 — Khởi động infrastructure
 
 ```powershell
 docker compose up -d postgres redis
 ```
 
-### 2. Cài dependencies
+### Bước 2 — Tạo virtual environment Python
 
 ```powershell
 python -m venv .venv
-.\.venv\Scripts\Activate.ps1
+.\.venv\Scripts\Activate.ps1        # Windows
+# source .venv/bin/activate          # Linux / macOS
 pip install -r requirements.txt
+cd backend && pip install -r requirements.txt && cd ..
 ```
 
-### 3. Database migration
+### Bước 3 — Apply database migrations
 
 ```powershell
 cd backend
@@ -148,257 +188,296 @@ alembic upgrade head
 cd ..
 ```
 
-### 4. Chạy Agent Service (cho chatbot)
+### Bước 4 — Chạy Agent Service
+
+Chạy từ **thư mục gốc** (để `agent_service.*` imports hoạt động):
 
 ```powershell
-$env:PYTHONPATH="$PWD;$PWD\backend"
-$env:AGENT_ALLOW_DEV_INTERNAL_KEY="true"
+$env:PYTHONPATH = "$PWD;$PWD\backend"
+$env:AGENT_ALLOW_DEV_INTERNAL_KEY = "true"
 uvicorn agent_service.main:app --reload --port 8100
 ```
 
-### 5. Chạy Backend
+### Bước 5 — Chạy Pipeline Worker
+
+```powershell
+$env:PYTHONPATH = "$PWD"
+uvicorn pipeline_worker.main:app --reload --port 8200
+```
+
+### Bước 6 — Chạy Backend
 
 ```powershell
 cd backend
 uvicorn app.main:app --reload --port 8000
 ```
 
-### 6. Chạy Frontend
+### Bước 7 — Chạy Frontend
 
 ```powershell
-cd frontend
-npm install
-npm run dev
+cd frontend && npm install && npm run dev
 ```
 
-## ⚙️ Biến Môi Trường Chính
+Truy cập http://localhost:3000.
 
-Xem đầy đủ trong `backend/app/config.py` và `agent_service/config.py`.
+---
+
+## Biến môi trường
+
+Tất cả biến đọc từ file `.env` ở thư mục gốc. Xem chi tiết tại `backend/app/config.py` và `agent_service/config.py`.
+
+### Bắt buộc
+
+| Biến | Ý nghĩa |
+|---|---|
+| `GEMINI_API_KEY` | Google Gemini API key — thiếu thì router fallback sang rule-based |
+| `AGENT_INTERNAL_KEY` | Khóa xác thực nội bộ backend ↔ agent-service |
+| `JWT_SECRET_KEY` | Khóa ký JWT — **đổi khi deploy production** |
+
+### Database & Cache
 
 | Biến | Mặc định | Ý nghĩa |
 |---|---|---|
-| `DATABASE_URL` | local Postgres | SQLAlchemy async connection string |
-| `REDIS_URL` | `redis://localhost:6379/0` | Redis connection |
-| `GEMINI_API_KEY` | — | Google Gemini API key (cho LLM + judge) |
-| `GEMINI_MODEL` | `gemini-2.0-flash` | Model Gemini |
-| `JWT_SECRET_KEY` | demo secret | **Đổi khi deploy production** |
-| `AGENT_INTERNAL_KEY` | dev key | Key xác thực nội bộ giữa các service |
-| `AGENT_SERVICE_URL` | `http://localhost:8100` | URL agent service |
-| `CHATBOT_AGENT_SERVICE_ENABLED` | `true` | Dùng agent service (thay vì inline) |
-| `HF_EMBEDDING_MODEL` | `BAAI/bge-m3` | SentenceTransformer model |
-| `EMBEDDING_DIM` | `1024` | Vector dimension (phải khớp pgvector schema) |
-| `COHERE_API_KEY` | — | Bật rerank (optional) |
-| `SLACK_WEBHOOK_URL` | — | Nhận cảnh báo qua Slack (optional) |
+| `DATABASE_URL` | `postgresql+asyncpg://admin:realestate_secret_2026@localhost:5432/realestate` | SQLAlchemy async URL |
+| `REDIS_URL` | `redis://localhost:6379/0` | Redis URL |
+| `POSTGRES_PASSWORD` | `realestate_secret_2026` | **Đổi khi deploy production** |
 
-## 🤖 Chatbot Multi-Agent RAG
+> Docker: host = `postgres` (tên service). Local: host = `localhost`.
 
-Hệ thống dùng **LangGraph StateGraph** với 8 node:
+### AI / Embedding
 
-1. **context_builder** — Chuẩn hóa query + lấy context từ chat history
-2. **readiness_checker** — Kiểm tra data source sẵn sàng
-3. **router** — Phân tích intent, chọn specialist agents
-4. **retrieval_planner** — Lập kế hoạch retrieval
-5. **specialist_agents** — 6 agents chạy song song:
-   - `property_search` — Tìm BĐS theo tiêu chí
-   - `market_analysis` — Phân tích giá, xu hướng thị trường
-   - `legal_advisor` — Tư vấn pháp lý (có disclaimer)
-   - `investment_advisor` — Phân tích đầu tư, ROI (có disclaimer)
-   - `news_agent` — Tin tức thị trường mới nhất
-   - `project_agent` — Thông tin dự án BĐS
-6. **synthesizer** — Tổng hợp kết quả, dedup sources
-7. **safety_validator** — Kiểm tra disclaimer, evidence
-8. **memory_proposals** — Đề xuất lưu preferences người dùng
+| Biến | Mặc định | Ý nghĩa |
+|---|---|---|
+| `GEMINI_MODEL` | `gemini-2.5-flash` | Model chatbot |
+| `GEMINI_JUDGE_MODEL` | `gemini-2.5-flash` | Model LLM judge |
+| `HF_EMBEDDING_MODEL` | `BAAI/bge-m3` | Embedding model |
+| `EMBEDDING_DIM` | `1024` | Số chiều vector — phải khớp pgvector schema |
+| `CHATBOT_EMBEDDING_LOCAL_FILES_ONLY` | `true` | Không re-download model |
+| `COHERE_API_KEY` | _(trống)_ | Bật Cohere reranker (tùy chọn) |
+
+### Agent Service
+
+| Biến | Mặc định | Ý nghĩa |
+|---|---|---|
+| `AGENT_ROUTER_MODE` | `hybrid` | `rule` / `llm` / `hybrid` |
+| `AGENT_AGENTIC_MODE` | `true` | Bật ReAct tool loop |
+| `AGENT_STREAM_ENABLED` | `true` | SSE streaming |
+| `AGENT_CHECKPOINT_ENABLED` | `true` | Lưu graph state (SQLite) |
+| `AGENT_ALLOW_DEV_INTERNAL_KEY` | `false` | Cho phép key mặc định khi dev local |
+| `SLACK_WEBHOOK_URL` | _(trống)_ | Alert qua Slack (tùy chọn) |
+
+---
+
+## Cấu trúc dự án
+
+```
+RealEstate_Chatbot_v2/
+├── agent_service/          # LangGraph multi-agent RAG service (:8100)
+│   ├── agents/             # 6 specialist agents
+│   ├── graph/              # StateGraph: supervisor → specialist → grade → rewrite → synthesize
+│   ├── tools/              # Hybrid retrieval, market stats, readiness
+│   ├── llm/                # Gemini wrapper + cost tracking
+│   ├── evaluation/         # LLM-as-judge (5 metrics)
+│   └── contracts.py        # AgentChatRequest/Response (mirror'd in backend)
+│
+├── backend/                # FastAPI public API (:8000)
+│   ├── app/
+│   │   ├── main.py         # Entrypoint
+│   │   ├── models/         # ORM: User, Listing, Project, Article, Chunk, Chat...
+│   │   ├── routers/        # auth, chat, listings, market, projects, articles, admin, metrics
+│   │   └── services/       # agent_service client, chatbot orchestrator
+│   └── alembic/            # Migrations
+│
+├── frontend/               # Next.js 16 App Router (:3000)
+│   ├── app/                # /, /nha-dat-ban, /thi-truong, /dang-nhap, /admin
+│   ├── components/         # ChatWidget, ListingCard, FilterPanel, AdminDashboard
+│   └── lib/                # api.ts, types.ts
+│
+├── pipeline_worker/        # ETL service (:8200)
+├── crawler/                # Playwright crawlers: sale, rent, projects, news
+├── data_pipeline/          # clean → chunk → embed → ingest
+├── airflow/                # Airflow DAGs (docker-compose riêng)
+├── infra/                  # Prometheus, Grafana, AlertManager, Nginx configs
+└── docker-compose.yml      # Full stack: 13 services
+```
+
+> `backend/main.py` là **legacy** — không dùng. Entrypoint chính là `backend/app/main.py`.
+
+---
+
+## Chatbot multi-agent RAG
+
+### LangGraph StateGraph (kiến trúc hiện tại)
+
+```
+query
+  │
+  ▼
+[supervisor] — phân tích intent, chọn agents, query rewriting
+  │
+  ├──► [specialist] — các agents chạy song song:
+  │         property_search    · market_analysis  · legal_advisor
+  │         investment_advisor · news_agent       · project_agent
+  │
+  ▼
+[grade] — đánh giá chất lượng kết quả
+  │
+  ├── pass ──► [synthesize] — tổng hợp, committee review, safety check → response
+  │
+  └── fail ──► [rewrite] — viết lại query → quay lại [specialist]
+```
+
+Mỗi specialist có thể chạy **ReAct tool loop** (`AGENT_AGENTIC_MODE=true`) — tức là tự gọi tool, kiểm tra kết quả, gọi lại nếu cần, tối đa `AGENT_REACT_MAX_ITERATIONS=2` vòng.
+
+Graph state được checkpoint vào SQLite (`AGENT_CHECKPOINT_PATH`). Streaming qua SSE — mỗi node emit một event.
 
 ### Hybrid Retrieval
 
-1. **SQL filter** — Lọc candidate theo cấu trúc (loại BĐS, giá, diện tích, khu vực)
-2. **Vector search** — pgvector kNN trên `chunks.embedding` (cosine distance)
-3. **Rerank** — Cohere rerank (nếu có API key)
-4. **Resolve** — Map chunks → parent records (listing/project/article)
+1. **SQL filter** — lọc theo loại BĐS, giá, diện tích, khu vực
+2. **Vector search** — pgvector kNN trên `chunks.embedding` (HNSW, cosine)
+3. **Full-text search** — tsvector RRF trên `chunks.text_tsv` (unaccent Vietnamese)
+4. **Rerank** — Cohere (nếu có key), fallback cosine
+5. **Resolve** — map chunks → parent record (listing / project / article)
 
-## 📊 Monitoring
+### Cấu hình
 
-Stack monitoring gồm **Prometheus + Grafana + AlertManager**:
-
-### Metrics thu thập
-
-- `realestate_chat_requests_total` — Số lượng chat request
-- `realestate_retrieval_latency_seconds` — Latency hybrid search (histogram)
-- `realestate_listings_total` — Số tin đăng theo loại (sale/rent)
-- `realestate_chunks_total` — Số chunks đã index
-- `realestate_pipeline_runs_total` — Pipeline runs theo DAG + status
-- `realestate_llm_cost_usd` — Chi phí LLM tháng hiện tại
-- `realestate_llm_cost_budget_exceeded` — Cảnh báo vượt budget
-
-### Alert Rules (8 rules)
-
-| Cảnh báo | Mức độ |
-|---|---|
-| Backend / PostgreSQL / Redis DOWN | 🔴 Critical |
-| Không có chat traffic trong 15 phút | 🟡 Warning |
-| P95 retrieval latency > 2s | 🟡 Warning |
-| Pipeline DAG fail liên tục | 🟡 Warning |
-| LLM monthly budget exceeded | 🟡 Warning |
-| PostgreSQL > 50 connections | 🟡 Warning |
-| Redis memory > 85% | 🟡 Warning |
-
-### Dashboards
-
-- **RealEstate Pipeline** — Listings, chunks, pipeline runs, retrieval latency, chat rate
-- **RealEstate Service Health** — Uptime, alerts, request rate, latency percentiles
-
-Truy cập Grafana tại http://localhost:3001 (admin/admin).
-
-## 📡 Backend API
-
-Tất cả endpoint được mount tại `/api/v1`. Xem đầy đủ tại http://localhost:8000/docs.
-
-### Danh sách Routers
-
-| Router | Prefix | Mô tả |
+| Biến | Mặc định | Mô tả |
 |---|---|---|
-| `listings` | `/api/v1/listings` | CRUD tin đăng, filter, sort, similar |
-| `market` | `/api/v1/market` | Thống kê thị trường, giá theo KV, top locations |
-| `chat` | `/api/v1/chat` | Chatbot multi-agent, sessions, history |
-| `auth` | `/api/v1/auth` | Register, login, JWT |
-| `preferences` | `/api/v1/preferences` | User preferences & memory |
-| `projects` | `/api/v1/projects` | Dự án BĐS |
-| `articles` | `/api/v1/articles` | Tin tức, legal KB |
-| `admin` | `/api/v1/admin` | Traces, eval runs, agent health, pipeline readiness |
-| `metrics` | `/metrics` | Prometheus exposition endpoint |
+| `AGENT_ROUTER_MODE` | `hybrid` | `rule`: keyword, `llm`: Gemini, `hybrid`: kết hợp |
+| `AGENT_REACT_MAX_ITERATIONS` | `2` | Số vòng ReAct tối đa mỗi specialist |
+| `AGENT_LLM_MONTHLY_BUDGET_USD` | `100` | Ngưỡng cảnh báo chi phí LLM |
 
-## 🕷 Crawler
+---
 
-Crawler dùng Playwright headless Chromium với stealth mode, retry, và parallel workers.
+## Data Pipeline & Crawler
+
+### Crawler
 
 ```powershell
-# Crawl URLs
+# URLs
 python -m crawler.sale.crawl_urls --pages 1 5 --output data/raw/sale_urls.csv --workers 4
-
-# Crawl details
-python -m crawler.sale.crawl_details --input data/raw/sale_urls.csv --output data/raw/sale_details.csv --workers 4 --limit 100
-
-# Tương tự cho rent, projects, news:
-python -m crawler.rent.crawl_urls ...
-python -m crawler.projects.crawl_urls ...
-python -m crawler.news.crawl_urls ...
+# Details
+python -m crawler.sale.crawl_details --input data/raw/sale_urls.csv --output data/raw/sale_details.csv --workers 4
+# Tương tự: crawler.rent / crawler.projects / crawler.news
 ```
 
-## 📥 Data Pipeline
+### Ingest
+
+Pipeline: **clean → enrich → upsert → chunk → embed (bge-m3) → index pgvector**
 
 ```powershell
-# Ingest listings
 python -m data_pipeline.ingestors.listings_ingestor --csv data/raw/sale_details.csv --batch-size 50
-
-# Ingest projects
 python -m data_pipeline.ingestors.projects_ingestor --csv data/raw/projects_details.csv --batch-size 25
-
-# Ingest news
-python -m data_pipeline.ingestors.news_ingestor --csv data/raw/news_articles.csv --batch-size 25
-
-# Ingest legal knowledge base
+python -m data_pipeline.ingestors.news_ingestor     --csv data/raw/news_articles.csv --batch-size 25
 python -m data_pipeline.ingestors.legal_kb_ingestor
 ```
 
-Pipeline thực hiện: **clean → enrich → upsert parent → chunk → embed → index**.
-
-## ⏰ Airflow
-
-Airflow có docker-compose riêng trong `airflow/`.
+### Airflow (lên lịch tự động)
 
 ```powershell
-# Chạy app stack trước để tạo network
-docker compose up -d postgres redis backend
-
-# Chạy Airflow
-cd airflow
-docker compose -f docker-compose.airflow.yml up -d --build
+docker compose up -d postgres redis backend   # tạo network trước
+cd airflow && docker compose -f docker-compose.airflow.yml up -d --build
 ```
 
-### Các DAG
-
-| DAG | Schedule | Mô tả |
+| DAG | Lịch | Mô tả |
 |---|---|---|
-| `daily_listings_dag` | 2:00 AM daily | Crawl + ingest sale/rent, mark inactive |
-| `weekly_projects_dag` | 3:00 AM Sunday | Crawl + ingest projects |
-| `weekly_news_dag` | 4:00 AM Sunday | Crawl + ingest news |
-| `monthly_legal_kb_dag` | 5:00 AM, 1st | Re-ingest legal KB |
+| `daily_listings_dag` | 2:00 AM | Crawl + ingest sale/rent |
+| `weekly_projects_dag` | CN 3:00 AM | Crawl + ingest dự án |
+| `weekly_news_dag` | CN 4:00 AM | Crawl + ingest tin tức |
+| `monthly_legal_kb_dag` | Ngày 1 5:00 AM | Re-ingest legal KB |
 
-## 🗄 Database
+---
 
-PostgreSQL 16 + pgvector extension.
+## Monitoring
 
-### Các bảng chính
+Prometheus + Grafana + AlertManager. Truy cập http://localhost:3001 (admin / admin).
+
+| Metric | Mô tả |
+|---|---|
+| `realestate_retrieval_latency_seconds` | Latency hybrid search (histogram) |
+| `realestate_chat_requests_total` | Số chat request |
+| `realestate_llm_cost_usd` | Chi phí LLM tháng hiện tại |
+| `realestate_chunks_total` | Số chunks đã index |
+| `realestate_pipeline_runs_total` | Pipeline runs theo DAG + status |
+
+Alert: backend/postgres/redis DOWN (critical), P95 latency >2s, LLM budget exceeded, no chat traffic 15 phút (warning).
+
+---
+
+## API Backend
+
+Tất cả endpoint dưới `/api/v1`. Xem đầy đủ tại http://localhost:8000/docs.
+
+| Router | Prefix | Mô tả |
+|---|---|---|
+| `auth` | `/api/v1/auth` | Đăng ký, đăng nhập, JWT |
+| `listings` | `/api/v1/listings` | CRUD, filter, sort, similar |
+| `market` | `/api/v1/market` | Thống kê giá theo khu vực |
+| `chat` | `/api/v1/chat` | Chatbot, sessions, history |
+| `projects` | `/api/v1/projects` | Dự án BĐS |
+| `articles` | `/api/v1/articles` | Tin tức, legal KB |
+| `preferences` | `/api/v1/preferences` | User memory |
+| `admin` | `/api/v1/admin` | Traces, eval runs, agent health |
+| `metrics` | `/metrics` | Prometheus endpoint |
+
+### Database — các bảng chính
 
 | Bảng | Mô tả |
 |---|---|
-| `users` | Tài khoản người dùng |
-| `listings` | Tin bán/thuê |
-| `projects` | Dự án BĐS |
-| `articles` | Tin tức + legal KB |
-| `chunks` | Semantic chunks + vector embedding (1024-dim) |
+| `listings` / `projects` / `articles` | Dữ liệu BĐS |
+| `chunks` | Semantic chunks + vector 1024-dim (HNSW) — canonical embedding store |
 | `chat_sessions` / `chat_messages` | Lịch sử chat |
-| `pipeline_runs` | Log các lần chạy pipeline |
-| `agent_traces` / `agent_trace_steps` | Observability traces |
-| `agent_llm_calls` / `agent_retrieval_events` | LLM & retrieval telemetry |
-| `eval_runs` / `eval_scores` | LLM judge evaluation |
-
-### Migration
+| `agent_traces` / `agent_llm_calls` / `agent_retrieval_events` | Observability |
+| `eval_runs` / `eval_scores` | LLM judge |
 
 ```powershell
 cd backend
-alembic upgrade head                # Apply migrations
-alembic revision --autogenerate -m "mô tả"  # Tạo migration mới
+alembic upgrade head                              # apply
+alembic revision --autogenerate -m "description" # tạo mới
+alembic heads                                     # kiểm tra sau khi merge branch
 ```
 
-## 🧪 Testing
+---
+
+## Testing
 
 ```powershell
-# Backend tests
-pytest backend/tests
+# Backend
+cd backend && python -m pytest tests -q
 
-# With coverage
-pytest backend/tests --cov=backend/app --cov=agent_service
+# Agent service (từ thư mục gốc)
+python -m pytest agent_service/tests -q
 
-# Specific file
-pytest backend/tests/test_chat_router_pipeline.py -v
-
-# Python syntax check
-python -m compileall backend/app agent_service data_pipeline
+# Syntax check
+python -m compileall backend/app agent_service pipeline_worker data_pipeline
 
 # Frontend
 cd frontend && npm run lint && npm run build
 ```
 
-## 🔧 Troubleshooting
+> Agent tests dùng httpx fake transport và LLM giả — không cần Gemini API key.
 
-| Vấn đề | Cách kiểm tra |
+---
+
+## Troubleshooting
+
+| Vấn đề | Cách xử lý |
 |---|---|
-| Backend không kết nối DB | `DATABASE_URL`: local là `localhost`, Docker là `postgres` |
-| `extension "vector" does not exist` | Dùng image `pgvector/pgvector:pg16`, chạy `CREATE EXTENSION IF NOT EXISTS vector` |
-| Chatbot không có sources | Kiểm tra `chunks` có data, `EMBEDDING_DIM=1024`, model BGE-M3 đã tải |
-| Agent Service không phản hồi | `curl -H "X-Internal-Agent-Key: $KEY" http://localhost:8100/internal/agent/health` |
-| Frontend gọi API lỗi | Backend health OK? `INTERNAL_API_URL` đúng host? |
-| Crawler bị block | Giảm `--workers`, thêm delay, kiểm tra selector |
-| Airflow không thấy network | Chạy `docker compose up -d` trước để tạo network `realestate_chatbot_v2_default` |
+| Backend không kết nối DB | `DATABASE_URL` host: `localhost` (local) vs `postgres` (Docker) |
+| `extension "vector" does not exist` | Dùng image `pgvector/pgvector:pg16`; chạy `CREATE EXTENSION IF NOT EXISTS vector;` |
+| Chatbot không trả về sources | Kiểm tra bảng `chunks` có data, `EMBEDDING_DIM=1024`, model BGE-M3 đã cache |
+| Agent Service không phản hồi | `curl -H "X-Internal-Agent-Key: dev-agent-internal-key" http://localhost:8100/internal/agent/health` |
+| Agent Service import error | Chạy từ **thư mục gốc** với `PYTHONPATH="$PWD;$PWD\backend"` |
+| Model BGE-M3 tải lại mỗi build | Tải model về host trước (bước 2), `docker-compose.yml` đã mount `~/.cache/huggingface` |
+| Crawler bị block | Giảm `--workers`, kiểm tra CSS selector còn đúng không |
+| Airflow không thấy network | Chạy `docker compose up -d` trước để tạo network |
+| Alembic nhiều heads | `alembic merge heads -m "merge"` |
 
-## 📚 Công Nghệ
+---
 
-| Lớp | Công nghệ |
-|---|---|
-| **Frontend** | Next.js 16, React 19, TypeScript, Tailwind CSS 4, Recharts |
-| **Backend** | FastAPI, SQLAlchemy async, Alembic, Pydantic v2 |
-| **AI/ML** | LangGraph, Google Gemini 2.0 Flash, BGE-M3, pgvector HNSW |
-| **Database** | PostgreSQL 16 + pgvector, Redis 7 |
-| **Crawler** | Playwright, playwright-stealth |
-| **Pipeline** | pandas, PyMuPDF, Airflow LocalExecutor |
-| **Monitoring** | Prometheus, Grafana, AlertManager |
-| **Infra** | Docker Compose, Nginx (frontend) |
-
-## 📖 Tài Liệu
+## Tài liệu thêm
 
 - `docs/pipeline.md` — Thiết kế pipeline crawl/index
-- `docs/multiagent-workflow.md` — Kiến trúc multi-agent (tham khảo)
-- `docs/implementation_plan.md` — Kế hoạch triển khai
-- `docs/guide_chay_datapipeline.md` — Hướng dẫn data pipeline (tiếng Việt)
-- `.claude/rules/` — Coding conventions cho AI assistants
+- `docs/multiagent-workflow.md` — Kiến trúc multi-agent
+- `docs/guide_chay_datapipeline.md` — Hướng dẫn data pipeline
+- `CLAUDE.md` — Hướng dẫn cho AI assistant

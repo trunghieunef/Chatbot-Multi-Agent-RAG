@@ -22,7 +22,7 @@ def test_agent_settings_defaults_are_internal_safe(monkeypatch):
 
     assert settings.AGENT_INTERNAL_KEY == "dev-agent-internal-key"
     assert settings.AGENT_ALLOW_DEV_INTERNAL_KEY is False
-    assert settings.GEMINI_MODEL == "gemini-2.0-flash"
+    assert settings.GEMINI_MODEL == "gemini-2.5-flash"
     assert settings.CHATBOT_TRACE_LEVEL == "full"
 
 

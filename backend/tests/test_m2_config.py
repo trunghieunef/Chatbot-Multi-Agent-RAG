@@ -19,7 +19,7 @@ def test_m2_settings_defaults(monkeypatch):
     assert settings.GEOCODER_RATE_LIMIT_SECONDS == 1.0
     assert settings.GOONG_API_KEY == ""
     assert settings.INTENT_EXTRACTOR == "rule"
-    assert settings.GEMINI_INTENT_MODEL == "gemini-2.0-flash"
+    assert settings.GEMINI_INTENT_MODEL == "gemini-2.5-flash"
 
 
 def test_debug_accepts_release_as_false():

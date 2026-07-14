@@ -62,11 +62,18 @@ _PROPERTY_TYPE_VOCAB_TTL = 3600.0
 
 
 async def _fetch_distinct_property_types() -> list[str]:
-    """Read the distinct, non-empty property_type values from the listings data."""
+    """Read the property_type taxonomy from the listings data.
+
+    The real taxonomy is ~10 short category names. Legacy rows may carry raw
+    title-like values ("Nhà riêng tại đường X…"); embedding those in the router
+    prompt once blew it up to ~40K tokens per call. Guard the prompt no matter
+    what is in the DB: keep only short, frequent values, hard-capped.
+    """
     query = text(
-        "SELECT DISTINCT property_type FROM listings "
+        "SELECT property_type FROM listings "
         "WHERE property_type IS NOT NULL AND btrim(property_type) <> '' "
-        "ORDER BY property_type"
+        "AND length(property_type) <= 30 "
+        "GROUP BY property_type ORDER BY COUNT(*) DESC LIMIT 15"
     )
     async with async_session() as session:
         result = await session.execute(query)
@@ -237,6 +244,11 @@ def _router_prompt(
         "- Query hỏi PHÁP LÝ, LUẬT, THỦ TỤC → chọn legal_advisor.",
         "- Query hỏi ĐẦU TƯ, LỢI NHUẬN, ROI → chọn investment_advisor.",
         "- Có thể chọn NHIỀU agent nếu query phức tạp.",
+        "- Query chỉ là CHÀO HỎI/XÃ GIAO (hi, chào, cảm ơn, tạm biệt...) → "
+        'intent "greeting", agents = [] (danh sách rỗng).',
+        "- Query KHÔNG LIÊN QUAN bất động sản (thời tiết, thể thao, nấu ăn, "
+        'lập trình, đời tư...) → intent "off_topic", agents = [] (danh sách rỗng), '
+        "confidence cao nếu chắc chắn.",
         "",
         "### Bộ lọc cần trích xuất (nếu có):",
         "- city: Tỉnh/Thành phố.",
@@ -252,7 +264,7 @@ def _router_prompt(
         "",
         "Trả về CHỈ MỘT JSON object (không markdown, không code fence) với định dạng:",
         "{",
-        '  "intent": "market_analysis|property_search|legal_advice|investment_advice|news|project|mixed",',
+        '  "intent": "market_analysis|property_search|legal_advice|investment_advice|news|project|mixed|greeting|off_topic",',
         '  "agents": ["agent_1", "agent_2"],',
         '  "confidence": 0.0-1.0,',
         '  "filters": {"city": "...", "district": "...", ...},',
@@ -323,6 +335,13 @@ async def route_request(
         return rule
 
     llm = await route_with_llm(state, client=client)
+    # Off-topic/greeting is a VALID verdict with empty agents — don't let the
+    # rule fallback (property_search) override it and run retrieval for "hi".
+    if (
+        llm.intent in ("greeting", "off_topic")
+        and llm.confidence >= settings.AGENT_LLM_CONFIDENCE_THRESHOLD
+    ):
+        return llm
     if settings.AGENT_ROUTER_MODE == "llm":
         if llm.confidence >= settings.AGENT_LLM_CONFIDENCE_THRESHOLD and llm.agents:
             return llm

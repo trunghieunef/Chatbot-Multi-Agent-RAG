@@ -13,6 +13,24 @@ if str(BACKEND) not in sys.path:
 from app.database import async_session
 
 
+def _district_bind(district: str) -> tuple[str, dict]:
+    """SQL clause + params matching a district by name OR bare number.
+
+    The market snapshots store HCM districts as bare numbers ("7", "10") while
+    users say "Quận 7"; the listings table stores "Quận 7". Match both: the full
+    string (LIKE %district%) OR the extracted number as an exact district value.
+    """
+    import re
+
+    num = re.search(r"\d+", district or "")
+    clause = "unaccent(district) ILIKE unaccent(:district)"
+    params: dict = {"district": f"%{district}%"}
+    if num:
+        clause = f"({clause} OR district = :district_num)"
+        params["district_num"] = num.group(0)
+    return clause, params
+
+
 def build_district_price_query(
     *,
     city: str,
@@ -36,8 +54,9 @@ def build_district_price_query(
         clauses.append("property_type ILIKE :property_type")
         params["property_type"] = f"%{property_type}%"
     if district:
-        clauses.append("unaccent(district) ILIKE unaccent(:district)")
-        params["district"] = f"%{district}%"
+        clause, dparams = _district_bind(district)
+        clauses.append(clause)
+        params.update(dparams)
 
     sql = (
         "SELECT district, COUNT(*) AS listings, "
@@ -68,8 +87,9 @@ def build_snapshot_district_price_query(
         clauses.append("property_type ILIKE :property_type")
         params["property_type"] = f"%{property_type}%"
     if district:
-        clauses.append("unaccent(district) ILIKE unaccent(:district)")
-        params["district"] = f"%{district}%"
+        clause, dparams = _district_bind(district)
+        clauses.append(clause)
+        params.update(dparams)
 
     sql = (
         "WITH selected_source AS ("

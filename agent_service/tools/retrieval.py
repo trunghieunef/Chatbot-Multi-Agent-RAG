@@ -37,6 +37,16 @@ class RetrievalTrace:
         )
 
 
+def _clamp_int(value: Any, *, default: int, lo: int, hi: int) -> int:
+    """Sanitize an LLM-provided integer arg (Gemini has sent rerank_to=0,
+    which turned into Cohere top_n=0 → 400 → empty results)."""
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return max(lo, min(parsed, hi))
+
+
 async def _run_hybrid_tool(
     *,
     query: str,
@@ -47,6 +57,8 @@ async def _run_hybrid_tool(
     top_k: int = 20,
     rerank_to: int = 5,
 ) -> list[dict[str, Any]]:
+    top_k = _clamp_int(top_k, default=20, lo=1, hi=50)
+    rerank_to = _clamp_int(rerank_to, default=5, lo=1, hi=top_k)
     started = time.perf_counter()
     try:
         results = await hybrid_search(

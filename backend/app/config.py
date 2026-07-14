@@ -30,7 +30,7 @@ class Settings(BaseSettings):
 
     # Google Gemini
     GEMINI_API_KEY: str = ""
-    GEMINI_MODEL: str = "gemini-2.0-flash"
+    GEMINI_MODEL: str = "gemini-2.5-flash"
     GEMINI_EMBEDDING_MODEL: str = "gemini-embedding-001"
     EMBEDDING_PROVIDER: str = "bge_m3"
     HF_EMBEDDING_MODEL: str = "BAAI/bge-m3"
@@ -57,7 +57,10 @@ class Settings(BaseSettings):
     # Internal Agent Service
     AGENT_SERVICE_URL: str = "http://localhost:8100"
     AGENT_INTERNAL_KEY: str = "dev-agent-internal-key"
-    AGENT_SERVICE_TIMEOUT_SECONDS: float = 45.0
+    # Must be >= the agent service's own AGENT_TOTAL_TIMEOUT_SECONDS, or this
+    # httpx client cuts a self-correction run (2 specialist passes) mid-stream
+    # before the `final` event, and the frontend shows a generic error.
+    AGENT_SERVICE_TIMEOUT_SECONDS: float = 95.0
     CHATBOT_AGENT_SERVICE_ENABLED: bool = True
     CHATBOT_LLM_JUDGE_ENABLED: bool = False
     CHATBOT_EVAL_ENABLED: bool = False
@@ -66,7 +69,7 @@ class Settings(BaseSettings):
     CHATBOT_MEMORY_ENABLED: bool = True
     CHATBOT_ADMIN_ENABLED: bool = True
     CHATBOT_TRACE_LEVEL: str = "full"
-    GEMINI_JUDGE_MODEL: str = "gemini-2.0-flash"
+    GEMINI_JUDGE_MODEL: str = "gemini-2.5-flash"
     OBSERVABILITY_ANON_RETENTION_DAYS: int = 30
     OBSERVABILITY_AUTH_RETENTION_DAYS: int = 90
     OBSERVABILITY_CLEANUP_ENABLED: bool = True
@@ -96,7 +99,10 @@ class Settings(BaseSettings):
 
     # Intent extraction
     INTENT_EXTRACTOR: str = "rule"                # 'rule' | 'gemini'
-    GEMINI_INTENT_MODEL: str = "gemini-2.0-flash"
+    GEMINI_INTENT_MODEL: str = "gemini-2.5-flash"
+    # Max concurrent enrich (intent LLM) calls per batch during ingest.
+    # ponytail: raise on a paid Gemini tier for faster re-embed; lower on 429s.
+    INTENT_MAX_CONCURRENCY: int = 10
 
     @field_validator("DEBUG", mode="before")
     @classmethod

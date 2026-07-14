@@ -8,6 +8,7 @@ from typing import Any
 from sqlalchemy import delete, select
 
 from app.models.agent_observability import (
+    AgentLLMCall,
     AgentRetrievalEvent,
     AgentTrace,
     AgentTraceStep,
@@ -191,7 +192,11 @@ def _fallback_retrieval_events(full_trace: dict[str, Any]) -> list[dict[str, Any
 
 
 def _retrieval_events(full_trace: dict[str, Any], steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    events = _retrieval_events_from_steps(steps)
+    # The agentic graph emits events directly under full_trace["retrieval_events"];
+    # older shapes hid them in steps / retrieval_plan, so keep those as fallbacks.
+    direct = full_trace.get("retrieval_events")
+    events = list(direct) if isinstance(direct, list) else []
+    events.extend(_retrieval_events_from_steps(steps))
     events.extend(_fallback_retrieval_events(full_trace))
     return events
 
@@ -294,6 +299,29 @@ async def persist_agent_observability(
                         else None
                     ),
                     metadata_json=_event_metadata(event),
+                )
+            )
+
+        await db.execute(
+            delete(AgentLLMCall).where(AgentLLMCall.request_id == request_id)
+        )
+        for call in full_trace.get("llm_calls", []):
+            if not isinstance(call, dict):
+                continue
+            db.add(
+                AgentLLMCall(
+                    request_id=request_id,
+                    node_name=str(call.get("node_name") or "unknown")[:120],
+                    model_name=str(call.get("model_name") or "unknown")[:120],
+                    latency_ms=_safe_float(call.get("latency_ms")),
+                    token_input_estimate=call.get("token_input_estimate"),
+                    token_output_estimate=call.get("token_output_estimate"),
+                    status=str(call.get("status") or "success")[:30],
+                    error_message=call.get("error_message"),
+                    metadata_json=_truncate_json(
+                        {k: v for k, v in call.items()
+                         if k not in {"node_name", "model_name", "latency_ms", "status"}}
+                    ),
                 )
             )
 

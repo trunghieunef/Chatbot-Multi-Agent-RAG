@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models.agent_observability import (
+    AgentLLMCall,
     AgentRetrievalEvent,
     AgentTrace,
     AgentTraceStep,
@@ -126,11 +127,19 @@ async def get_chat_trace(
             .order_by(EvalRun.created_at.desc())
         )
     ).scalars().all()
+    llm_calls = (
+        await db.execute(
+            select(AgentLLMCall)
+            .where(AgentLLMCall.request_id == request_id)
+            .order_by(AgentLLMCall.id)
+        )
+    ).scalars().all()
 
     payload = serialize_model_public_columns(trace)
     payload["steps"] = _serialize_rows(steps)
     payload["retrieval_events"] = _serialize_rows(retrieval_events)
     payload["eval_runs"] = _serialize_rows(eval_runs)
+    payload["llm_calls"] = _serialize_rows(llm_calls)
     return payload
 
 

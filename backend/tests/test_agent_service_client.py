@@ -65,13 +65,13 @@ def test_agent_service_settings_defaults(monkeypatch):
 
     assert settings.AGENT_SERVICE_URL == "http://localhost:8100"
     assert settings.AGENT_INTERNAL_KEY == "dev-agent-internal-key"
-    assert settings.AGENT_SERVICE_TIMEOUT_SECONDS == 45.0
+    assert settings.AGENT_SERVICE_TIMEOUT_SECONDS == 95.0
     assert settings.CHATBOT_AGENT_SERVICE_ENABLED is True
     assert settings.CHATBOT_LLM_JUDGE_ENABLED is False
     assert settings.CHATBOT_MEMORY_ENABLED is True
     assert settings.CHATBOT_ADMIN_ENABLED is True
     assert settings.CHATBOT_TRACE_LEVEL == "full"
-    assert settings.GEMINI_JUDGE_MODEL == "gemini-2.0-flash"
+    assert settings.GEMINI_JUDGE_MODEL == "gemini-2.5-flash"
     assert settings.ANON_CHAT_DAILY_LIMIT == 20
     assert settings.AUTH_CHAT_DAILY_LIMIT == 200
 
