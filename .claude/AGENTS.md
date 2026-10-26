@@ -36,20 +36,20 @@ Plans nằm trong `docs/superpowers/plans/`:
 batdongsan.com.vn
         │
         ▼
-crawler/sale/crawl_urls.py  ──►  data/raw/listing_urls.csv
-crawler/sale/crawl_details.py ──► data/raw/listing_details.csv
+etl/crawler/sale/crawl_urls.py  ──►  data/raw/listing_urls.csv
+etl/crawler/sale/crawl_details.py ──► data/raw/listing_details.csv
         │
         ▼
-data_pipeline/clean.py          (row_to_listing — chuẩn hóa giá/diện tích/location)
+etl/data_pipeline/clean.py          (row_to_listing — chuẩn hóa giá/diện tích/location)
         │
         ▼
-data_pipeline/chunk.py          (4 chunk types: overview/description/location/intent_tags)
+etl/data_pipeline/chunk.py          (4 chunk types: overview/description/location/intent_tags)
         │
         ▼
-data_pipeline/embed.py          (GeminiEmbedder, gemini-embedding-001, output_dim=768)
+etl/data_pipeline/embed.py          (GeminiEmbedder, gemini-embedding-001, output_dim=768)
         │
         ▼
-data_pipeline/ingestors/listings_ingestor.py
+etl/data_pipeline/ingestors/listings_ingestor.py
         │
         ├─► PostgreSQL `listings`  (upsert by product_id)
         └─► PostgreSQL `chunks`    (parent_type='listing', embedding vector(768), HNSW index)
@@ -105,7 +105,7 @@ User Query
 
 ```
 RealEstate_Chatbot_v2/
-├── backend/                          # FastAPI Backend
+├── services/backend/                          # FastAPI Backend
 │   ├── app/                          # Backend v2 — USE THIS
 │   │   ├── main.py                   # FastAPI app + lifespan + CORS
 │   │   ├── config.py                 # Pydantic Settings (env vars)
@@ -124,13 +124,11 @@ RealEstate_Chatbot_v2/
 │   │   └── versions/
 │   │       └── 20260525_0001_m1_foundation.py   # ★ articles + chunks + HNSW
 │   ├── tests/                        # ★ pytest test suite
-│   │   ├── conftest.py               # sys.path fix (REPO_ROOT + BACKEND_ROOT)
 │   │   └── test_*.py
 │   ├── requirements.txt
 │   └── Dockerfile
-│   └── main.py                       # ⚠ Legacy CSV backend — DO NOT USE
 │
-├── crawler/                          # ★ M1 — replaces old Crawl/
+├── etl/crawler/                          # ★ M1 — replaces old Crawl/
 │   ├── core/
 │   │   ├── csv_writer.py             # append_csv, read_done_ids, merge_tmp_files
 │   │   └── parser.py                 # text_or_empty, attribute_or_empty
@@ -138,16 +136,15 @@ RealEstate_Chatbot_v2/
 │       ├── crawl_urls.py             # 8-worker parallel URL listing crawler
 │       └── crawl_details.py          # Detail parser, --since flag for incremental
 │
-├── data_pipeline/                    # ★ M1 — ETL stages
+├── etl/data_pipeline/                    # ★ M1 — ETL stages
 │   ├── clean.py                      # row_to_listing + 7 parser helpers
 │   ├── chunk.py                      # build_listing_chunks (4 chunk types)
 │   ├── embed.py                      # GeminiEmbedder (retry, batch, 768-dim config)
 │   ├── ingestors/
 │   │   └── listings_ingestor.py      # CLI: --csv → upsert + chunk + embed
-│   └── load_db.py                    # ⚠ Legacy loader
 │
 ├── chatbot/                          # ★ M1 — Multi-agent RAG (replaces RAG/)
-│   ├── config.py                     # Mirrors backend/app/config.py
+│   ├── config.py                     # Mirrors shared/config.py
 │   ├── state.py                      # ChatState (LangGraph)
 │   ├── graph.py                      # StateGraph workflow
 │   ├── tools/
@@ -159,7 +156,7 @@ RealEstate_Chatbot_v2/
 │       ├── legal_advisor.py          # placeholder (M4)
 │       └── investment_advisor.py     # placeholder
 │
-├── frontend/                         # Next.js 14+
+├── services/frontend/                         # Next.js 14+
 │   ├── app/                          # App Router pages
 │   ├── components/                   # Header, Footer, ListingCard, ListingGrid, FilterPanel, ChatWidget
 │   └── lib/                          # api.ts, types.ts, utils.ts
@@ -180,7 +177,6 @@ RealEstate_Chatbot_v2/
 ├── Crawl/                            # ⚠ Legacy crawler scripts (reference only)
 ├── RAG/                              # ⚠ Legacy RAG scaffold (replaced by chatbot/)
 ├── FrontEnd_old/                     # ⚠ Legacy HTML/CSS/JS (reference only)
-├── batdongsancom-crawler/            # Crawler utils (clean, heatmap)
 ├── notebooks/                        # 01.EDA.ipynb
 ├── docker-compose.yml
 ├── requirements.txt
@@ -278,7 +274,7 @@ NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
 
 - **Framework**: FastAPI async/await
 - **ORM**: SQLAlchemy 2.0 async (`asyncpg` driver)
-- **Validation**: Pydantic v2 schemas trong `backend/app/schemas/`
+- **Validation**: Pydantic v2 schemas trong `services/backend/app/schemas/`
 - **Config**: Pydantic Settings từ `.env`
 - **API versioning**: prefix `/api/v1/`
 - **Type hints**: bắt buộc cho mọi function signature
@@ -289,8 +285,8 @@ NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
 
 - **Stages**: clean → chunk → embed → ingest, mỗi stage là module độc lập
 - **TDD**: viết test trước, run để confirm fail, implement, run để pass, commit
-- **Tests**: `backend/tests/test_*.py` với pytest + pytest-asyncio
-- **Imports**: `data_pipeline.*` import được từ repo root nhờ `backend/tests/conftest.py` chèn cả `REPO_ROOT` và `BACKEND_ROOT` vào `sys.path`
+- **Tests**: `services/backend/tests/test_*.py` với pytest + pytest-asyncio
+- **Imports**: mọi package import từ gốc repo với đường dẫn đầy đủ (`etl.data_pipeline.*`, `shared.*`, `services.*`); `pytest.ini` đặt `pythonpath = .`
 
 ### Frontend (TypeScript/React)
 
@@ -315,7 +311,7 @@ NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
 - **Tool**: Playwright + playwright-stealth
 - **Parallel**: 8 workers cho URL listing crawl
 - **Output**: CSV → `data/raw/`
-- **Helpers**: dùng `crawler.core.csv_writer` (`append_csv`, `read_done_ids`) và `crawler.core.parser`
+- **Helpers**: dùng `etl.crawler.core.csv_writer` (`append_csv`, `read_done_ids`) và `etl.crawler.core.parser`
 - **Anti-detection**: stealth, random delays, UA rotation
 - **Incremental**: `--since` flag trong `crawl_details.py` để skip product_id đã có
 
@@ -399,26 +395,26 @@ GET  /api/v1/health
 ## Trạng thái hiện tại
 
 ### ✅ Đã hoàn thành (M1)
-- `crawler/core/` shared helpers + `crawler/sale/` URL + detail crawlers (refactor từ `Crawl/`)
-- `data_pipeline/clean.py` — 8 parser/normalizer functions, rent vs sale price unit
-- `data_pipeline/chunk.py` — 4 semantic chunk types (overview/description/location/intent_tags) với rule-based intent tagging
-- `data_pipeline/embed.py` — `GeminiEmbedder` với retry, batch, explicit `output_dimensionality=768`
-- `data_pipeline/ingestors/listings_ingestor.py` — CLI upsert + chunk + embed
+- `etl/crawler/core/` shared helpers + `etl/crawler/sale/` URL + detail crawlers (refactor từ `Crawl/`)
+- `etl/data_pipeline/clean.py` — 8 parser/normalizer functions, rent vs sale price unit
+- `etl/data_pipeline/chunk.py` — 4 semantic chunk types (overview/description/location/intent_tags) với rule-based intent tagging
+- `etl/data_pipeline/embed.py` — `GeminiEmbedder` với retry, batch, explicit `output_dimensionality=768`
+- `etl/data_pipeline/ingestors/listings_ingestor.py` — CLI upsert + chunk + embed
 - Alembic migration `20260525_0001` — tạo `articles` + `chunks` (parent polymorphic) + HNSW
 - `chatbot/tools/hybrid_search.py` — 4-stage retrieval, Cohere fallback
 - `chatbot/agents/property_search.py` — async LangGraph node gọi hybrid_search
-- Test suite `backend/tests/` (pytest + pytest-asyncio)
+- Test suite `services/backend/tests/` (pytest + pytest-asyncio)
 - PR #1: `m1-foundation` → `demo`
 
 ### 🚧 Đang triển khai (M2 — branch `m2-multi-source`)
 13 tasks theo `docs/superpowers/plans/2026-05-25-m2-multi-source-pipeline.md`:
 - Geocoding config (Nominatim/Goong) + intent extraction config
-- Shared `crawler/core/listing_detail_parser.py` cho sale + rent
-- `crawler/rent/` package
-- `data_pipeline/enrich.py` — `NominatimGeocoder` + `GeminiIntentExtractor`
+- Shared `etl/crawler/core/listing_detail_parser.py` cho sale + rent
+- `etl/crawler/rent/` package
+- `etl/data_pipeline/enrich.py` — `NominatimGeocoder` + `GeminiIntentExtractor`
 - Listings ingestor: thêm enrichment pass (lat/lon + intent_tags)
-- `crawler/projects/` + `data_pipeline/ingestors/projects_ingestor.py`
-- `crawler/news/` + `data_pipeline/ingestors/news_ingestor.py`
+- `etl/crawler/projects/` + `etl/data_pipeline/ingestors/projects_ingestor.py`
+- `etl/crawler/news/` + `etl/data_pipeline/ingestors/news_ingestor.py`
 - Hybrid search dispatch theo `parent_type` (listing/project/article)
 - `chatbot/tools/market_stats.py` + wire market_analysis agent
 - Property search forwards `listing_type` filter
@@ -440,14 +436,13 @@ docker-compose up -d postgres redis
 
 ### Chạy migrations
 ```bash
-cd backend
+cd services/backend
 alembic upgrade head
 ```
 
 ### Backend dev server
 ```bash
-cd backend
-uvicorn app.main:app --reload --port 8000
+uvicorn services.backend.app.main:app --reload --port 8000
 ```
 
 ### Frontend
@@ -460,31 +455,28 @@ npm run dev    # http://localhost:3000
 ### Pipeline (M1)
 ```bash
 # Crawl
-python -m crawler.sale.crawl_urls --pages 1 5 --output data/raw/listing_urls.csv
-python -m crawler.sale.crawl_details --input data/raw/listing_urls.csv --output data/raw/listing_details.csv
+python -m etl.crawler.sale.crawl_urls --pages 1 5 --output data/raw/listing_urls.csv
+python -m etl.crawler.sale.crawl_details --input data/raw/listing_urls.csv --output data/raw/listing_details.csv
 
 # Ingest (clean + chunk + embed + upsert)
-python -m data_pipeline.ingestors.listings_ingestor --csv data/raw/listing_details.csv --batch-size 50
+python -m etl.data_pipeline.ingestors.listings_ingestor --csv data/raw/listing_details.csv --batch-size 50
 ```
 
 ### Tests
 ```bash
-cd backend
-python -m pytest tests -q
+python -m pytest services/backend/tests -q
 ```
 
 ### Verification
 ```bash
-python -m compileall backend/app chatbot data_pipeline crawler
+python -m compileall services/backend/app chatbot data_pipeline crawler
 ```
 
 ---
 
 ## Lưu ý quan trọng
 
-1. **Hai backend**: `backend/main.py` (legacy CSV) vs `backend/app/main.py` (v2). **Luôn dùng `backend/app/main.py`**.
-
-2. **Legacy folders**: `RAG/`, `Crawl/`, `FrontEnd_old/`, `backend/main.py`, `data_pipeline/load_db.py` — giữ để tham khảo, KHÔNG dùng cho dev mới. Code mới đi vào `chatbot/`, `crawler/`, `data_pipeline/{clean,chunk,embed,ingestors}.py`, `backend/app/`.
+2. **Legacy folders**: `RAG/`, `Crawl/`, `FrontEnd_old/` — đã xoá; legacy CSV backend, `load_db.py`, `batdongsancom-crawler/` cũng đã xoá (xem git history). Trước đây giữ để tham khảo, KHÔNG dùng cho dev mới. Code mới đi vào `chatbot/`, `etl/crawler/`, `etl/data_pipeline/{clean,chunk,embed,ingestors}.py`, `services/backend/app/`.
 
 3. **Embedding model**: Bắt buộc `gemini-embedding-001` với `output_dimensionality=768` (cấu hình qua `types.EmbedContentConfig`). Default model trả 3072 dims, không khớp `Vector(768)` schema. Tên model `text-embedding-004` hoặc `gemini-embedding-2` đều SAI / không tồn tại trên API hiện tại.
 

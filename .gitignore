@@ -64,9 +64,8 @@ data/knowledge/ingested/*
 # ─── Agent ────────────────────────────────────────────────────
 .agent/
 
-batdongsancom-crawler/
 # Anchored to repo root: ignore the legacy top-level chatbot/ package only,
-# NOT nested dirs like frontend/components/chatbot/ (which must stay tracked).
+# NOT nested dirs like services/frontend/components/chatbot/ (which must stay tracked).
 /chatbot/
 
 report/

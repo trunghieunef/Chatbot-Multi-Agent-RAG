@@ -1,15 +1,15 @@
 ---
 paths:
-  - agent_service/**/*
-  - backend/app/routers/chat.py
-  - backend/app/services/chatbot/**/*
-  - backend/app/services/agent_service/**/*
+  - services/agent_service/**/*
+  - services/backend/app/routers/chat.py
+  - services/backend/app/services/chatbot/**/*
+  - services/backend/app/services/agent_service/**/*
 ---
 # RAG Multi-Agent System
 
 ## Architecture
 
-- Framework: LangGraph (StateGraph) in `agent_service/`.
+- Framework: LangGraph (StateGraph) in `services/agent_service/`.
 - LLM: Google Gemini 2.5 Flash via `google-genai` SDK.
 - Vector store: **pgvector only** (PostgreSQL). No ChromaDB.
 - Embeddings: **BAAI/bge-m3**, dimension **1024** (local HuggingFace model).
@@ -41,7 +41,7 @@ supervisor (route: classify intent, select agents, rewrite query, extract filter
 - `synthesize` validates grounding (claims' evidence ⊆ retrieved evidence) and falls
   back to deterministic concatenation on violation.
 
-Key graph files in `agent_service/graph/`:
+Key graph files in `services/agent_service/graph/`:
 - `agentic_workflow.py` — graph builder + all nodes (supervisor, specialist, grade,
   rewrite, synthesize), `run_agentic_graph[_stream]`, tool registry.
 - `router.py` — intent classification + agent selection + query rewrite (one LLM call).
@@ -53,7 +53,7 @@ Present but **not wired into the runtime graph** (imported only by their own tes
 treat as dead/reference code, do not assume they run): `query_understanding.py`,
 `committee.py`, `memory_extraction.py`, `investment_model.py`, `blackboard.py`.
 
-## Agents (`agent_service/agents/`)
+## Agents (`services/agent_service/agents/`)
 
 - `base.py` — `BaseAgent`: ReAct loop, tool calling, prompt building, observability hooks.
 - `fc_runner.py` — function-calling runner used by agents for tool execution.
@@ -65,7 +65,7 @@ treat as dead/reference code, do not assume they run): `query_understanding.py`,
 - `project_agent.py` — real estate project search.
 - `news_agent.py` — news/article search.
 
-## Tools (`agent_service/tools/`)
+## Tools (`services/agent_service/tools/`)
 
 - `registry.py` — `ToolRegistry` with permission checks (per-agent `allowed_for`) and retry wrappers. One registry instance per graph run, built by `build_default_tool_registry()`.
 - `retrieval.py` — hybrid search: SQL filter → pgvector kNN + full-text → rerank → resolve evidence.
@@ -83,9 +83,9 @@ treat as dead/reference code, do not assume they run): `query_understanding.py`,
   `None` (it deadlocks across event loops). Streaming therefore rebuilds final state by
   merging stream updates, not from a checkpoint.
 - Streaming emits SSE node events when `AGENT_STREAM_ENABLED=true`.
-- `agent_service/contracts.py` defines all inter-service data models (AgentChatRequest, AgentChatResponse, Evidence, AgentSource, etc.). Note: `AgentSource.score` (not `rerank_score`) carries the rerank/relevance score that `grade` reads.
+- `services/agent_service/contracts.py` defines all inter-service data models (AgentChatRequest, AgentChatResponse, Evidence, AgentSource, etc.). Note: `AgentSource.score` (not `rerank_score`) carries the rerank/relevance score that `grade` reads.
 
-## Key Feature Flags (`agent_service/config.py`)
+## Key Feature Flags (`services/agent_service/config.py`)
 
 | Flag | Default | Effect |
 |------|---------|--------|
@@ -102,7 +102,7 @@ treat as dead/reference code, do not assume they run): `query_understanding.py`,
 | `AGENT_GRADE_MIN_SCORE` | `0.2` | `grade` retries when best `AgentSource.score` is below this |
 | `AGENT_MAX_CORRECTION_ROUNDS` | `1` | Max grade→rewrite retry rounds (self-correction loop cap) |
 
-## Backend Chat Plumbing (`backend/app/services/chatbot/`)
+## Backend Chat Plumbing (`services/backend/app/services/chatbot/`)
 
 Distinct from the agent graph — this is orchestration on the backend side:
 - `context.py` — assemble conversation context from DB history.
@@ -114,6 +114,6 @@ Distinct from the agent graph — this is orchestration on the backend side:
 
 - All chatbot responses must be in Vietnamese.
 - Always include sources/citations when available.
-- Agent tests in `agent_service/tests/` use a fake LLM transport (no real Gemini calls).
+- Agent tests in `services/agent_service/tests/` use a fake LLM transport (no real Gemini calls).
 - The backend Docker image does not install `agent_service`; use the mirrored contracts in
-  `backend/app/services/agent_service/contracts.py` for backend runtime code.
+  `services/backend/app/services/agent_service/contracts.py` for backend runtime code.

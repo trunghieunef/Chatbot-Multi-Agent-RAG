@@ -177,45 +177,42 @@ python -m venv .venv
 .\.venv\Scripts\Activate.ps1        # Windows
 # source .venv/bin/activate          # Linux / macOS
 pip install -r requirements.txt
-cd backend && pip install -r requirements.txt && cd ..
+pip install -r services/backend/requirements.txt
 ```
 
 ### Bước 3 — Apply database migrations
 
 ```powershell
-cd backend
+cd services/backend
 alembic upgrade head
-cd ..
+cd ../..
 ```
 
 ### Bước 4 — Chạy Agent Service
 
-Chạy từ **thư mục gốc** (để `agent_service.*` imports hoạt động):
+Mọi lệnh chạy từ **thư mục gốc** — tất cả import đều bắt đầu từ gốc repo (`shared.*`, `services.*`, `etl.*`):
 
 ```powershell
-$env:PYTHONPATH = "$PWD;$PWD\backend"
 $env:AGENT_ALLOW_DEV_INTERNAL_KEY = "true"
-uvicorn agent_service.main:app --reload --port 8100
+uvicorn services.agent_service.main:app --reload --port 8100
 ```
 
 ### Bước 5 — Chạy Pipeline Worker
 
 ```powershell
-$env:PYTHONPATH = "$PWD"
-uvicorn pipeline_worker.main:app --reload --port 8200
+uvicorn services.pipeline_worker.main:app --reload --port 8200
 ```
 
 ### Bước 6 — Chạy Backend
 
 ```powershell
-cd backend
-uvicorn app.main:app --reload --port 8000
+uvicorn services.backend.app.main:app --reload --port 8000
 ```
 
 ### Bước 7 — Chạy Frontend
 
 ```powershell
-cd frontend && npm install && npm run dev
+cd services/frontend && npm install && npm run dev
 ```
 
 Truy cập http://localhost:3000.
@@ -224,7 +221,7 @@ Truy cập http://localhost:3000.
 
 ## Biến môi trường
 
-Tất cả biến đọc từ file `.env` ở thư mục gốc. Xem chi tiết tại `backend/app/config.py` và `agent_service/config.py`.
+Tất cả biến đọc từ file `.env` ở thư mục gốc. Xem chi tiết tại `shared/config.py` và `services/agent_service/config.py`.
 
 ### Bắt buộc
 
@@ -272,7 +269,9 @@ Tất cả biến đọc từ file `.env` ở thư mục gốc. Xem chi tiết t
 
 ```
 RealEstate_Chatbot_v2/
-├── agent_service/          # LangGraph multi-agent RAG service (:8100)
+├── shared/                 # Code dùng chung: config, database, models/ (ORM), rag/ (hybrid search, embeddings)
+│
+├── services/agent_service/          # LangGraph multi-agent RAG service (:8100)
 │   ├── agents/             # 6 specialist agents
 │   ├── graph/              # StateGraph: supervisor → specialist → grade → rewrite → synthesize
 │   ├── tools/              # Hybrid retrieval, market stats, readiness
@@ -280,28 +279,27 @@ RealEstate_Chatbot_v2/
 │   ├── evaluation/         # LLM-as-judge (5 metrics)
 │   └── contracts.py        # AgentChatRequest/Response (mirror'd in backend)
 │
-├── backend/                # FastAPI public API (:8000)
+├── services/backend/                # FastAPI public API (:8000)
 │   ├── app/
 │   │   ├── main.py         # Entrypoint
-│   │   ├── models/         # ORM: User, Listing, Project, Article, Chunk, Chat...
 │   │   ├── routers/        # auth, chat, listings, market, projects, articles, admin, metrics
 │   │   └── services/       # agent_service client, chatbot orchestrator
 │   └── alembic/            # Migrations
 │
-├── frontend/               # Next.js 16 App Router (:3000)
+├── services/frontend/               # Next.js 16 App Router (:3000)
 │   ├── app/                # /, /nha-dat-ban, /thi-truong, /dang-nhap, /admin
 │   ├── components/         # ChatWidget, ListingCard, FilterPanel, AdminDashboard
 │   └── lib/                # api.ts, types.ts
 │
-├── pipeline_worker/        # ETL service (:8200)
-├── crawler/                # Playwright crawlers: sale, rent, projects, news
-├── data_pipeline/          # clean → chunk → embed → ingest
-├── airflow/                # Airflow DAGs (docker-compose riêng)
+├── services/pipeline_worker/        # ETL service (:8200)
+├── etl/crawler/                # Playwright crawlers: sale, rent, projects, news
+├── etl/data_pipeline/          # clean → chunk → embed → ingest
+├── etl/airflow/                # Airflow DAGs (docker-compose riêng)
 ├── infra/                  # Prometheus, Grafana, AlertManager, Nginx configs
 └── docker-compose.yml      # Full stack: 13 services
 ```
 
-> `backend/main.py` là **legacy** — không dùng. Entrypoint chính là `backend/app/main.py`.
+> Mọi import Python đi từ gốc repo với đường dẫn đầy đủ (vd. `services.backend.app.routers.chat`); `pytest.ini` đặt `pythonpath = .`.
 
 ---
 
@@ -355,10 +353,10 @@ Graph state được checkpoint vào SQLite (`AGENT_CHECKPOINT_PATH`). Streaming
 
 ```powershell
 # URLs
-python -m crawler.sale.crawl_urls --pages 1 5 --output data/raw/sale_urls.csv --workers 4
+python -m etl.crawler.sale.crawl_urls --pages 1 5 --output data/raw/sale_urls.csv --workers 4
 # Details
-python -m crawler.sale.crawl_details --input data/raw/sale_urls.csv --output data/raw/sale_details.csv --workers 4
-# Tương tự: crawler.rent / crawler.projects / crawler.news
+python -m etl.crawler.sale.crawl_details --input data/raw/sale_urls.csv --output data/raw/sale_details.csv --workers 4
+# Tương tự: etl.crawler.rent / etl.crawler.projects / etl.crawler.news
 ```
 
 ### Ingest
@@ -366,10 +364,10 @@ python -m crawler.sale.crawl_details --input data/raw/sale_urls.csv --output dat
 Pipeline: **clean → enrich → upsert → chunk → embed (bge-m3) → index pgvector**
 
 ```powershell
-python -m data_pipeline.ingestors.listings_ingestor --csv data/raw/sale_details.csv --batch-size 50
-python -m data_pipeline.ingestors.projects_ingestor --csv data/raw/projects_details.csv --batch-size 25
-python -m data_pipeline.ingestors.news_ingestor     --csv data/raw/news_articles.csv --batch-size 25
-python -m data_pipeline.ingestors.legal_kb_ingestor
+python -m etl.data_pipeline.ingestors.listings_ingestor --csv data/raw/sale_details.csv --batch-size 50
+python -m etl.data_pipeline.ingestors.projects_ingestor --csv data/raw/projects_details.csv --batch-size 25
+python -m etl.data_pipeline.ingestors.news_ingestor     --csv data/raw/news_articles.csv --batch-size 25
+python -m etl.data_pipeline.ingestors.legal_kb_ingestor
 ```
 
 ### Airflow (lên lịch tự động)
@@ -400,7 +398,7 @@ Prometheus + Grafana + AlertManager. Truy cập http://localhost:3001 (admin / a
 | `realestate_chunks_total` | Số chunks đã index |
 | `realestate_pipeline_runs_total` | Pipeline runs theo DAG + status |
 
-Alert: backend/postgres/redis DOWN (critical), P95 latency >2s, LLM budget exceeded, no chat traffic 15 phút (warning).
+Alert: services/backend/postgres/redis DOWN (critical), P95 latency >2s, LLM budget exceeded, no chat traffic 15 phút (warning).
 
 ---
 
@@ -431,7 +429,7 @@ Tất cả endpoint dưới `/api/v1`. Xem đầy đủ tại http://localhost:8
 | `eval_runs` / `eval_scores` | LLM judge |
 
 ```powershell
-cd backend
+cd services/backend
 alembic upgrade head                              # apply
 alembic revision --autogenerate -m "description" # tạo mới
 alembic heads                                     # kiểm tra sau khi merge branch
@@ -443,16 +441,16 @@ alembic heads                                     # kiểm tra sau khi merge bra
 
 ```powershell
 # Backend
-cd backend && python -m pytest tests -q
+python -m pytest services/backend/tests -q
 
 # Agent service (từ thư mục gốc)
-python -m pytest agent_service/tests -q
+python -m pytest services/agent_service/tests -q
 
 # Syntax check
-python -m compileall backend/app agent_service pipeline_worker data_pipeline
+python -m compileall shared services/backend/app services/agent_service services/pipeline_worker etl
 
 # Frontend
-cd frontend && npm run lint && npm run build
+cd services/frontend && npm run lint && npm run build
 ```
 
 > Agent tests dùng httpx fake transport và LLM giả — không cần Gemini API key.
@@ -467,7 +465,7 @@ cd frontend && npm run lint && npm run build
 | `extension "vector" does not exist` | Dùng image `pgvector/pgvector:pg16`; chạy `CREATE EXTENSION IF NOT EXISTS vector;` |
 | Chatbot không trả về sources | Kiểm tra bảng `chunks` có data, `EMBEDDING_DIM=1024`, model BGE-M3 đã cache |
 | Agent Service không phản hồi | `curl -H "X-Internal-Agent-Key: dev-agent-internal-key" http://localhost:8100/internal/agent/health` |
-| Agent Service import error | Chạy từ **thư mục gốc** với `PYTHONPATH="$PWD;$PWD\backend"` |
+| `ModuleNotFoundError: shared` / `services` | Chạy lệnh từ **thư mục gốc** repo (Alembic: từ `services/backend`) |
 | Model BGE-M3 tải lại mỗi build | Tải model về host trước (bước 2), `docker-compose.yml` đã mount `~/.cache/huggingface` |
 | Crawler bị block | Giảm `--workers`, kiểm tra CSS selector còn đúng không |
 | Airflow không thấy network | Chạy `docker compose up -d` trước để tạo network |

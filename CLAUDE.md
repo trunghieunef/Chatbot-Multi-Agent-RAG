@@ -25,23 +25,35 @@ Browser ──► frontend (Next.js, :3000)
         pipeline-worker (FastAPI, :8200)      crawl/clean/chunk/embed/ingest jobs (internal only)
 ```
 
-- **backend/app/** — public `/api/v1` API. The chat router (`backend/app/routers/chat.py`) handles
+- **services/backend/app/** — public `/api/v1` API. The chat router (`services/backend/app/routers/chat.py`) handles
   auth, quota, abuse guarding, conversation context/memory, and session persistence, then calls the
   agent service via `app/services/agent_service/client.py` (`AgentServiceClient`). It does NOT
   import the agent graph. `app/services/chatbot/` is backend-side chat plumbing (context, memory,
   quota, abuse_guard) — distinct from the agent graph.
-- **agent_service/** — standalone service that owns the LangGraph agentic RAG graph. Authenticated
+- **services/agent_service/** — standalone service that owns the LangGraph agentic RAG graph. Authenticated
   by the shared `X-Internal-Agent-Key`. See "Agent service internals" below.
-- **pipeline_worker/** — standalone service exposing `/internal/pipeline/*` endpoints that invoke
-  the `crawler/` and `data_pipeline/` modules as jobs (crawl, CSV ingest, chunk cleanup,
+- **services/pipeline_worker/** — standalone service exposing `/internal/pipeline/*` endpoints that invoke
+  the `etl/crawler/` and `etl/data_pipeline/` modules as jobs (crawl, CSV ingest, chunk cleanup,
   maintenance).
-- **frontend/** — Next.js 16 App Router, React 19, Tailwind v4. See `frontend/CLAUDE.md`.
+- **services/frontend/** — Next.js 16 App Router, React 19, Tailwind v4. See `services/frontend/CLAUDE.md`.
+- **shared/** — code used by more than one Python service: `config.py` (Pydantic Settings),
+  `database.py` (async engine, `get_db`), `models/` (SQLAlchemy ORM), `rag/` (hybrid search,
+  bge-m3 embeddings, Redis JSON cache). Services import it as `shared.*`; it never imports a service.
+- **etl/** — `crawler/` (Playwright scrapers), `data_pipeline/` (clean → chunk → embed → ingest),
+  `airflow/` (DAGs, separate compose file).
 
 All three Python services read the **single root `.env`** and share the same PostgreSQL/Redis.
 
-### Agent service internals (`agent_service/`)
+### Imports: one root
 
-The graph entry point is `agent_service/graph/agentic_workflow.py`:
+Every Python package is imported from the **repo root** with its full dotted path —
+`shared.models`, `services.backend.app.routers.chat`, `services.agent_service.graph.router`,
+`etl.data_pipeline.ingestors.listings_ingestor`. Run commands from the repo root; `pytest.ini`
+sets `pythonpath = .` and Dockerfiles set `PYTHONPATH=/app`. Do not add `sys.path` hacks.
+
+### Agent service internals (`services/agent_service/`)
+
+The graph entry point is `services/agent_service/graph/agentic_workflow.py`:
 
 ```
 query_understanding → router (classify intent + select agents)
@@ -67,25 +79,25 @@ Key pieces:
 - `evaluation/judge.py` — LLM-as-judge scoring, exposed at `/internal/agent/evaluate`.
 - State is checkpointed to SQLite (`AGENT_CHECKPOINT_PATH`, default `data/checkpoints/agent_graph.db`).
 - Streaming emits SSE node events.
-- Behavior is flag-driven (see `agent_service/config.py`):
+- Behavior is flag-driven (see `services/agent_service/config.py`):
   `AGENT_AGENTIC_MODE`, `AGENT_BLACKBOARD_ENABLED`, `AGENT_STREAM_ENABLED`,
   `AGENT_CHECKPOINT_ENABLED`, `AGENT_LLM_COST_TRACKING_ENABLED`,
   `AGENT_QUERY_REWRITE_ENABLED`, `AGENT_SPECIALIST_LLM_ENABLED`, etc.
 
 ### Contracts mirror (important)
 
-`agent_service/contracts.py` is the canonical contracts file. The backend keeps a **verbatim
+`services/agent_service/contracts.py` is the canonical contracts file. The backend keeps a **verbatim
 mirror** of the public models (AgentChatRequest, AgentChatResponse, and supporting types) in
-`backend/app/services/agent_service/contracts.py` because the backend Docker image does not
+`services/backend/app/services/agent_service/contracts.py` because the backend Docker image does not
 install `agent_service`. **Do not import `agent_service` from backend runtime code.** Keep both
 files in sync manually when public models change.
 
 ### Data / RAG pipeline
 
 ```
-crawler/{sale,rent,projects,news}  ──►  data/raw/*.csv
+etl/crawler/{sale,rent,projects,news}  ──►  data/raw/*.csv
         │
-data_pipeline/clean.py → chunk.py → embed.py → ingestors/*_ingestor.py
+etl/data_pipeline/clean.py → chunk.py → embed.py → ingestors/*_ingestor.py
         │
 PostgreSQL: listings / projects / articles  +  chunks (polymorphic: parent_type/parent_id, embedding[1024])
         │
@@ -118,37 +130,38 @@ docker-compose up -d postgres redis            # local DB + cache
 docker-compose up --build                       # full stack
 
 # Backend (public API, :8000)
-cd backend && pip install -r requirements.txt
-cd backend && alembic upgrade head              # apply migrations
-cd backend && uvicorn app.main:app --reload --port 8000
+pip install -r services/backend/requirements.txt
+cd services/backend && alembic upgrade head              # apply migrations
+uvicorn services.backend.app.main:app --reload --port 8000
 
-# Agent service (:8100) — run from repo root so `agent_service.*` imports resolve
-uvicorn agent_service.main:app --reload --port 8100
+# Agent service (:8100)
+uvicorn services.agent_service.main:app --reload --port 8100
 
 # Pipeline worker (:8200)
-uvicorn pipeline_worker.main:app --reload --port 8200
+uvicorn services.pipeline_worker.main:app --reload --port 8200
 
 # Frontend (:3000)
-cd frontend && npm install && npm run dev
-cd frontend && npm run lint                     # ESLint (run for any frontend change)
+cd services/frontend && npm install && npm run dev
+cd services/frontend && npm run lint                     # ESLint (run for any frontend change)
 
 # Data pipeline
-python -m crawler.sale.crawl_urls --pages 1 5 --output data/raw/listing_urls.csv
-python -m data_pipeline.ingestors.listings_ingestor --csv data/raw/listing_details.csv --batch-size 50
+python -m etl.crawler.sale.crawl_urls --pages 1 5 --output data/raw/listing_urls.csv
+python -m etl.data_pipeline.ingestors.listings_ingestor --csv data/raw/listing_details.csv --batch-size 50
 ```
 
 ### Tests & verification
 
-Two pytest suites with their own `conftest.py`:
+Two pytest suites, both configured by the root `pytest.ini` (run from the repo root):
 
 ```bash
-cd backend && python -m pytest tests -q          # backend API + pipeline tests
-python -m pytest agent_service/tests -q           # agent graph tests (run from repo root)
-python -m pytest agent_service/tests/test_router_modes.py -q          # single file
-python -m pytest agent_service/tests/test_synthesis.py::test_name -q  # single test
+python -m pytest -q                                 # both suites
+python -m pytest services/backend/tests -q          # backend API + pipeline tests
+python -m pytest services/agent_service/tests -q    # agent graph tests
+python -m pytest services/agent_service/tests/test_router_modes.py -q          # single file
+python -m pytest services/agent_service/tests/test_synthesis.py::test_name -q  # single test
 
 # Python syntax/import check across active packages
-python -m compileall backend/app agent_service pipeline_worker data_pipeline crawler
+python -m compileall shared services/backend/app services/agent_service services/pipeline_worker etl
 ```
 
 Agent tests inject an `httpx` transport / fake LLM rather than hitting a live service or Gemini —
@@ -163,7 +176,7 @@ Project rules are in `.claude/rules/*.md`. Highlights:
   (`/nha-dat-ban`, `/nha-dat-cho-thue`, `/thi-truong`, `/dang-nhap`, `/dang-ky`).
 - **Backend**: FastAPI async, SQLAlchemy 2.0 async (`asyncpg`), Pydantic v2 schemas in
   `app/schemas/`, all routes under `/api/v1/`, type hints required, sessions via `get_db`.
-- **Migrations**: Alembic in `backend/alembic/versions/`. Never edit an existing migration — add a
+- **Migrations**: Alembic in `services/backend/alembic/versions/`. Never edit an existing migration — add a
   new file `YYYYMMDD_NNNN_description.py`. Check `alembic heads` after branching.
 - **Frontend**: Tailwind **v4** via PostCSS plugin — **no `tailwind.config.ts`**.
   TypeScript strict, functional components, `lucide-react` icons, `recharts` charts, API calls
@@ -171,14 +184,8 @@ Project rules are in `.claude/rules/*.md`. Highlights:
 - **Secrets**: everything in root `.env`; never commit real keys. `GEMINI_API_KEY` and
   `AGENT_INTERNAL_KEY` matter most.
 
-## Two-backends warning
+## Not wired into the main stack
 
-There are two `main.py` files under `backend/`:
-- `backend/app/main.py` — the v2 FastAPI API. **Use this.**
-- `backend/main.py` — legacy CSV-based backend. **Do not use.**
-
-## Legacy / reference-only (do not build on)
-
-`batdongsancom-crawler/`, `backend/main.py`, `data_pipeline/load_db.py`.
-`RAG/` and `FrontEnd_old/` no longer exist.
-`airflow/` exists but is not wired into docker-compose or active code.
+`etl/airflow/` exists but is not part of the root `docker-compose.yml` (it has its own compose file).
+The legacy CSV backend, `load_db.py` and `batdongsancom-crawler/` were removed; recover them from
+git history if needed.

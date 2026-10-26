@@ -1,9 +1,9 @@
 ---
 paths:
-  - backend/app/models/**/*
-  - backend/app/database.py
-  - backend/alembic/**/*
-  - data_pipeline/**/*
+  - shared/models/**/*
+  - shared/database.py
+  - services/backend/alembic/**/*
+  - etl/data_pipeline/**/*
 ---
 # Database Schema
 
@@ -11,7 +11,7 @@ paths:
 
 - PostgreSQL 16 with `pgvector` and `unaccent` extensions.
 - Async driver: `asyncpg` via SQLAlchemy 2.0.
-- Extensions auto-enabled in `backend/app/database.py` → `init_db()`.
+- Extensions auto-enabled in `shared/database.py` → `init_db()`.
 
 ## Tables
 
@@ -47,7 +47,7 @@ paths:
 - `market_price_snapshots` — historical price aggregations with street-segment tracking.
 
 ### Pipeline tracking
-- `pipeline_runs` — crawler/ingest job records (status, started_at, finished_at, stats).
+- `pipeline_runs` — etl/crawler/ingest job records (status, started_at, finished_at, stats).
 
 ### Agent observability
 - `agent_traces` — top-level agent execution traces per request.
@@ -66,6 +66,6 @@ paths:
 
 ## Migrations
 
-- Located in `backend/alembic/versions/`.
+- Located in `services/backend/alembic/versions/`.
 - Never edit an existing migration — always add a new file `YYYYMMDD_NNNN_description.py`.
 - Check `alembic heads` after branching; multiple heads have been merged before.

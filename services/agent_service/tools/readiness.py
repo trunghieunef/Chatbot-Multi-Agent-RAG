@@ -1,0 +1,104 @@
+from __future__ import annotations
+
+import asyncio
+import time
+from typing import Any
+
+from sqlalchemy import func, select
+
+from shared.database import async_session
+from shared.models import Article, Chunk, Listing, Project
+
+
+READINESS_SOURCE_TIMEOUT_SECONDS = 2.0
+READINESS_CACHE_TTL_SECONDS = 30.0
+SOURCE_NAMES = ("listings", "projects", "news", "legal")
+_readiness_cache: tuple[float, dict[str, dict[str, Any]]] | None = None
+
+
+def clear_readiness_cache() -> None:
+    global _readiness_cache
+    _readiness_cache = None
+
+
+def _status(parent_count: int, chunk_count: int) -> str:
+    return "ready" if parent_count > 0 and chunk_count > 0 else "not_ready"
+
+
+async def count_source(source_name: str) -> dict[str, Any]:
+    async with async_session() as session:
+        if source_name == "listings":
+            parent_result = await session.execute(select(func.count(Listing.id)))
+            chunk_result = await session.execute(
+                select(func.count(Chunk.id)).where(Chunk.parent_type == "listing")
+            )
+        elif source_name == "projects":
+            parent_result = await session.execute(select(func.count(Project.id)))
+            chunk_result = await session.execute(
+                select(func.count(Chunk.id)).where(Chunk.parent_type == "project")
+            )
+        elif source_name == "news":
+            parent_result = await session.execute(
+                select(func.count(Article.id)).where(Article.category != "legal")
+            )
+            chunk_result = await session.execute(
+                select(func.count(Chunk.id))
+                .select_from(Chunk)
+                .join(Article, Chunk.parent_id == Article.id)
+                .where(Chunk.parent_type == "article", Article.category != "legal")
+            )
+        elif source_name == "legal":
+            parent_result = await session.execute(
+                select(func.count(Article.id)).where(Article.category == "legal")
+            )
+            chunk_result = await session.execute(
+                select(func.count(Chunk.id))
+                .select_from(Chunk)
+                .join(Article, Chunk.parent_id == Article.id)
+                .where(Chunk.parent_type == "article", Article.category == "legal")
+            )
+        else:
+            return {
+                "status": "not_ready",
+                "parent_count": 0,
+                "chunk_count": 0,
+            }
+
+        parent_count = int(parent_result.scalar_one())
+        chunk_count = int(chunk_result.scalar_one())
+        return {
+            "status": _status(parent_count, chunk_count),
+            "parent_count": parent_count,
+            "chunk_count": chunk_count,
+        }
+
+
+async def build_readiness_snapshot() -> dict[str, dict[str, Any]]:
+    global _readiness_cache
+    now = time.monotonic()
+    if _readiness_cache is not None:
+        cached_at, cached_value = _readiness_cache
+        if now - cached_at < READINESS_CACHE_TTL_SECONDS:
+            return cached_value
+
+    async def safe_count(source_name: str) -> tuple[str, dict[str, Any]]:
+        try:
+            result = await asyncio.wait_for(
+                count_source(source_name),
+                timeout=READINESS_SOURCE_TIMEOUT_SECONDS,
+            )
+        except Exception as exc:
+            result = {
+                "status": "unknown",
+                "parent_count": 0,
+                "chunk_count": 0,
+                "warning": str(exc),
+            }
+        return source_name, result
+
+    pairs = await asyncio.gather(
+        *(safe_count(source_name) for source_name in SOURCE_NAMES)
+    )
+    snapshot = dict(pairs)
+    _readiness_cache = (now, snapshot)
+    return snapshot

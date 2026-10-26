@@ -32,7 +32,7 @@ services:
   pipeline-worker:
     build:
       context: .
-      dockerfile: pipeline_worker/Dockerfile
+      dockerfile: services/pipeline_worker/Dockerfile
     container_name: realestate_pipeline_worker
     # Reserve the host GPU so bge-m3 embedding runs on CUDA, not CPU.
     deploy:
@@ -67,8 +67,8 @@ services:
 
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/backend/Dockerfile
     container_name: realestate_backend
     ports:
       - "${BACKEND_PORT:-8000}:8000"
@@ -92,7 +92,7 @@ services:
   agent-service:
     build:
       context: .
-      dockerfile: agent_service/Dockerfile
+      dockerfile: services/agent_service/Dockerfile
     container_name: realestate_agent_service
     # Reserve the host GPU so bge-m3 query embedding runs on CUDA, not CPU
     # (CPU embedding was the dominant per-request latency).
@@ -140,7 +140,7 @@ services:
 
   frontend:
     build:
-      context: ./frontend
+      context: ./services/frontend
       dockerfile: Dockerfile
       args:
         INTERNAL_API_URL: http://backend:8000

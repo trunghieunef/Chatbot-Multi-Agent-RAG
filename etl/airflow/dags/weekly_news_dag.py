@@ -1,0 +1,71 @@
+from __future__ import annotations
+
+import os
+from datetime import datetime, timedelta
+
+from airflow import DAG
+from airflow.operators.python import PythonOperator
+
+from plugins.alerting import slack_failure_callback
+from plugins.pipeline_runner import REPO_ROOT, run_crawler, run_news_ingestion
+from plugins.run_metrics import on_failure as record_failure
+from plugins.run_metrics import on_success as record_success
+
+
+def _alert_emails() -> list[str]:
+    raw = os.environ.get("ALERT_EMAIL_RECIPIENTS", "")
+    return [item.strip() for item in raw.split(",") if item.strip()]
+
+
+DEFAULT_ARGS = {
+    "owner": "data",
+    "retries": 3,
+    "retry_delay": timedelta(minutes=10),
+    "retry_exponential_backoff": True,
+    "max_retry_delay": timedelta(hours=1),
+    "email": _alert_emails(),
+    "email_on_failure": bool(_alert_emails()),
+    "email_on_retry": False,
+    "on_failure_callback": slack_failure_callback,
+}
+
+
+def _crawl_news_urls(**_):
+    output = str(REPO_ROOT / "data/raw/news_urls.csv")
+    run_crawler(
+        module="etl.crawler.news.crawl_urls",
+        args={"--pages": ["1", "10"], "--output": output, "--workers": "2"},
+    )
+
+
+def _crawl_news_details(**_):
+    run_crawler(
+        module="etl.crawler.news.crawl_details",
+        args={
+            "--input": str(REPO_ROOT / "data/raw/news_urls.csv"),
+            "--output": str(REPO_ROOT / "data/raw/news_articles.csv"),
+            "--workers": "2",
+        },
+    )
+
+
+def _ingest_news(**_):
+    return run_news_ingestion(str(REPO_ROOT / "data/raw/news_articles.csv"))
+
+
+with DAG(
+    dag_id="weekly_news_dag",
+    description="Crawl news article CSVs, publish articles for web/API visibility, then index article chunks for chatbot retrieval",
+    default_args=DEFAULT_ARGS,
+    schedule_interval="0 4 * * 0",
+    start_date=datetime(2026, 5, 25),
+    catchup=False,
+    max_active_runs=1,
+    on_success_callback=record_success,
+    on_failure_callback=record_failure,
+    tags=["realestate", "news"],
+) as dag:
+    crawl_urls = PythonOperator(task_id="crawl_news_urls", python_callable=_crawl_news_urls)
+    crawl_details = PythonOperator(task_id="crawl_news_details", python_callable=_crawl_news_details)
+    ingest = PythonOperator(task_id="ingest_news", python_callable=_ingest_news)
+    crawl_urls >> crawl_details >> ingest

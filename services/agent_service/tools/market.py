@@ -1,0 +1,148 @@
+from __future__ import annotations
+
+import logging
+from datetime import date, timedelta
+from typing import Any
+
+from sqlalchemy import text
+
+logger = logging.getLogger(__name__)
+
+
+from shared.database import async_session
+
+from services.agent_service.tools.market_stats import district_price_overview
+
+
+def _infer_city_from_district(district: str | None) -> str | None:
+    """Users say 'Quận 7' without a city; numbered districts are HCM-specific.
+
+    Returns 'Hồ Chí Minh' for a district that is a bare/prefixed number
+    (Quận 1–12) so the market lookup isn't skipped for lack of a city.
+    """
+    if not district:
+        return None
+    import re
+
+    return "Hồ Chí Minh" if re.search(r"\d", district) else None
+
+
+async def lookup_market_metrics(filters: dict[str, Any]) -> list[dict[str, Any]]:
+    """Current snapshot lookup (existing tool)."""
+    city = filters.get("city")
+    listing_type = filters.get("listing_type") or "sale"
+    property_type = filters.get("property_type")
+    district = filters.get("district")
+    if not city:
+        city = _infer_city_from_district(district)
+    if not city:
+        logger.info("[market_metrics] skipped: no 'city' in filters (district=%s)", district)
+        return []
+
+    rows = await district_price_overview(
+        city=str(city),
+        listing_type=str(listing_type),
+        property_type=str(property_type) if property_type else None,
+        district=str(district) if district else None,
+    )
+    metrics = [
+        {
+            "source_identity": (
+                f"market:{row.get('district')}:{property_type or 'all'}:"
+                f"avg_price_per_m2:{row.get('period') or 'current'}"
+            ),
+            "metric": "avg_price_per_m2",
+            "value": row.get("avg_price_per_m2"),
+            "unit": "million VND/m2",
+            "location": {"city": city, "district": row.get("district")},
+            "property_type": property_type,
+            "period": row.get("period") or "current_snapshot",
+            "record": row,
+        }
+        for row in rows
+        if row.get("avg_price_per_m2") is not None
+    ]
+    logger.info(
+        "[market_metrics] city=%s district=%s property_type=%s rows=%d metrics=%d",
+        city, district, property_type, len(rows), len(metrics),
+    )
+    return metrics
+
+
+async def lookup_market_timeseries(
+    filters: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Fetch timeseries from market_price_snapshots for trend analysis.
+
+    Returns one dict per month with aggregated price metrics.
+    Fields: snapshot_month, avg_price_per_m2, median_price_per_m2,
+            min_price_per_m2, max_price_per_m2, listing_count.
+    """
+    city = filters.get("city")
+    district = filters.get("district")
+    property_type = filters.get("property_type")
+    months = int(filters.get("months", 6))
+
+    # Compute the cutoff date in Python: binding a timedelta into
+    # (DATE_TRUNC('month', NOW()) - :interval)::date raises
+    # "cannot cast type interval to date" under asyncpg. A bound date is safe.
+    cutoff = date.today().replace(day=1) - timedelta(days=months * 31)
+
+    # city is optional: district alone identifies the area for trend analysis.
+    clauses = ["month >= :cutoff"]
+    params: dict[str, Any] = {"cutoff": cutoff}
+
+    if city:
+        clauses.append("city ILIKE :city")
+        params["city"] = f"%{city}%"
+    if district:
+        # Match "Quận 7" against the bare-number district ("7") the snapshots use.
+        from services.agent_service.tools.market_stats import _district_bind
+        clause, dparams = _district_bind(str(district))
+        clauses.append(clause)
+        params.update(dparams)
+    if property_type:
+        clauses.append("property_type ILIKE :property_type")
+        params["property_type"] = f"%{property_type}%"
+
+    sql = (
+        "SELECT "
+        "  TO_CHAR(month, 'YYYY-MM') AS snapshot_month, "
+        "  city, district, property_type, "
+        "  SUM(listing_count) AS listing_count, "
+        "  ROUND(AVG(avg_price_per_m2)::numeric, 2) AS avg_price_per_m2, "
+        "  ROUND(AVG(median_price_per_m2)::numeric, 2) AS median_price_per_m2, "
+        "  ROUND(MIN(avg_price_per_m2)::numeric, 2) AS min_price_per_m2, "
+        "  ROUND(MAX(avg_price_per_m2)::numeric, 2) AS max_price_per_m2 "
+        "FROM market_price_snapshots "
+        f"WHERE {' AND '.join(clauses)} "
+        "GROUP BY snapshot_month, city, district, property_type "
+        "ORDER BY snapshot_month ASC"
+    )
+
+    async with async_session() as session:
+        result = await session.execute(text(sql), params)
+        series = [
+            {
+                # Stable evidence id so grounded synthesis can cite the trend.
+                "source_identity": (
+                    f"market:{row.district}:{row.property_type or 'all'}"
+                    f":trend:{row.snapshot_month}"
+                ),
+                "snapshot_month": row.snapshot_month,
+                "city": row.city,
+                "district": row.district,
+                "property_type": row.property_type,
+                "listing_count": row.listing_count,
+                "avg_price_per_m2": float(row.avg_price_per_m2) if row.avg_price_per_m2 else None,
+                "median_price_per_m2": float(row.median_price_per_m2) if row.median_price_per_m2 else None,
+                "min_price_per_m2": float(row.min_price_per_m2) if row.min_price_per_m2 else None,
+                "max_price_per_m2": float(row.max_price_per_m2) if row.max_price_per_m2 else None,
+            }
+            for row in result
+        ]
+    logger.info(
+        "[market_timeseries] district=%s property_type=%s months=%s rows=%d",
+        district, property_type, months, len(series),
+    )
+    return series

@@ -1,12 +1,12 @@
 ---
 paths:
-  - crawler/**/*
-  - pipeline_worker/**/*
-  - data_pipeline/**/*
+  - etl/crawler/**/*
+  - services/pipeline_worker/**/*
+  - etl/data_pipeline/**/*
 ---
 # Crawler & Pipeline Conventions
 
-## Crawler (`crawler/`)
+## Crawler (`etl/crawler/`)
 
 - Tool: Playwright + playwright-stealth for anti-bot bypass.
 - Parallelism: 8 workers for URL crawling, 4 workers for detail crawling.
@@ -17,19 +17,19 @@ paths:
 - Deduplication: by `product_id` during merge step.
 
 ### Crawlers
-- `crawler/sale/` — sale listing URL crawl + detail crawl
-- `crawler/rent/` — rental listing URL crawl + detail crawl
-- `crawler/news/` — news article URL crawl + detail crawl
-- `crawler/projects/` — real estate project URL crawl + detail crawl
-- `crawler/core/` — shared: `csv_writer.py`, `parser.py`, `listing_detail_parser.py`, `listing_images.py`
+- `etl/crawler/sale/` — sale listing URL crawl + detail crawl
+- `etl/crawler/rent/` — rental listing URL crawl + detail crawl
+- `etl/crawler/news/` — news article URL crawl + detail crawl
+- `etl/crawler/projects/` — real estate project URL crawl + detail crawl
+- `etl/crawler/core/` — shared: `csv_writer.py`, `parser.py`, `listing_detail_parser.py`, `listing_images.py`
 
 ### Run examples
 ```bash
-python -m crawler.sale.crawl_urls --pages 1 5 --output data/raw/listing_urls.csv
-python -m crawler.sale.crawl_details --input data/raw/listing_urls.csv --output data/raw/listing_details.csv
+python -m etl.crawler.sale.crawl_urls --pages 1 5 --output data/raw/listing_urls.csv
+python -m etl.crawler.sale.crawl_details --input data/raw/listing_urls.csv --output data/raw/listing_details.csv
 ```
 
-## Data Pipeline (`data_pipeline/`)
+## Data Pipeline (`etl/data_pipeline/`)
 
 Stages: `clean.py` → `chunk.py` → `embed.py` → `ingestors/`
 
@@ -43,11 +43,11 @@ Stages: `clean.py` → `chunk.py` → `embed.py` → `ingestors/`
 
 ### Run examples
 ```bash
-python -m data_pipeline.ingestors.listings_ingestor --csv data/raw/listing_details.csv --batch-size 50
-python -m data_pipeline.ingestors.news_ingestor --csv data/raw/news_details.csv
+python -m etl.data_pipeline.ingestors.listings_ingestor --csv data/raw/listing_details.csv --batch-size 50
+python -m etl.data_pipeline.ingestors.news_ingestor --csv data/raw/news_details.csv
 ```
 
-## Pipeline Worker (`pipeline_worker/`)
+## Pipeline Worker (`services/pipeline_worker/`)
 
 Standalone FastAPI service (:8200) that exposes `/internal/pipeline/*` endpoints.
 Triggers crawler and data_pipeline jobs as subprocess commands.

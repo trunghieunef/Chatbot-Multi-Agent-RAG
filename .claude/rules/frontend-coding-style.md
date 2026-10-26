@@ -1,6 +1,6 @@
 ---
 paths:
-  - frontend/**/*
+  - services/frontend/**/*
 ---
 # Frontend Coding Style
 
@@ -11,6 +11,6 @@ paths:
 - Naming: `PascalCase` for component files (`.tsx`), `camelCase` for functions/variables, `.ts` for utilities.
 - Icons: use `lucide-react` exclusively.
 - Charts: use `recharts`.
-- API calls: centralized in `frontend/lib/api.ts`.
-- Types: defined in `frontend/lib/types.ts`.
-- Read `frontend/CLAUDE.md` before changing Next.js configuration or behavior.
+- API calls: centralized in `services/frontend/lib/api.ts`.
+- Types: defined in `services/frontend/lib/types.ts`.
+- Read `services/frontend/CLAUDE.md` before changing Next.js configuration or behavior.

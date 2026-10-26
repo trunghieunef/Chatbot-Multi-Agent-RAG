@@ -1,0 +1,126 @@
+"""
+Backend application configuration.
+
+Loads settings from environment variables with sensible defaults.
+"""
+
+from functools import lru_cache
+from pathlib import Path
+
+from pydantic import field_validator
+from pydantic_settings import BaseSettings
+
+
+ROOT_ENV_FILE = Path(__file__).resolve().parents[1] / ".env"
+
+
+class Settings(BaseSettings):
+    """Application settings loaded from environment."""
+
+    # App
+    APP_NAME: str = "Real Estate Chatbot API"
+    APP_VERSION: str = "2.0.0"
+    DEBUG: bool = True
+
+    # Database
+    DATABASE_URL: str = "postgresql+asyncpg://admin:realestate_secret_2026@localhost:5432/realestate"
+
+    # Redis
+    REDIS_URL: str = "redis://localhost:6379/0"
+
+    # Google Gemini
+    GEMINI_API_KEY: str = ""
+    GEMINI_MODEL: str = "gemini-2.5-flash"
+    GEMINI_EMBEDDING_MODEL: str = "gemini-embedding-001"
+    EMBEDDING_PROVIDER: str = "bge_m3"
+    HF_EMBEDDING_MODEL: str = "BAAI/bge-m3"
+    EMBEDDING_DIM: int = 1024
+    EMBEDDING_BATCH_SIZE: int = 16
+    HF_EMBEDDING_DEVICE: str = ""
+    CHATBOT_EMBEDDING_LOCAL_FILES_ONLY: bool = True
+    CHUNK_SIZE_TOKENS: int = 400
+    CHUNK_OVERLAP_TOKENS: int = 80
+
+    # Reranking
+    COHERE_API_KEY: str = ""
+    RERANK_PROVIDER: str = "cohere"
+    RERANK_MODEL: str = "rerank-multilingual-v3.0"
+    RERANK_TOP_N: int = 5
+
+    # Hybrid retrieval (dense + lexical fused via Reciprocal Rank Fusion)
+    HYBRID_LEXICAL_ENABLED: bool = True
+    HYBRID_RRF_K: int = 60
+    # When true, log per-stage retrieval counts (candidates/vector/lexical/
+    # fused/reranked/records) to stderr to diagnose empty results.
+    HYBRID_SEARCH_DEBUG: bool = False
+
+    # Internal Agent Service
+    AGENT_SERVICE_URL: str = "http://localhost:8100"
+    AGENT_INTERNAL_KEY: str = "dev-agent-internal-key"
+    # Must be >= the agent service's own AGENT_TOTAL_TIMEOUT_SECONDS, or this
+    # httpx client cuts a self-correction run (2 specialist passes) mid-stream
+    # before the `final` event, and the frontend shows a generic error.
+    AGENT_SERVICE_TIMEOUT_SECONDS: float = 95.0
+    CHATBOT_AGENT_SERVICE_ENABLED: bool = True
+    CHATBOT_LLM_JUDGE_ENABLED: bool = False
+    CHATBOT_EVAL_ENABLED: bool = False
+    CHATBOT_EVAL_SAMPLE_RATE: float = 0.0
+    CHATBOT_EVAL_SYNC_FOR_TESTS: bool = False   
+    CHATBOT_MEMORY_ENABLED: bool = True
+    CHATBOT_ADMIN_ENABLED: bool = True
+    CHATBOT_TRACE_LEVEL: str = "full"
+    GEMINI_JUDGE_MODEL: str = "gemini-2.5-flash"
+    OBSERVABILITY_ANON_RETENTION_DAYS: int = 30
+    OBSERVABILITY_AUTH_RETENTION_DAYS: int = 90
+    OBSERVABILITY_CLEANUP_ENABLED: bool = True
+
+    # Chat quotas
+    ANON_CHAT_DAILY_LIMIT: int = 20
+    AUTH_CHAT_DAILY_LIMIT: int = 200
+    CHAT_ABUSE_GUARD_ENABLED: bool = True
+    CHAT_ABUSE_GUARD_ANON_MAX_REQUESTS: int = 10
+    CHAT_ABUSE_GUARD_ANON_WINDOW_SECONDS: int = 60
+    CHAT_ABUSE_GUARD_AUTH_MAX_REQUESTS: int = 30
+    CHAT_ABUSE_GUARD_AUTH_WINDOW_SECONDS: int = 60
+
+    # JWT
+    JWT_SECRET_KEY: str = "your-super-secret-jwt-key-change-in-production"
+    JWT_ALGORITHM: str = "HS256"
+    JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  # 24 hours
+
+    # CORS
+    CORS_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000"
+
+    # Geocoding
+    GEOCODER_PROVIDER: str = "nominatim"          # 'nominatim' | 'goong'
+    GEOCODER_USER_AGENT: str = "realestate-chatbot/0.1 (contact@example.com)"
+    GEOCODER_RATE_LIMIT_SECONDS: float = 1.0
+    GOONG_API_KEY: str = ""
+
+    # Intent extraction
+    INTENT_EXTRACTOR: str = "rule"                # 'rule' | 'gemini'
+    GEMINI_INTENT_MODEL: str = "gemini-2.5-flash"
+    # Max concurrent enrich (intent LLM) calls per batch during ingest.
+    # ponytail: raise on a paid Gemini tier for faster re-embed; lower on 429s.
+    INTENT_MAX_CONCURRENCY: int = 10
+
+    @field_validator("DEBUG", mode="before")
+    @classmethod
+    def parse_debug(cls, value):
+        if isinstance(value, str) and value.lower() in {"release", "prod", "production"}:
+            return False
+        return value
+
+    @property
+    def cors_origins_list(self) -> list[str]:
+        return [origin.strip() for origin in self.CORS_ORIGINS.split(",")]
+
+    class Config:
+        env_file = str(ROOT_ENV_FILE)
+        case_sensitive = True
+        extra = "ignore"  # Ignore extra env vars not defined in Settings
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()

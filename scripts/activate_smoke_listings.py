@@ -10,16 +10,13 @@ from sqlalchemy import update
 
 
 ROOT = Path(__file__).resolve().parents[1]
-BACKEND = ROOT / "backend"
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
-if str(BACKEND) not in sys.path:
-    sys.path.insert(0, str(BACKEND))
 
-from app.database import async_session
-from app.models import Listing
-from data_pipeline.clean import row_to_listing
-from data_pipeline.ingestors.listings_ingestor import (
+from shared.database import async_session
+from shared.models import Listing
+from etl.data_pipeline.clean import row_to_listing
+from etl.data_pipeline.ingestors.listings_ingestor import (
     LISTING_IMAGE_META_KEY,
     listing_image_urls_from_row,
     publish_listing_batch,

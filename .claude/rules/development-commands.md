@@ -9,58 +9,59 @@ docker-compose up --build                 # full stack (all services + monitorin
 
 ## Backend (public API, :8000)
 ```bash
-cd backend && pip install -r requirements.txt
-cd backend && alembic upgrade head        # apply DB migrations
-cd backend && alembic heads               # check for multiple heads after branching
-cd backend && uvicorn app.main:app --reload --port 8000
+pip install -r services/backend/requirements.txt
+cd services/backend && alembic upgrade head        # apply DB migrations
+cd services/backend && alembic heads               # check for multiple heads after branching
+uvicorn services.backend.app.main:app --reload --port 8000
 ```
 
+All commands run from the **repo root** unless they `cd` (imports start at the root).
+
 ## Agent Service (:8100)
-Run from **repo root** so `agent_service.*` imports resolve:
 ```bash
-pip install -r requirements.txt           # or agent_service/requirements.txt
-uvicorn agent_service.main:app --reload --port 8100
+pip install -r requirements.txt           # or services/agent_service/requirements.txt
+uvicorn services.agent_service.main:app --reload --port 8100
 ```
 
 ## Pipeline Worker (:8200)
 ```bash
-uvicorn pipeline_worker.main:app --reload --port 8200
+uvicorn services.pipeline_worker.main:app --reload --port 8200
 ```
 
 ## Frontend (:3000)
 ```bash
-cd frontend && npm install
-cd frontend && npm run dev
-cd frontend && npm run lint               # ESLint — run for any frontend change
-cd frontend && npm run build              # production build
+cd services/frontend && npm install
+cd services/frontend && npm run dev
+cd services/frontend && npm run lint               # ESLint — run for any frontend change
+cd services/frontend && npm run build              # production build
 ```
 
 ## Data Pipeline
 ```bash
 # Crawl
-python -m crawler.sale.crawl_urls --pages 1 5 --output data/raw/listing_urls.csv
-python -m crawler.sale.crawl_details --input data/raw/listing_urls.csv --output data/raw/listing_details.csv
+python -m etl.crawler.sale.crawl_urls --pages 1 5 --output data/raw/listing_urls.csv
+python -m etl.crawler.sale.crawl_details --input data/raw/listing_urls.csv --output data/raw/listing_details.csv
 
 # Ingest
-python -m data_pipeline.ingestors.listings_ingestor --csv data/raw/listing_details.csv --batch-size 50
-python -m data_pipeline.ingestors.news_ingestor --csv data/raw/news_details.csv
+python -m etl.data_pipeline.ingestors.listings_ingestor --csv data/raw/listing_details.csv --batch-size 50
+python -m etl.data_pipeline.ingestors.news_ingestor --csv data/raw/news_details.csv
 ```
 
 ## Tests & Verification
 
-Two separate pytest suites — each has its own `conftest.py` that fixes `sys.path`:
+Two pytest suites, both configured by the root `pytest.ini` (`pythonpath = .`):
 
 ```bash
 # Backend tests
-cd backend && python -m pytest tests -q
+python -m pytest services/backend/tests -q
 
 # Agent service tests (run from repo root)
-python -m pytest agent_service/tests -q
-python -m pytest agent_service/tests/test_router_modes.py -q        # single file
-python -m pytest agent_service/tests/test_synthesis.py::test_name -q # single test
+python -m pytest services/agent_service/tests -q
+python -m pytest services/agent_service/tests/test_router_modes.py -q        # single file
+python -m pytest services/agent_service/tests/test_synthesis.py::test_name -q # single test
 
 # Python syntax/import check
-python -m compileall backend/app agent_service pipeline_worker data_pipeline crawler
+python -m compileall shared services/backend/app services/agent_service services/pipeline_worker etl
 ```
 
 Agent tests use a fake LLM transport and do not hit real Gemini — follow this pattern for new tests.

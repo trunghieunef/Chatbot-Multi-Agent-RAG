@@ -1,8 +1,8 @@
 ---
 paths:
-  - backend/app/routers/**/*
-  - backend/app/schemas/**/*
-  - frontend/lib/api.ts
+  - services/backend/app/routers/**/*
+  - services/backend/app/schemas/**/*
+  - services/frontend/lib/api.ts
 ---
 # API Endpoints
 
